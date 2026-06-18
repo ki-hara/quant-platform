@@ -50,6 +50,8 @@ class DynamicWaveStrategy(Strategy):
             size = self.calculate_position_size(context)
             if size.quantity <= 0:
                 return BuySignal(False, "quantity_zero")
+            if size.quantity * context.current_close > context.cash:
+                return BuySignal(False, "insufficient_cash")
             return BuySignal(True, "aod_threshold")
         return BuySignal(False, "price_above_threshold")
 
@@ -71,6 +73,7 @@ class DynamicWaveStrategy(Strategy):
         return PositionSize(amount, quantity)
 
     def update_capital(self, context: StrategyContext, realized_pnl: Decimal) -> CapitalUpdate:
+        """Apply PCR/LCR to realized PnL after the caller has checked the update schedule."""
         if realized_pnl >= 0:
             rate = Decimal(str(context.settings["profit_compounding_rate"])) / Decimal("100")
             capital = context.capital + realized_pnl * rate

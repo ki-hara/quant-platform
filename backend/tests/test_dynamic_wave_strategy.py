@@ -4,6 +4,7 @@ from decimal import Decimal
 from app.domain.enums import StrategyMode
 from app.strategy_engine.context import StrategyContext, StrategyPosition
 from app.strategy_engine.dynamic_wave import DynamicWaveStrategy
+from app.strategy_engine.registry import StrategyRegistry
 
 
 def make_context(**overrides) -> StrategyContext:
@@ -51,6 +52,17 @@ def test_position_size_uses_capital_not_cash() -> None:
     assert size.quantity == 1
 
 
+def test_should_not_buy_when_cash_cannot_afford_capital_sized_quantity() -> None:
+    strategy = DynamicWaveStrategy()
+    context = make_context(capital=Decimal("1000"), cash=Decimal("50"), current_close=Decimal("103"))
+    size = strategy.calculate_position_size(context)
+
+    assert size.quantity == 1
+    signal = strategy.should_buy(context)
+    assert signal.should_buy is False
+    assert signal.reason == "insufficient_cash"
+
+
 def test_should_sell_when_profit_target_is_reached() -> None:
     strategy = DynamicWaveStrategy()
     position = StrategyPosition(date(2026, 1, 1), Decimal("100"), 1, StrategyMode.SAFE)
@@ -72,3 +84,18 @@ def test_update_capital_applies_pcr_and_lcr() -> None:
     context = make_context(capital=Decimal("1000"))
     assert strategy.update_capital(context, Decimal("100")).capital == Decimal("1050.000000")
     assert strategy.update_capital(context, Decimal("-100")).capital == Decimal("970.000000")
+
+
+def test_registry_lists_creates_and_rejects_unknown_strategy_types() -> None:
+    registry = StrategyRegistry()
+    registry.register(DynamicWaveStrategy)
+
+    assert registry.list() == [{"type": "dynamic_wave", "name": "Dynamic Wave Strategy"}]
+    assert isinstance(registry.create("dynamic_wave"), DynamicWaveStrategy)
+
+    try:
+        registry.create("missing")
+    except ValueError as exc:
+        assert str(exc) == "Unknown strategy type 'missing'. Available strategy types: dynamic_wave"
+    else:
+        raise AssertionError("Expected ValueError for unknown strategy type")

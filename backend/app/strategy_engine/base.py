@@ -52,6 +52,11 @@ class Strategy(ABC):
 
     @abstractmethod
     def update_capital(self, context: StrategyContext, realized_pnl: Decimal) -> CapitalUpdate:
+        """Apply strategy-specific capital compounding when orchestration says it is due.
+
+        Backtest and orchestration services own the configured schedule check and call this
+        method only for realized PnL that should update capital.
+        """
         raise NotImplementedError
 
     @abstractmethod

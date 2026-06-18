@@ -10,7 +10,13 @@ class StrategyRegistry:
         self._strategies[strategy_cls.strategy_type] = strategy_cls
 
     def create(self, strategy_type: str) -> Strategy:
-        return self._strategies[strategy_type]()
+        strategy_cls = self._strategies.get(strategy_type)
+        if strategy_cls is None:
+            available = ", ".join(self._strategies.keys()) or "none"
+            raise ValueError(
+                f"Unknown strategy type '{strategy_type}'. Available strategy types: {available}"
+            )
+        return strategy_cls()
 
     def list(self) -> list[dict[str, str]]:
         return [
