@@ -29,6 +29,8 @@ const defaultForm = {
   mode: "safe",
   position_id: "",
   sell_reason: "",
+  sell_reason_code: "",
+  sell_reason_touched: false,
 };
 
 export function SignalPanel({ dashboard, onExecute, executing = false }: SignalPanelProps) {
@@ -59,6 +61,8 @@ export function SignalPanel({ dashboard, onExecute, executing = false }: SignalP
       quantity: position?.quantity ?? current.quantity,
       position_id: position ? String(position.id) : "",
       sell_reason: side === "sell" ? translateReason(reason ?? "manual_signal") : "",
+      sell_reason_code: side === "sell" ? reason ?? "manual_signal" : "",
+      sell_reason_touched: false,
     }));
   }
 
@@ -73,7 +77,12 @@ export function SignalPanel({ dashboard, onExecute, executing = false }: SignalP
       source: "signal_execution",
       mode: form.side === "buy" ? form.mode : undefined,
       position_id: form.side === "sell" && form.position_id ? Number(form.position_id) : null,
-      sell_reason: form.side === "sell" ? form.sell_reason || "manual_signal" : null,
+      sell_reason:
+        form.side === "sell"
+          ? form.sell_reason_touched
+            ? form.sell_reason || "manual_signal"
+            : form.sell_reason_code || "manual_signal"
+          : null,
     });
   }
 
@@ -218,7 +227,11 @@ export function SignalPanel({ dashboard, onExecute, executing = false }: SignalP
                 <input
                   value={form.sell_reason}
                   onChange={(event) =>
-                    setForm((current) => ({ ...current, sell_reason: event.target.value }))
+                    setForm((current) => ({
+                      ...current,
+                      sell_reason: event.target.value,
+                      sell_reason_touched: true,
+                    }))
                   }
                 />
               </label>

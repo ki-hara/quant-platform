@@ -63,7 +63,7 @@ export function BacktestPage() {
   const metrics = [
     { label: "초기 자본", value: formatMoney(run?.initial_capital), helper: "시작" },
     { label: "최종 자본", value: formatMoney(run?.final_capital), helper: "종료" },
-    { label: "CAGR/수익률", value: formatPercent(run?.total_return), helper: "총 수익률" },
+    { label: "총수익률", value: formatPercent(run?.total_return), helper: "총 수익률" },
     { label: "MDD", value: formatPercent(run?.max_drawdown), helper: "최대 낙폭", tone: "negative" as const },
     { label: "승률", value: formatPercent(run?.win_rate), helper: "청산 거래 기준" },
     { label: "거래 수", value: String(run?.total_trades ?? "-"), helper: "총 체결" },
@@ -134,9 +134,9 @@ export function BacktestPage() {
           </div>
         </div>
         <div className="button-row">
-          <CsvLink disabled={!run} href={run ? getBacktestDailyCsvUrl(run.id) : "#"} label="일별 CSV 다운로드" />
-          <CsvLink disabled={!run} href={run ? getBacktestTradesCsvUrl(run.id) : "#"} label="거래 CSV 다운로드" />
-          <CsvLink disabled={!run} href={run ? getBacktestSummaryCsvUrl(run.id) : "#"} label="요약 CSV 다운로드" />
+          <CsvLink disabled={!run} href={run ? getBacktestDailyCsvUrl(run.id) : undefined} label="일별 CSV 다운로드" />
+          <CsvLink disabled={!run} href={run ? getBacktestTradesCsvUrl(run.id) : undefined} label="거래 CSV 다운로드" />
+          <CsvLink disabled={!run} href={run ? getBacktestSummaryCsvUrl(run.id) : undefined} label="요약 CSV 다운로드" />
         </div>
       </section>
 
@@ -153,9 +153,18 @@ export function BacktestPage() {
   );
 }
 
-function CsvLink({ href, label, disabled }: { href: string; label: string; disabled: boolean }) {
+function CsvLink({ href, label, disabled }: { href?: string; label: string; disabled: boolean }) {
+  if (disabled || !href) {
+    return (
+      <button className="button-link" type="button" disabled>
+        <Download aria-hidden="true" size={16} />
+        {label}
+      </button>
+    );
+  }
+
   return (
-    <a className={disabled ? "button-link is-disabled" : "button-link"} href={href} aria-disabled={disabled}>
+    <a className="button-link" href={href}>
       <Download aria-hidden="true" size={16} />
       {label}
     </a>
