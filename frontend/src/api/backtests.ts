@@ -1,5 +1,10 @@
 import { apiGet, apiPost, apiUrl } from "./client";
-import type { BacktestCreateRequest, BacktestRun } from "../types/api";
+import type {
+  BacktestCreateRequest,
+  BacktestDailySnapshot,
+  BacktestRun,
+  BacktestTrade,
+} from "../types/api";
 
 export function createBacktest(request: BacktestCreateRequest): Promise<BacktestRun> {
   return apiPost<BacktestRun>("/api/backtests", request);
@@ -19,4 +24,80 @@ export function getBacktestTradesCsvUrl(runId: number): string {
 
 export function getBacktestSummaryCsvUrl(runId: number): string {
   return apiUrl(`/api/backtests/${runId}/summary.csv`);
+}
+
+export async function getBacktestDailyCsv(runId: number): Promise<BacktestDailySnapshot[]> {
+  const rows = await fetchCsv(getBacktestDailyCsvUrl(runId));
+  return rows.map((row) => ({
+    backtest_run_id: runId,
+    date: row.date,
+    capital: row.capital,
+    cash: row.cash,
+    position_value: row.position_value,
+    total_asset: row.total_asset,
+    drawdown: row.drawdown,
+    cumulative_fees: row.cumulative_fees,
+  }));
+}
+
+export async function getBacktestTradesCsv(runId: number): Promise<BacktestTrade[]> {
+  const rows = await fetchCsv(getBacktestTradesCsvUrl(runId));
+  return rows.map((row, index) => ({
+    id: index + 1,
+    backtest_run_id: runId,
+    date: row.date,
+    side: row.side,
+    quantity: row.quantity,
+    price: row.price,
+    fee: row.fee,
+    realized_pnl: row.realized_pnl,
+    sell_reason: row.sell_reason || null,
+    source: row.source,
+    created_at: "",
+    updated_at: "",
+  }));
+}
+
+async function fetchCsv(url: string): Promise<Record<string, string>[]> {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(await response.text());
+  const text = await response.text();
+  return parseCsv(text);
+}
+
+function parseCsv(text: string): Record<string, string>[] {
+  const lines = text.trim().split(/\r?\n/);
+  const [headerLine, ...body] = lines;
+  if (!headerLine) return [];
+  const headers = splitCsvLine(headerLine);
+  return body.map((line) => {
+    const cells = splitCsvLine(line);
+    return headers.reduce<Record<string, string>>((row, header, index) => {
+      row[header] = cells[index] ?? "";
+      return row;
+    }, {});
+  });
+}
+
+function splitCsvLine(line: string): string[] {
+  const cells: string[] = [];
+  let current = "";
+  let quoted = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    const next = line[index + 1];
+    if (char === '"' && quoted && next === '"') {
+      current += '"';
+      index += 1;
+    } else if (char === '"') {
+      quoted = !quoted;
+    } else if (char === "," && !quoted) {
+      cells.push(current);
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+  cells.push(current);
+  return cells;
 }
