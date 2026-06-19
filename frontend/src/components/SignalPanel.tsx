@@ -58,7 +58,7 @@ export function SignalPanel({ dashboard, onExecute, executing = false }: SignalP
       price: latestClose || current.price,
       quantity: position?.quantity ?? current.quantity,
       position_id: position ? String(position.id) : "",
-      sell_reason: side === "sell" ? reason ?? "manual_signal" : "",
+      sell_reason: side === "sell" ? translateReason(reason ?? "manual_signal") : "",
     }));
   }
 
