@@ -5,7 +5,7 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from app.domain.enums import PositionStatus, StrategyMode, TradeSide, TradeSource
-from app.domain.models import Trade
+from app.domain.models import LivePortfolio, Trade
 from app.infrastructure.repositories.portfolios import PortfolioRepository, PositionRepository
 from app.infrastructure.repositories.strategies import StrategyConfigRepository
 from app.infrastructure.repositories.trades import TradeRepository
@@ -33,6 +33,7 @@ class SignalExecutionResult:
 
 class SignalExecutionService:
     def __init__(self, session: Session) -> None:
+        self.session = session
         self.configs = StrategyConfigRepository(session)
         self.portfolios = PortfolioRepository(session)
         self.positions = PositionRepository(session)
@@ -43,22 +44,38 @@ class SignalExecutionService:
         config_id: int,
         request: SignalExecutionRequest,
     ) -> SignalExecutionResult:
-        if self.configs.get(config_id) is None:
-            raise ValueError(f"Strategy config not found: {config_id}")
-        portfolio = self.portfolios.get_by_config(config_id)
-        if portfolio is None:
-            raise ValueError(f"Live portfolio not found for config: {config_id}")
-        if request.side == TradeSide.BUY:
-            return self._buy(config_id, request, portfolio)
-        if request.side == TradeSide.SELL:
-            return self._sell(config_id, request, portfolio)
-        raise ValueError(f"Unsupported trade side: {request.side}")
+        try:
+            self._validate_request(request)
+            if self.configs.get(config_id) is None:
+                raise ValueError(f"Strategy config not found: {config_id}")
+            portfolio = self.portfolios.get_by_config(config_id)
+            if portfolio is None:
+                raise ValueError(f"Live portfolio not found for config: {config_id}")
+            if request.side == TradeSide.BUY:
+                result = self._buy(config_id, request, portfolio)
+            elif request.side == TradeSide.SELL:
+                result = self._sell(config_id, request, portfolio)
+            else:
+                raise ValueError(f"Unsupported trade side: {request.side}")
+            self.session.commit()
+            return result
+        except Exception:
+            self.session.rollback()
+            raise
+
+    def _validate_request(self, request: SignalExecutionRequest) -> None:
+        if request.quantity <= 0:
+            raise ValueError("quantity must be greater than zero.")
+        if request.price <= 0:
+            raise ValueError("price must be greater than zero.")
+        if request.fee < 0:
+            raise ValueError("fee must be greater than or equal to zero.")
 
     def _buy(
         self,
         config_id: int,
         request: SignalExecutionRequest,
-        portfolio,
+        portfolio: LivePortfolio,
     ) -> SignalExecutionResult:
         gross = request.price * request.quantity
         total_cost = gross + request.fee
@@ -70,6 +87,7 @@ class SignalExecutionService:
             buy_price=request.price,
             quantity=request.quantity,
             mode=request.mode,
+            buy_fee=request.fee,
         )
         portfolio.cash -= total_cost
         portfolio.cumulative_fees += request.fee
@@ -91,7 +109,7 @@ class SignalExecutionService:
         self,
         config_id: int,
         request: SignalExecutionRequest,
-        portfolio,
+        portfolio: LivePortfolio,
     ) -> SignalExecutionResult:
         if request.position_id is None:
             raise ValueError("position_id is required for sell signals.")
@@ -107,7 +125,7 @@ class SignalExecutionService:
 
         gross = request.price * request.quantity
         net_proceeds = gross - request.fee
-        cost_basis = position.buy_price * position.quantity
+        cost_basis = position.buy_price * position.quantity + position.buy_fee
         realized_pnl = net_proceeds - cost_basis
 
         self.positions.close(position)

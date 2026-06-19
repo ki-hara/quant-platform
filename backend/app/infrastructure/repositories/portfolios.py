@@ -21,7 +21,7 @@ class PortfolioRepository:
             cumulative_fees=Decimal("0"),
         )
         self.session.add(portfolio)
-        self.session.commit()
+        self.session.flush()
         self.session.refresh(portfolio)
         return portfolio
 
@@ -30,7 +30,7 @@ class PortfolioRepository:
 
     def save(self, portfolio: LivePortfolio) -> LivePortfolio:
         self.session.add(portfolio)
-        self.session.commit()
+        self.session.flush()
         self.session.refresh(portfolio)
         return portfolio
 
@@ -63,17 +63,19 @@ class PositionRepository:
         buy_price: Decimal,
         quantity: Decimal,
         mode: StrategyMode,
+        buy_fee: Decimal = Decimal("0"),
     ) -> Position:
         position = Position(
             strategy_config_id=strategy_config_id,
             buy_date=buy_date,
             buy_price=buy_price,
+            buy_fee=buy_fee,
             quantity=quantity,
             mode=mode,
             status=PositionStatus.OPEN,
         )
         self.session.add(position)
-        self.session.commit()
+        self.session.flush()
         self.session.refresh(position)
         return position
 
@@ -87,6 +89,6 @@ class PositionRepository:
 
     def save(self, position: Position) -> Position:
         self.session.add(position)
-        self.session.commit()
+        self.session.flush()
         self.session.refresh(position)
         return position

@@ -33,6 +33,7 @@ class StrategyConfigUpdateRequest:
 
 class StrategyConfigService:
     def __init__(self, session: Session) -> None:
+        self.session = session
         self.configs = StrategyConfigRepository(session)
         self.portfolios = PortfolioRepository(session)
 
@@ -44,18 +45,23 @@ class StrategyConfigService:
         owner_id: str,
         request: StrategyConfigCreateRequest,
     ) -> StrategyConfig:
-        config = self.configs.create(
-            owner_id=owner_id,
-            name=request.name,
-            strategy_type=request.strategy_type,
-            symbol=request.symbol,
-            initial_capital=request.initial_capital,
-            fee_rate=request.fee_rate,
-            slippage_rate=request.slippage_rate,
-            settings_json=request.settings_json,
-        )
-        self.portfolios.create_for_config(config)
-        return config
+        try:
+            config = self.configs.create(
+                owner_id=owner_id,
+                name=request.name,
+                strategy_type=request.strategy_type,
+                symbol=request.symbol,
+                initial_capital=request.initial_capital,
+                fee_rate=request.fee_rate,
+                slippage_rate=request.slippage_rate,
+                settings_json=request.settings_json,
+            )
+            self.portfolios.create_for_config(config)
+            self.session.commit()
+            return config
+        except Exception:
+            self.session.rollback()
+            raise
 
     def get_config(self, config_id: int) -> StrategyConfig:
         config = self.configs.get(config_id)
@@ -68,17 +74,23 @@ class StrategyConfigService:
         config_id: int,
         request: StrategyConfigUpdateRequest,
     ) -> StrategyConfig:
-        config = self.get_config(config_id)
-        for field in (
-            "name",
-            "strategy_type",
-            "symbol",
-            "initial_capital",
-            "fee_rate",
-            "slippage_rate",
-            "settings_json",
-        ):
-            value = getattr(request, field)
-            if value is not None:
-                setattr(config, field, value)
-        return self.configs.save(config)
+        try:
+            config = self.get_config(config_id)
+            for field in (
+                "name",
+                "strategy_type",
+                "symbol",
+                "initial_capital",
+                "fee_rate",
+                "slippage_rate",
+                "settings_json",
+            ):
+                value = getattr(request, field)
+                if value is not None:
+                    setattr(config, field, value)
+            config = self.configs.save(config)
+            self.session.commit()
+            return config
+        except Exception:
+            self.session.rollback()
+            raise

@@ -110,6 +110,7 @@ class Position(Base):
     )
     buy_date: Mapped[date] = mapped_column(Date, nullable=False)
     buy_price: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
+    buy_fee: Mapped[Decimal] = mapped_column(Numeric(18, 6), default=Decimal("0"), nullable=False)
     quantity: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
     mode: Mapped[StrategyMode] = mapped_column(enum_column(StrategyMode), nullable=False)
     status: Mapped[PositionStatus] = mapped_column(enum_column(PositionStatus), nullable=False)

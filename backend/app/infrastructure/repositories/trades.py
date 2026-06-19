@@ -36,7 +36,7 @@ class TradeRepository:
             source=source,
         )
         self.session.add(trade)
-        self.session.commit()
+        self.session.flush()
         self.session.refresh(trade)
         return trade
 

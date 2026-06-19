@@ -33,7 +33,7 @@ class StrategyConfigRepository:
             settings_json=settings_json,
         )
         self.session.add(config)
-        self.session.commit()
+        self.session.flush()
         self.session.refresh(config)
         return config
 
@@ -50,6 +50,6 @@ class StrategyConfigRepository:
 
     def save(self, config: StrategyConfig) -> StrategyConfig:
         self.session.add(config)
-        self.session.commit()
+        self.session.flush()
         self.session.refresh(config)
         return config

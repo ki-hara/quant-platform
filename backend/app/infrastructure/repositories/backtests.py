@@ -43,7 +43,7 @@ class BacktestRepository:
             total_trades=total_trades,
         )
         self.session.add(run)
-        self.session.commit()
+        self.session.flush()
         self.session.refresh(run)
         return run
 
@@ -69,7 +69,7 @@ class BacktestRepository:
             for snapshot in snapshots
         ]
         self.session.add_all(rows)
-        self.session.commit()
+        self.session.flush()
         return rows
 
     def add_trades(
@@ -92,7 +92,7 @@ class BacktestRepository:
             for trade in trades
         ]
         self.session.add_all(rows)
-        self.session.commit()
+        self.session.flush()
         return rows
 
     def _trade_side(self, side: str) -> TradeSide:
