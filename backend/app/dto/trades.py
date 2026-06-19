@@ -42,5 +42,24 @@ class SignalExecutionResponseDto(BaseModel):
     realized_pnl: Decimal
 
 
+class ManualTradeRequestDto(BaseModel):
+    config_id: int
+    trade_date: date
+    side: TradeSide
+    quantity: Decimal
+    price: Decimal
+    fee: Decimal
+    sell_reason: str | None = None
+    source: TradeSource = TradeSource.MANUAL
+    mode: StrategyMode = StrategyMode.SAFE
+    position_id: int | None = None
+
+
+class ManualTradeResponseDto(BaseModel):
+    trade: TradeResponseDto
+    cash: Decimal
+    realized_pnl: Decimal
+
+
 class PositionsResponseDto(BaseModel):
     positions: list[PositionDto]

@@ -27,6 +27,16 @@ class StrategyConfigCreateDto(BaseModel):
     settings_json: dict[str, Any]
 
 
+class StrategyConfigUpdateDto(BaseModel):
+    name: str | None = None
+    strategy_type: str | None = None
+    symbol: str | None = None
+    initial_capital: Decimal | None = None
+    fee_rate: Decimal | None = None
+    slippage_rate: Decimal | None = None
+    settings_json: dict[str, Any] | None = None
+
+
 class StrategyConfigResponseDto(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

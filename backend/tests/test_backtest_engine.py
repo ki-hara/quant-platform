@@ -2,6 +2,7 @@ from datetime import date
 from decimal import Decimal
 
 from app.backtest_engine.engine import BacktestEngine
+from app.dto.market_data import OhlcvDto
 from app.strategy_engine.dynamic_wave import DynamicWaveStrategy
 from tests.fixtures import simple_prices
 
@@ -77,3 +78,72 @@ def test_backtest_engine_generates_snapshots_and_trades() -> None:
     assert_money(result.summary.average_holding_days, "2.500000")
     assert_money(result.summary.cumulative_fees, "0.540000")
     assert result.summary.cumulative_fees == final_snapshot.cumulative_fees
+
+
+def test_calendar_monthly_capital_update_is_due_on_last_available_trading_day() -> None:
+    prices = [
+        _price(date(2026, 1, 29)),
+        _price(date(2026, 1, 30)),
+        _price(date(2026, 2, 2)),
+    ]
+    engine = BacktestEngine()
+    settings = {"capital_update": {"type": "calendar", "period": "monthly"}}
+
+    assert engine._is_capital_update_due(settings, 0, prices, None) is False
+    assert engine._is_capital_update_due(settings, 1, prices, None) is True
+    assert engine._is_capital_update_due(settings, 2, prices, None) is False
+
+
+def test_calendar_monthly_update_uses_next_actual_price_after_holiday() -> None:
+    prices = [_price(date(2026, 1, 29)), _price(date(2026, 1, 30))]
+    settings = {"capital_update": {"type": "calendar", "period": "monthly"}}
+
+    assert (
+        BacktestEngine()._is_capital_update_due(
+            settings,
+            1,
+            prices,
+            date(2026, 2, 3),
+        )
+        is True
+    )
+
+
+def test_calendar_monthly_update_is_not_due_without_lookahead() -> None:
+    prices = [_price(date(2026, 1, 15)), _price(date(2026, 1, 16))]
+    settings = {"capital_update": {"type": "calendar", "period": "monthly"}}
+
+    assert BacktestEngine()._is_capital_update_due(settings, 1, prices, None) is False
+
+
+def test_calendar_quarterly_update_requires_lookahead_in_next_quarter() -> None:
+    prices = [_price(date(2026, 3, 30)), _price(date(2026, 3, 31))]
+    settings = {"capital_update": {"type": "calendar", "period": "quarterly"}}
+
+    engine = BacktestEngine()
+    assert engine._is_capital_update_due(settings, 1, prices, date(2026, 4, 2)) is True
+    assert engine._is_capital_update_due(settings, 1, prices, date(2026, 3, 31)) is False
+
+
+def test_calendar_yearly_update_requires_lookahead_in_next_year() -> None:
+    prices = [_price(date(2026, 12, 30)), _price(date(2026, 12, 31))]
+    settings = {"capital_update": {"type": "calendar", "period": "yearly"}}
+
+    assert BacktestEngine()._is_capital_update_due(
+        settings,
+        1,
+        prices,
+        date(2027, 1, 4),
+    ) is True
+
+
+def _price(day: date) -> OhlcvDto:
+    return OhlcvDto(
+        symbol="TEST",
+        date=day,
+        open=Decimal("100"),
+        high=Decimal("100"),
+        low=Decimal("100"),
+        close=Decimal("100"),
+        volume=Decimal("1000"),
+    )

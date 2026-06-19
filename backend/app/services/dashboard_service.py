@@ -4,6 +4,7 @@ from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.domain.models import LivePortfolio, MarketPrice, Position, StrategyConfig
 from app.infrastructure.repositories.market_data import MarketPriceRepository
 from app.infrastructure.repositories.portfolios import PortfolioRepository, PositionRepository
@@ -32,12 +33,12 @@ class DashboardDto:
 
 
 class DashboardService:
-    def __init__(self, session: Session, market_data_provider: str = "finance-data-reader") -> None:
+    def __init__(self, session: Session, market_data_provider: str | None = None) -> None:
         self.configs = StrategyConfigRepository(session)
         self.portfolios = PortfolioRepository(session)
         self.positions = PositionRepository(session)
         self.market_prices = MarketPriceRepository(session)
-        self.market_data_provider = market_data_provider
+        self.market_data_provider = market_data_provider or settings.market_data_provider
 
     def get_dashboard(self, config_id: int) -> DashboardDto:
         config = self._get_config(config_id)

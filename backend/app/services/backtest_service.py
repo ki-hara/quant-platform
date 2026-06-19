@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
 
@@ -20,6 +20,8 @@ class BacktestRunRequest:
 
 
 class BacktestService:
+    LOOKAHEAD_DAYS = 14
+
     def __init__(
         self,
         session: Session,
@@ -35,10 +37,19 @@ class BacktestService:
     def run_backtest(self, request: BacktestRunRequest) -> BacktestRun:
         try:
             config = self._get_config(request.config_id)
-            prices = self.market_data_service.get_ohlcv(
+            fetched_prices = self.market_data_service.get_ohlcv(
                 config.symbol,
                 request.start_date,
-                request.end_date,
+                request.end_date + timedelta(days=self.LOOKAHEAD_DAYS),
+            )
+            prices = sorted(
+                (price for price in fetched_prices if price.date <= request.end_date),
+                key=lambda price: price.date,
+            )
+            lookahead_price = min(
+                (price for price in fetched_prices if price.date > request.end_date),
+                key=lambda price: price.date,
+                default=None,
             )
             strategy = registry.create(config.strategy_type)
             result = self.engine.run(
@@ -48,6 +59,7 @@ class BacktestService:
                 fee_rate=config.fee_rate,
                 slippage_rate=config.slippage_rate,
                 settings=config.settings_json,
+                lookahead_date=lookahead_price.date if lookahead_price else None,
             )
             run = self.backtests.create_run(
                 owner_id=config.owner_id,

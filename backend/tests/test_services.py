@@ -7,13 +7,15 @@ from sqlalchemy.orm import Session
 
 from app.db.base import Base
 from app.db.seed import seed_default_owner
-from app.domain.enums import PositionStatus, TradeSide
+from app.domain.enums import PositionStatus, TradeSide, TradeSource
 from app.infrastructure.repositories.portfolios import PortfolioRepository, PositionRepository
 from app.infrastructure.repositories.trades import TradeRepository
 from app.services.dashboard_service import DashboardService
+from app.services.manual_trade_service import ManualTradeRequest, ManualTradeService
 from app.services.signal_execution_service import SignalExecutionRequest, SignalExecutionService
 from app.services.strategy_config_service import (
     StrategyConfigCreateRequest,
+    StrategyConfigUpdateRequest,
     StrategyConfigService,
 )
 from app.strategy_engine.dynamic_wave import DynamicWaveStrategy
@@ -120,6 +122,162 @@ def test_signal_execution_sell_closes_position_and_realized_pnl_subtracts_buy_an
         assert portfolio.realized_pnl == Decimal("57.250000")
         assert trades[-1].side == TradeSide.SELL
         assert trades[-1].realized_pnl == Decimal("57.250000")
+
+
+def test_manual_trade_buy_creates_independent_open_position_and_updates_cash() -> None:
+    with create_session() as session:
+        config = create_config(session)
+
+        result = ManualTradeService(session).record_manual_trade(
+            ManualTradeRequest(
+                config_id=config.id,
+                side=TradeSide.BUY,
+                trade_date=date(2026, 1, 2),
+                quantity=Decimal("2"),
+                price=Decimal("100"),
+                fee=Decimal("1.25"),
+                source=TradeSource.MANUAL,
+            ),
+        )
+
+        portfolio = PortfolioRepository(session).get_by_config(config.id)
+        positions = PositionRepository(session).list_open(config.id)
+        trades = TradeRepository(session).list_by_strategy_config(config.id)
+
+        assert portfolio is not None
+        assert portfolio.cash == Decimal("798.750000")
+        assert portfolio.cumulative_fees == Decimal("1.250000")
+        assert positions[0].buy_price == Decimal("100.000000")
+        assert positions[0].buy_fee == Decimal("1.250000")
+        assert result.trade == trades[0]
+        assert trades[0].source == TradeSource.MANUAL
+
+
+def test_manual_trade_sell_requires_position_id() -> None:
+    with create_session() as session:
+        config = create_config(session)
+
+        with pytest.raises(ValueError, match="position_id"):
+            ManualTradeService(session).record_manual_trade(
+                ManualTradeRequest(
+                    config_id=config.id,
+                    side=TradeSide.SELL,
+                    trade_date=date(2026, 1, 3),
+                    quantity=Decimal("1"),
+                    price=Decimal("110"),
+                    fee=Decimal("0.50"),
+                    source=TradeSource.CORRECTION,
+                ),
+            )
+
+
+def test_manual_trade_partial_sell_reduces_position_and_allocates_buy_fee() -> None:
+    with create_session() as session:
+        config = create_config(session)
+        service = ManualTradeService(session)
+        service.record_manual_trade(
+            ManualTradeRequest(
+                config_id=config.id,
+                side=TradeSide.BUY,
+                trade_date=date(2026, 1, 2),
+                quantity=Decimal("2"),
+                price=Decimal("100"),
+                fee=Decimal("1.25"),
+            ),
+        )
+        position = PositionRepository(session).list_open(config.id)[0]
+
+        result = service.record_manual_trade(
+            ManualTradeRequest(
+                config_id=config.id,
+                side=TradeSide.SELL,
+                trade_date=date(2026, 1, 3),
+                quantity=Decimal("1"),
+                price=Decimal("110"),
+                fee=Decimal("0.50"),
+                position_id=position.id,
+                source=TradeSource.CORRECTION,
+            ),
+        )
+
+        portfolio = PortfolioRepository(session).get_by_config(config.id)
+        positions = PositionRepository(session).list_open(config.id)
+
+        assert portfolio is not None
+        assert len(positions) == 1
+        assert positions[0].quantity == Decimal("1.000000")
+        assert positions[0].buy_fee == Decimal("0.625000")
+        assert portfolio.cash == Decimal("908.250000")
+        assert portfolio.realized_pnl == Decimal("8.875000")
+        assert portfolio.cumulative_fees == Decimal("1.750000")
+        assert result.realized_pnl == Decimal("8.875000")
+
+
+def test_manual_trade_sell_rejects_quantity_above_open_position() -> None:
+    with create_session() as session:
+        config = create_config(session)
+        service = ManualTradeService(session)
+        service.record_manual_trade(
+            ManualTradeRequest(
+                config_id=config.id,
+                side=TradeSide.BUY,
+                trade_date=date(2026, 1, 2),
+                quantity=Decimal("1"),
+                price=Decimal("100"),
+                fee=Decimal("0"),
+            ),
+        )
+        position = PositionRepository(session).list_open(config.id)[0]
+
+        with pytest.raises(ValueError, match="cannot exceed"):
+            service.record_manual_trade(
+                ManualTradeRequest(
+                    config_id=config.id,
+                    side=TradeSide.SELL,
+                    trade_date=date(2026, 1, 3),
+                    quantity=Decimal("2"),
+                    price=Decimal("110"),
+                    fee=Decimal("0"),
+                    position_id=position.id,
+                ),
+            )
+
+
+def test_strategy_config_update_rejects_initial_capital_change() -> None:
+    with create_session() as session:
+        config = create_config(session)
+
+        with pytest.raises(ValueError, match="initial_capital"):
+            StrategyConfigService(session).update_config(
+                config.id,
+                StrategyConfigUpdateRequest(initial_capital=Decimal("2000")),
+            )
+
+
+def test_strategy_config_update_allows_unchanged_initial_capital() -> None:
+    with create_session() as session:
+        config = create_config(session)
+
+        updated = StrategyConfigService(session).update_config(
+            config.id,
+            StrategyConfigUpdateRequest(
+                name="Renamed",
+                initial_capital=Decimal("1000"),
+            ),
+        )
+
+        assert updated.name == "Renamed"
+
+
+def test_strategy_config_update_rejects_unknown_strategy_type() -> None:
+    with create_session() as session:
+        config = create_config(session)
+
+        with pytest.raises(ValueError, match="Unknown strategy type"):
+            StrategyConfigService(session).update_config(
+                config.id,
+                StrategyConfigUpdateRequest(strategy_type="missing_strategy"),
+            )
 
 
 @pytest.mark.parametrize(

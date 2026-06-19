@@ -36,6 +36,8 @@ export interface StrategyConfigCreateRequest {
   settings_json: Record<string, unknown>;
 }
 
+export type StrategyConfigUpdateRequest = Partial<StrategyConfigCreateRequest>;
+
 export interface PortfolioRow {
   strategy_config_id: number;
   capital: DecimalString;
@@ -111,6 +113,25 @@ export interface SignalExecutionRequest {
 }
 
 export interface SignalExecutionResponse {
+  trade: TradeRow;
+  cash: DecimalString;
+  realized_pnl: DecimalString;
+}
+
+export interface ManualTradeRequest {
+  config_id: number;
+  trade_date: ISODate;
+  side: "buy" | "sell";
+  quantity: DecimalString;
+  price: DecimalString;
+  fee: DecimalString;
+  sell_reason?: string | null;
+  source: "manual" | "correction";
+  mode?: string;
+  position_id?: number | null;
+}
+
+export interface ManualTradeResponse {
   trade: TradeRow;
   cash: DecimalString;
   realized_pnl: DecimalString;

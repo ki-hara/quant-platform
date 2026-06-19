@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.domain.models import StrategyConfig
 from app.infrastructure.repositories.portfolios import PortfolioRepository
 from app.infrastructure.repositories.strategies import StrategyConfigRepository
+from app.strategy_engine.registry import registry
 
 
 @dataclass(frozen=True)
@@ -46,6 +47,7 @@ class StrategyConfigService:
         request: StrategyConfigCreateRequest,
     ) -> StrategyConfig:
         try:
+            registry.create(request.strategy_type)
             config = self.configs.create(
                 owner_id=owner_id,
                 name=request.name,
@@ -76,6 +78,15 @@ class StrategyConfigService:
     ) -> StrategyConfig:
         try:
             config = self.get_config(config_id)
+            if (
+                request.initial_capital is not None
+                and request.initial_capital != config.initial_capital
+            ):
+                raise ValueError(
+                    "initial_capital cannot be changed after the live portfolio is created."
+                )
+            if request.strategy_type is not None:
+                registry.create(request.strategy_type)
             for field in (
                 "name",
                 "strategy_type",

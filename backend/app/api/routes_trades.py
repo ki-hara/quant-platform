@@ -7,6 +7,8 @@ from app.core.errors import NotFoundError, ValidationAppError
 from app.db.session import get_session
 from app.dto.dashboard import PositionDto
 from app.dto.trades import (
+    ManualTradeRequestDto,
+    ManualTradeResponseDto,
     SignalExecutionRequestDto,
     SignalExecutionResponseDto,
     TradeResponseDto,
@@ -14,6 +16,7 @@ from app.dto.trades import (
 from app.infrastructure.repositories.portfolios import PositionRepository
 from app.infrastructure.repositories.strategies import StrategyConfigRepository
 from app.infrastructure.repositories.trades import TradeRepository
+from app.services.manual_trade_service import ManualTradeRequest, ManualTradeService
 from app.services.signal_execution_service import (
     SignalExecutionRequest,
     SignalExecutionService,
@@ -46,6 +49,37 @@ def list_trades(config_id: int, session: SessionDep) -> list[object]:
 @router.get("/trades/{config_id}", response_model=list[TradeResponseDto])
 def list_trades_by_config(config_id: int, session: SessionDep) -> list[object]:
     return list_trades(config_id, session)
+
+
+@router.post(
+    "/trades/manual",
+    response_model=ManualTradeResponseDto,
+    status_code=status.HTTP_201_CREATED,
+)
+def record_manual_trade(
+    request: ManualTradeRequestDto,
+    session: SessionDep,
+) -> object:
+    service_request = ManualTradeRequest(
+        config_id=request.config_id,
+        side=request.side,
+        trade_date=request.trade_date,
+        quantity=request.quantity,
+        price=request.price,
+        fee=request.fee,
+        sell_reason=request.sell_reason,
+        source=request.source,
+        mode=request.mode,
+        position_id=request.position_id,
+    )
+    try:
+        return ManualTradeService(session).record_manual_trade(service_request)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=exc.message) from exc
+    except ValidationAppError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=exc.message) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 @router.post(

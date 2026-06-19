@@ -45,6 +45,7 @@ class BacktestEngine:
         fee_rate: Decimal,
         slippage_rate: Decimal,
         settings: dict,
+        lookahead_date: date | None = None,
     ) -> BacktestResult:
         sorted_prices = sorted(prices, key=lambda price: price.date)
         if len(sorted_prices) < 2:
@@ -129,7 +130,15 @@ class BacktestEngine:
                             )
                             next_position_id += 1
 
-                if self._is_capital_update_due(settings, index) and interval_realized_pnl != 0:
+                if (
+                    self._is_capital_update_due(
+                        settings,
+                        index,
+                        sorted_prices,
+                        lookahead_date,
+                    )
+                    and interval_realized_pnl != 0
+                ):
                     context = self._build_context(
                         price=price,
                         previous_close=previous_close,
@@ -242,12 +251,55 @@ class BacktestEngine:
         positions[:] = remaining_positions
         return cash, cumulative_fees, realized_today, trades
 
-    def _is_capital_update_due(self, settings: dict, trading_day_index: int) -> bool:
+    def _is_capital_update_due(
+        self,
+        settings: dict,
+        trading_day_index: int,
+        prices: list[OhlcvDto],
+        lookahead_date: date | None,
+    ) -> bool:
         schedule = settings.get("capital_update", {})
-        if schedule.get("type") != "trading_days":
+        if trading_day_index <= 0:
             return False
-        interval = int(schedule.get("interval", 0))
-        return interval > 0 and trading_day_index > 0 and trading_day_index % interval == 0
+        if schedule.get("type") == "trading_days":
+            interval = int(schedule.get("interval", 0))
+            return interval > 0 and trading_day_index % interval == 0
+        if schedule.get("type") == "calendar":
+            period = schedule.get("period")
+            if period not in {"monthly", "quarterly", "yearly"}:
+                return False
+            return self._is_last_available_period_day(
+                prices,
+                trading_day_index,
+                period,
+                lookahead_date,
+            )
+        return False
+
+    def _is_last_available_period_day(
+        self,
+        prices: list[OhlcvDto],
+        trading_day_index: int,
+        period: str,
+        lookahead_date: date | None,
+    ) -> bool:
+        next_date = (
+            prices[trading_day_index + 1].date
+            if trading_day_index < len(prices) - 1
+            else lookahead_date
+        )
+        if next_date is None:
+            return False
+        current_key = self._period_key(prices[trading_day_index].date, period)
+        next_key = self._period_key(next_date, period)
+        return current_key != next_key
+
+    def _period_key(self, value: date, period: str) -> tuple[int, int]:
+        if period == "monthly":
+            return (value.year, value.month)
+        if period == "quarterly":
+            return (value.year, (value.month - 1) // 3 + 1)
+        return (value.year, 1)
 
     def _apply_buy_slippage(self, price: Decimal, slippage_rate: Decimal) -> Decimal:
         return price * (Decimal("1") + slippage_rate / Decimal("100"))

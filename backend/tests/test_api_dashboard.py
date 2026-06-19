@@ -89,7 +89,42 @@ def test_post_strategy_configs_creates_config(api_client: TestClient) -> None:
     assert body["initial_capital"] == "1000.000000"
 
 
-def test_get_dashboard_returns_metric_fields(api_client: TestClient) -> None:
+def test_put_strategy_config_updates_existing_config(api_client: TestClient) -> None:
+    create_response = api_client.post(
+        "/api/strategy-configs",
+        json={
+            "name": "Original Strategy",
+            "strategy_type": "dynamic_wave",
+            "symbol": "TEST",
+            "initial_capital": "1000",
+            "fee_rate": "0.001",
+            "slippage_rate": "0",
+            "settings_json": DynamicWaveStrategy.default_settings(),
+        },
+    )
+    config_id = create_response.json()["id"]
+
+    response = api_client.put(
+        f"/api/strategy-configs/{config_id}",
+        json={
+            "name": "Updated Strategy",
+            "symbol": "QQQ",
+            "settings_json": {
+                **DynamicWaveStrategy.default_settings(),
+                "capital_update": {"type": "calendar", "period": "monthly"},
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == config_id
+    assert body["name"] == "Updated Strategy"
+    assert body["symbol"] == "QQQ"
+    assert body["settings_json"]["capital_update"] == {"type": "calendar", "period": "monthly"}
+
+
+def test_get_dashboard_reads_cached_prices_with_configured_provider_key(api_client: TestClient) -> None:
     create_response = api_client.post(
         "/api/strategy-configs",
         json={
@@ -106,7 +141,7 @@ def test_get_dashboard_returns_metric_fields(api_client: TestClient) -> None:
 
     with Session(api_client.app.state.test_engine) as session:
         MarketPriceRepository(session).upsert_prices(
-            "finance-data-reader",
+            "finance_data_reader",
             [
                 OhlcvDto(
                     symbol="TEST",
@@ -227,3 +262,101 @@ def test_invalid_signal_fill_returns_400(api_client: TestClient) -> None:
     )
 
     assert response.status_code == 400
+
+
+def test_post_manual_trade_buy_creates_trade_position_and_updates_cash(api_client: TestClient) -> None:
+    create_response = api_client.post(
+        "/api/strategy-configs",
+        json={
+            "name": "Manual Buy Strategy",
+            "strategy_type": "dynamic_wave",
+            "symbol": "TEST",
+            "initial_capital": "1000",
+            "fee_rate": "0.001",
+            "slippage_rate": "0",
+            "settings_json": DynamicWaveStrategy.default_settings(),
+        },
+    )
+    config_id = create_response.json()["id"]
+
+    response = api_client.post(
+        "/api/trades/manual",
+        json={
+            "config_id": config_id,
+            "trade_date": "2026-01-02",
+            "side": "buy",
+            "quantity": "2",
+            "price": "100",
+            "fee": "1.25",
+            "source": "manual",
+        },
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["trade"]["source"] == "manual"
+    assert body["trade"]["side"] == "buy"
+    assert body["cash"] == "798.750000"
+    positions = api_client.get(f"/api/strategy-configs/{config_id}/positions").json()
+    assert len(positions) == 1
+    assert positions[0]["buy_fee"] == "1.250000"
+
+
+def test_post_manual_trade_sell_without_position_returns_400(
+    api_client: TestClient,
+) -> None:
+    create_response = api_client.post(
+        "/api/strategy-configs",
+        json={
+            "name": "Manual Correction Strategy",
+            "strategy_type": "dynamic_wave",
+            "symbol": "TEST",
+            "initial_capital": "1000",
+            "fee_rate": "0.001",
+            "slippage_rate": "0",
+            "settings_json": DynamicWaveStrategy.default_settings(),
+        },
+    )
+    config_id = create_response.json()["id"]
+
+    response = api_client.post(
+        "/api/trades/manual",
+        json={
+            "config_id": config_id,
+            "trade_date": "2026-01-03",
+            "side": "sell",
+            "quantity": "1",
+            "price": "110",
+            "fee": "0.50",
+            "realized_pnl": "9.50",
+            "sell_reason": "broker_correction",
+            "source": "correction",
+        },
+    )
+
+    assert response.status_code == 400
+    assert "position_id" in response.json()["detail"]
+
+
+def test_put_strategy_config_rejects_initial_capital_change(api_client: TestClient) -> None:
+    create_response = api_client.post(
+        "/api/strategy-configs",
+        json={
+            "name": "Capital Guard",
+            "strategy_type": "dynamic_wave",
+            "symbol": "TEST",
+            "initial_capital": "1000",
+            "fee_rate": "0.001",
+            "slippage_rate": "0",
+            "settings_json": DynamicWaveStrategy.default_settings(),
+        },
+    )
+    config_id = create_response.json()["id"]
+
+    response = api_client.put(
+        f"/api/strategy-configs/{config_id}",
+        json={"initial_capital": "2000"},
+    )
+
+    assert response.status_code == 400
+    assert "initial_capital" in response.json()["detail"]

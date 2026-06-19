@@ -8,11 +8,13 @@ from app.db.session import get_session
 from app.dto.strategies import (
     StrategyConfigCreateDto,
     StrategyConfigResponseDto,
+    StrategyConfigUpdateDto,
     StrategyDto,
     StrategySchemaDto,
 )
 from app.services.strategy_config_service import (
     StrategyConfigCreateRequest,
+    StrategyConfigUpdateRequest,
     StrategyConfigService,
 )
 from app.strategy_engine.registry import registry
@@ -76,3 +78,29 @@ def get_strategy_config(config_id: int, session: SessionDep) -> object:
         return StrategyConfigService(session).get_config(config_id)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.put("/strategy-configs/{config_id}", response_model=StrategyConfigResponseDto)
+def update_strategy_config(
+    config_id: int,
+    request: StrategyConfigUpdateDto,
+    session: SessionDep,
+) -> object:
+    service_request = StrategyConfigUpdateRequest(
+        name=request.name,
+        strategy_type=request.strategy_type,
+        symbol=request.symbol,
+        initial_capital=request.initial_capital,
+        fee_rate=request.fee_rate,
+        slippage_rate=request.slippage_rate,
+        settings_json=request.settings_json,
+    )
+    try:
+        return StrategyConfigService(session).update_config(config_id, service_request)
+    except ValueError as exc:
+        status_code = (
+            status.HTTP_404_NOT_FOUND
+            if "not found" in str(exc).lower()
+            else status.HTTP_400_BAD_REQUEST
+        )
+        raise HTTPException(status_code=status_code, detail=str(exc)) from exc

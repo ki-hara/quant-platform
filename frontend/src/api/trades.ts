@@ -1,5 +1,7 @@
 import { apiGet, apiPost } from "./client";
 import type {
+  ManualTradeRequest,
+  ManualTradeResponse,
   PositionRow,
   SignalExecutionRequest,
   SignalExecutionResponse,
@@ -22,4 +24,8 @@ export function executeSignal(
     `/api/strategy-configs/${configId}/signals/execute`,
     request,
   );
+}
+
+export function recordManualTrade(request: ManualTradeRequest): Promise<ManualTradeResponse> {
+  return apiPost<ManualTradeResponse>("/api/trades/manual", request);
 }

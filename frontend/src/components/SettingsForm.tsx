@@ -1,6 +1,11 @@
 import { Save } from "lucide-react";
 import { FormEvent, useMemo, useState } from "react";
-import type { StrategyConfigCreateRequest, StrategyInfo, StrategySchema } from "../types/api";
+import type {
+  StrategyConfig,
+  StrategyConfigCreateRequest,
+  StrategyInfo,
+  StrategySchema,
+} from "../types/api";
 import { translateStrategyType } from "../utils/format";
 
 type FieldValue = string | number | boolean;
@@ -15,6 +20,7 @@ interface SettingsFormProps {
   strategies: StrategyInfo[];
   schema: StrategySchema | null;
   selectedStrategyType: string;
+  editingConfig?: StrategyConfig | null;
   onStrategyTypeChange: (strategyType: string) => void;
   onSubmit: (request: StrategyConfigCreateRequest) => Promise<void>;
   saving?: boolean;
@@ -32,13 +38,26 @@ export function SettingsForm({
   strategies,
   schema,
   selectedStrategyType,
+  editingConfig,
   onStrategyTypeChange,
   onSubmit,
   saving = false,
 }: SettingsFormProps) {
-  const [common, setCommon] = useState(commonDefaults);
+  const [common, setCommon] = useState(() =>
+    editingConfig
+      ? {
+          name: editingConfig.name,
+          symbol: editingConfig.symbol,
+          initial_capital: editingConfig.initial_capital,
+          fee_rate: editingConfig.fee_rate,
+          slippage_rate: editingConfig.slippage_rate,
+        }
+      : commonDefaults,
+  );
   const fields = useMemo(() => flattenSchemaFields(schema?.schema), [schema]);
-  const [settings, setSettings] = useState<Record<string, FieldValue>>({});
+  const [settings, setSettings] = useState<Record<string, FieldValue>>(() =>
+    flattenSettings(editingConfig?.settings_json),
+  );
 
   function valueFor(field: FieldDescriptor): FieldValue {
     return settings[field.key] ?? field.defaultValue;
@@ -46,14 +65,15 @@ export function SettingsForm({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const settingsJson = buildNestedSettings(fields, settings);
     await onSubmit({
       ...common,
       strategy_type: selectedStrategyType,
-      settings_json: settingsJson,
+      settings_json: buildNestedSettings(fields, settings),
     });
-    setCommon(commonDefaults);
-    setSettings({});
+    if (!editingConfig) {
+      setCommon(commonDefaults);
+      setSettings({});
+    }
   }
 
   return (
@@ -88,7 +108,7 @@ export function SettingsForm({
             />
           </label>
           <label>
-            티커
+            종목 코드
             <input
               value={common.symbol}
               onChange={(event) =>
@@ -99,17 +119,24 @@ export function SettingsForm({
             />
           </label>
           <label>
-            초기 자본
+            초기 투자금
             <input
               value={common.initial_capital}
               onChange={(event) =>
                 setCommon((current) => ({ ...current, initial_capital: event.target.value }))
               }
+              readOnly={Boolean(editingConfig)}
+              aria-describedby={editingConfig ? "initial-capital-edit-note" : undefined}
               required
             />
+            {editingConfig ? (
+              <small id="initial-capital-edit-note" className="form-status">
+                실전 포트폴리오 회계 보호를 위해 생성 후에는 수정할 수 없습니다.
+              </small>
+            ) : null}
           </label>
           <label>
-            수수료율
+            거래 수수료율 (%)
             <input
               value={common.fee_rate}
               onChange={(event) =>
@@ -119,7 +146,7 @@ export function SettingsForm({
             />
           </label>
           <label>
-            슬리피지율
+            슬리피지율 (%)
             <input
               value={common.slippage_rate}
               onChange={(event) =>
@@ -134,18 +161,41 @@ export function SettingsForm({
       <div className="form-section">
         <h2>전략별 설정</h2>
         {fields.length === 0 ? (
-          <div className="empty-state">스키마 데이터 없음</div>
+          <div className="empty-state">설정 스키마가 없습니다.</div>
         ) : (
           <div className="form-grid">
-            {fields.map((field) => (
+            {fields.filter((field) => isFieldVisible(field, fields, settings)).map((field) => (
               <label key={field.key}>
                 {field.label}
-                <input
-                  value={String(valueFor(field))}
-                  onChange={(event) =>
-                    setSettings((current) => ({ ...current, [field.key]: coerceValue(event.target.value) }))
-                  }
-                />
+                {field.key === "capital_update.type" ? (
+                  <select
+                    value={String(valueFor(field))}
+                    onChange={(event) =>
+                      setSettings((current) => ({ ...current, [field.key]: event.target.value }))
+                    }
+                  >
+                    <option value="trading_days">거래일 간격</option>
+                    <option value="calendar">달력 주기</option>
+                  </select>
+                ) : field.key === "capital_update.period" ? (
+                  <select
+                    value={String(valueFor(field))}
+                    onChange={(event) =>
+                      setSettings((current) => ({ ...current, [field.key]: event.target.value }))
+                    }
+                  >
+                    <option value="monthly">매월</option>
+                    <option value="quarterly">매분기</option>
+                    <option value="yearly">매년</option>
+                  </select>
+                ) : (
+                  <input
+                    value={String(valueFor(field))}
+                    onChange={(event) =>
+                      setSettings((current) => ({ ...current, [field.key]: coerceValue(event.target.value) }))
+                    }
+                  />
+                )}
               </label>
             ))}
           </div>
@@ -155,7 +205,7 @@ export function SettingsForm({
       <div className="form-actions">
         <button type="submit" disabled={saving || strategies.length === 0}>
           <Save aria-hidden="true" size={16} />
-          {saving ? "저장 중" : "설정 저장"}
+          {saving ? "저장 중" : editingConfig ? "변경사항 저장" : "새 설정 저장"}
         </button>
       </div>
     </form>
@@ -178,6 +228,11 @@ function flattenObject(value: Record<string, unknown>, prefix = ""): FieldDescri
   });
 }
 
+function flattenSettings(value: Record<string, unknown> | undefined): Record<string, FieldValue> {
+  if (!value) return {};
+  return Object.fromEntries(flattenObject(value).map((field) => [field.key, field.defaultValue]));
+}
+
 function buildNestedSettings(fields: FieldDescriptor[], values: Record<string, FieldValue>) {
   const root: Record<string, unknown> = {};
   fields.forEach((field) => {
@@ -192,6 +247,19 @@ function buildNestedSettings(fields: FieldDescriptor[], values: Record<string, F
   return root;
 }
 
+function isFieldVisible(
+  field: FieldDescriptor,
+  fields: FieldDescriptor[],
+  values: Record<string, FieldValue>,
+): boolean {
+  if (field.key !== "capital_update.interval" && field.key !== "capital_update.period") return true;
+  const typeField = fields.find((candidate) => candidate.key === "capital_update.type");
+  const updateType = String(values["capital_update.type"] ?? typeField?.defaultValue ?? "trading_days");
+  return field.key === "capital_update.interval"
+    ? updateType === "trading_days"
+    : updateType === "calendar";
+}
+
 function coerceValue(value: string): FieldValue {
   if (value === "true") return true;
   if (value === "false") return false;
@@ -201,20 +269,21 @@ function coerceValue(value: string): FieldValue {
 
 function labelFor(key: string): string {
   const labels: Record<string, string> = {
-    mode_rsi_symbol: "모드 RSI 티커",
-    base_index: "기준 지수",
-    profit_compounding_rate: "수익 복리 반영률",
-    loss_compounding_rate: "손실 복리 반영률",
-    "capital_update.type": "자본 갱신 방식",
-    "capital_update.interval": "자본 갱신 간격",
-    "safe.split_count": "안전 분할 수",
-    "safe.max_holding_days": "안전 최대 보유일",
-    "safe.buy_threshold_percent": "안전 매수 임계값(%)",
-    "safe.sell_threshold_percent": "안전 매도 임계값(%)",
-    "aggressive.split_count": "공세 분할 수",
-    "aggressive.max_holding_days": "공세 최대 보유일",
-    "aggressive.buy_threshold_percent": "공세 매수 임계값(%)",
-    "aggressive.sell_threshold_percent": "공세 매도 임계값(%)",
+    mode_rsi_symbol: "모드 변경 RSI 종목",
+    base_index: "기초지수",
+    profit_compounding_rate: "이익복리율 (PCR)",
+    loss_compounding_rate: "손실복리율 (LCR)",
+    "capital_update.type": "투자금 갱신 방식",
+    "capital_update.interval": "투자금 갱신 거래일 간격",
+    "capital_update.period": "투자금 갱신 달력 주기",
+    "safe.split_count": "안전모드 분할수",
+    "safe.max_holding_days": "안전모드 최대 보유기간",
+    "safe.buy_threshold_percent": "안전모드 매수조건 (%)",
+    "safe.sell_threshold_percent": "안전모드 매도조건 (%)",
+    "aggressive.split_count": "공세모드 분할수",
+    "aggressive.max_holding_days": "공세모드 최대 보유기간",
+    "aggressive.buy_threshold_percent": "공세모드 매수조건 (%)",
+    "aggressive.sell_threshold_percent": "공세모드 매도조건 (%)",
   };
   return labels[key] ?? key;
 }

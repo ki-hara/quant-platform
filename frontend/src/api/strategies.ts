@@ -1,7 +1,8 @@
-import { apiGet, apiPost } from "./client";
+import { apiGet, apiPost, apiPut } from "./client";
 import type {
   StrategyConfig,
   StrategyConfigCreateRequest,
+  StrategyConfigUpdateRequest,
   StrategyInfo,
   StrategySchema,
 } from "../types/api";
@@ -26,4 +27,11 @@ export function createStrategyConfig(
 
 export function getStrategyConfig(configId: number): Promise<StrategyConfig> {
   return apiGet<StrategyConfig>(`/api/strategy-configs/${configId}`);
+}
+
+export function updateStrategyConfig(
+  configId: number,
+  request: StrategyConfigUpdateRequest,
+): Promise<StrategyConfig> {
+  return apiPut<StrategyConfig>(`/api/strategy-configs/${configId}`, request);
 }

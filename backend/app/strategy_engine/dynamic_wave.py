@@ -1,4 +1,3 @@
-from datetime import date
 from decimal import Decimal, ROUND_DOWN
 
 from app.domain.enums import StrategyMode
@@ -20,7 +19,7 @@ class DynamicWaveStrategy(Strategy):
             "base_index": "QQQ",
             "profit_compounding_rate": 50,
             "loss_compounding_rate": 30,
-            "capital_update": {"type": "trading_days", "interval": 20},
+            "capital_update": {"type": "trading_days", "interval": 20, "period": "monthly"},
             "safe": {
                 "split_count": 7,
                 "max_holding_days": 20,

@@ -1,4 +1,6 @@
 from collections.abc import Generator
+from datetime import date, timedelta
+from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
@@ -10,17 +12,34 @@ from app.db.base import Base
 from app.db.seed import seed_default_owner
 from app.db.session import get_session
 from app.main import create_app
+from app.dto.market_data import OhlcvDto
 from app.strategy_engine.dynamic_wave import DynamicWaveStrategy
 from tests.fixtures import simple_prices
 
 
 class FakeMarketDataService:
+    def __init__(self) -> None:
+        self.calls = []
+
     def get_ohlcv(self, symbol, start_date, end_date):
-        return [
+        self.calls.append((symbol, start_date, end_date))
+        prices = [
             price
             for price in simple_prices()
             if price.symbol == symbol and start_date <= price.date <= end_date
         ]
+        lookahead = OhlcvDto(
+            symbol="TEST",
+            date=date(2026, 1, 7),
+            open=Decimal("113"),
+            high=Decimal("113"),
+            low=Decimal("113"),
+            close=Decimal("113"),
+            volume=Decimal("1000"),
+        )
+        if symbol == lookahead.symbol and start_date <= lookahead.date <= end_date:
+            prices.append(lookahead)
+        return prices
 
 
 @pytest.fixture
@@ -40,9 +59,11 @@ def api_client() -> Generator[TestClient, None, None]:
 
     from app.api.routes_backtests import get_market_data_service
 
+    fake_market_data_service = FakeMarketDataService()
     app = create_app()
     app.dependency_overrides[get_session] = override_session
-    app.dependency_overrides[get_market_data_service] = lambda: FakeMarketDataService()
+    app.dependency_overrides[get_market_data_service] = lambda: fake_market_data_service
+    app.state.fake_market_data_service = fake_market_data_service
     client = TestClient(app)
     yield client
     client.close()
@@ -90,6 +111,15 @@ def test_post_backtests_returns_completed_run_with_fixture_market_data(
     assert body["max_drawdown"] is not None
     assert body["win_rate"] is not None
     assert body["total_trades"] >= 0
+    assert api_client.app.state.fake_market_data_service.calls[-1] == (
+        "TEST",
+        date(2026, 1, 1),
+        date(2026, 1, 6) + timedelta(days=14),
+    )
+
+    daily = api_client.get(f"/api/backtests/{body['id']}/daily.csv")
+    assert "2026-01-06" in daily.text
+    assert "2026-01-07" not in daily.text
 
 
 def test_backtest_csv_endpoints_stream_attachments(api_client: TestClient) -> None:
