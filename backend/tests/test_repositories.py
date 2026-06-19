@@ -8,7 +8,11 @@ from app.db.base import Base
 from app.db.seed import seed_default_owner
 from app.db.session import create_engine_kwargs
 from app.dto.market_data import OhlcvDto
+from app.domain.enums import StrategyMode, TradeSide, TradeSource
 from app.domain.models import Owner
+from app.infrastructure.repositories.portfolios import PortfolioRepository, PositionRepository
+from app.infrastructure.repositories.strategies import StrategyConfigRepository
+from app.infrastructure.repositories.trades import TradeRepository
 from app.infrastructure.repositories.market_data import MarketPriceRepository
 
 
@@ -76,3 +80,52 @@ def test_market_price_repository_upserts_and_lists_prices_by_symbol_and_range() 
     assert [price.symbol for price in prices] == ["005930", "005930"]
     assert [price.close for price in prices] == [Decimal("100.000000"), Decimal("105.000000")]
     assert [int(price.volume) for price in prices] == [900, 1000]
+
+
+def test_repositories_read_live_records_by_strategy_config_id() -> None:
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+
+    with Session(engine) as session:
+        seed_default_owner(session, "default")
+        configs = StrategyConfigRepository(session)
+        portfolios = PortfolioRepository(session)
+        positions = PositionRepository(session)
+        trades = TradeRepository(session)
+
+        config = configs.create(
+            owner_id="default",
+            name="Live Strategy",
+            strategy_type="dynamic_wave",
+            symbol="005930",
+            initial_capital=Decimal("1000000"),
+            fee_rate=Decimal("0.1"),
+            slippage_rate=Decimal("0.0"),
+            settings_json={"safe": {"split_count": 7}},
+        )
+        portfolio = portfolios.create_for_config(config)
+        position = positions.create_open(
+            strategy_config_id=config.id,
+            buy_date=date(2026, 1, 2),
+            buy_price=Decimal("50000"),
+            quantity=Decimal("3"),
+            mode=StrategyMode.SAFE,
+        )
+        trade = trades.create(
+            strategy_config_id=config.id,
+            trade_date=date(2026, 1, 2),
+            side=TradeSide.BUY,
+            quantity=Decimal("3"),
+            price=Decimal("50000"),
+            fee=Decimal("150"),
+            realized_pnl=Decimal("0"),
+            sell_reason=None,
+            source=TradeSource.SIGNAL_EXECUTION,
+        )
+
+        assert configs.get(config.id) == config
+        assert configs.list_by_owner("default") == [config]
+        assert portfolios.get_by_config(config.id) == portfolio
+        assert positions.list_open(config.id) == [position]
+        assert positions.list_by_strategy_config(config.id) == [position]
+        assert trades.list_by_strategy_config(config.id) == [trade]
