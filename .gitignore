@@ -1,1 +1,9 @@
 .superpowers/
+.venv/
+__pycache__/
+.pytest_cache/
+quant_platform.db
+node_modules/
+dist/
+.env
+.env.*
