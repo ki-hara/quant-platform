@@ -54,6 +54,10 @@ docker compose up --build
 - 백엔드: `http://localhost:8000`
 - 프론트엔드: `http://localhost:5173`
 - SQLite 데이터베이스: `quant-data` 볼륨의 `/data/quant_platform.db`
+- 백엔드 컨테이너는 추적 중인 `uv.lock`을 기준으로 런타임 의존성만 설치합니다.
+- 프론트엔드 컨테이너는 추적 중인 `package-lock.json`을 기준으로 `npm ci`를 실행합니다.
+
+Compose는 기본 환경 변수로 `QUANT_DEFAULT_OWNER_ID=default`, `QUANT_MARKET_DATA_PROVIDER=finance_data_reader`, `VITE_API_BASE_URL=http://localhost:8000`을 설정합니다.
 
 중지하려면 다음을 실행합니다.
 

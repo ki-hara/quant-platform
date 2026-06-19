@@ -5,6 +5,8 @@ services:
       - "8000:8000"
     environment:
       QUANT_DATABASE_URL: sqlite:////data/quant_platform.db
+      QUANT_DEFAULT_OWNER_ID: default
+      QUANT_MARKET_DATA_PROVIDER: finance_data_reader
     volumes:
       - quant-data:/data
 
