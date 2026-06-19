@@ -2,7 +2,7 @@ import { RefreshCw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { getDashboard } from "../api/dashboard";
 import { listStrategyConfigs } from "../api/strategies";
-import { listTrades, executeSignal } from "../api/trades";
+import { executeSignal, listTrades } from "../api/trades";
 import { MetricStrip } from "../components/MetricStrip";
 import { SignalPanel } from "../components/SignalPanel";
 import { Table, type TableColumn } from "../components/Table";
@@ -13,7 +13,14 @@ import type {
   StrategyConfig,
   TradeRow,
 } from "../types/api";
-import { formatMoney, translateSide, translateStatus } from "../utils/format";
+import {
+  formatMoney,
+  translateMode,
+  translateReason,
+  translateSide,
+  translateSource,
+  translateStatus,
+} from "../utils/format";
 
 export function DashboardPage() {
   const [configs, setConfigs] = useState<StrategyConfig[]>([]);
@@ -123,7 +130,11 @@ export function DashboardPage() {
         <div className="panel-header">
           <div>
             <h2>계좌 요약</h2>
-            <span>{dashboard?.latest_price ? `최근 종가 ${formatMoney(dashboard.latest_price.close)}` : "시장 데이터 대기"}</span>
+            <span>
+              {dashboard?.latest_price
+                ? `최근 종가 ${formatMoney(dashboard.latest_price.close)}`
+                : "시장 데이터 대기"}
+            </span>
           </div>
         </div>
         <MetricStrip metrics={metrics} />
@@ -160,7 +171,7 @@ const positionColumns: TableColumn<PositionRow>[] = [
   { key: "buy_date", header: "매수일", render: (row) => row.buy_date },
   { key: "quantity", header: "수량", align: "right", render: (row) => formatMoney(row.quantity) },
   { key: "price", header: "매수가", align: "right", render: (row) => formatMoney(row.buy_price) },
-  { key: "mode", header: "모드", render: (row) => row.mode },
+  { key: "mode", header: "모드", render: (row) => translateMode(row.mode) },
   { key: "status", header: "상태", render: (row) => translateStatus(row.status) },
 ];
 
@@ -170,7 +181,8 @@ const tradeColumns: TableColumn<TradeRow>[] = [
   { key: "quantity", header: "수량", align: "right", render: (row) => formatMoney(row.quantity) },
   { key: "price", header: "가격", align: "right", render: (row) => formatMoney(row.price) },
   { key: "pnl", header: "실현 손익", align: "right", render: (row) => formatMoney(row.realized_pnl) },
-  { key: "source", header: "출처", render: (row) => row.source },
+  { key: "reason", header: "사유", render: (row) => translateReason(row.sell_reason) },
+  { key: "source", header: "출처", render: (row) => translateSource(row.source) },
 ];
 
 function errorMessage(error: unknown): string {

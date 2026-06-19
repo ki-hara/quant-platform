@@ -1,12 +1,23 @@
 import { Play, RotateCcw } from "lucide-react";
 import { FormEvent, useMemo, useState } from "react";
 import type { DashboardResponse, PositionRow, SignalExecutionRequest } from "../types/api";
-import { todayIso } from "../utils/format";
+import { formatPercent, todayIso, translateMode, translateReason } from "../utils/format";
 
 interface SignalPanelProps {
   dashboard: DashboardResponse | null;
   onExecute: (request: SignalExecutionRequest) => Promise<void>;
   executing?: boolean;
+}
+
+interface SellSignalRow {
+  position_id?: number;
+  should_sell?: boolean;
+  reason?: string | null;
+  return_percent?: string | number | null;
+}
+
+interface ActionableSellSignal extends SellSignalRow {
+  position: PositionRow | undefined;
 }
 
 const defaultForm = {
@@ -28,11 +39,18 @@ export function SignalPanel({ dashboard, onExecute, executing = false }: SignalP
   const latestClose = dashboard?.latest_price?.close ?? "";
   const signals = dashboard?.signals;
 
-  const sellSignalCount = useMemo(() => {
-    return Array.isArray(signals?.sell_signals) ? signals.sell_signals.length : 0;
-  }, [signals?.sell_signals]);
+  const actionableSellSignals = useMemo(() => {
+    const rows = Array.isArray(signals?.sell_signals) ? signals.sell_signals : [];
+    return rows
+      .map(toSellSignalRow)
+      .filter((row) => row.should_sell === true)
+      .map<ActionableSellSignal>((row) => ({
+        ...row,
+        position: positions.find((position) => position.id === row.position_id),
+      }));
+  }, [positions, signals?.sell_signals]);
 
-  function prefill(side: "buy" | "sell", position?: PositionRow) {
+  function prefill(side: "buy" | "sell", position?: PositionRow, reason?: string | null) {
     setExpanded(true);
     setForm((current) => ({
       ...current,
@@ -40,7 +58,7 @@ export function SignalPanel({ dashboard, onExecute, executing = false }: SignalP
       price: latestClose || current.price,
       quantity: position?.quantity ?? current.quantity,
       position_id: position ? String(position.id) : "",
-      sell_reason: side === "sell" ? "manual_signal" : "",
+      sell_reason: side === "sell" ? reason ?? "manual_signal" : "",
     }));
   }
 
@@ -58,6 +76,8 @@ export function SignalPanel({ dashboard, onExecute, executing = false }: SignalP
       sell_reason: form.side === "sell" ? form.sell_reason || "manual_signal" : null,
     });
   }
+
+  const firstSellSignal = actionableSellSignals[0];
 
   return (
     <section className="panel">
@@ -83,8 +103,8 @@ export function SignalPanel({ dashboard, onExecute, executing = false }: SignalP
           <div className="signal-card">
             <div>
               <span className="signal-label">오늘의 매수</span>
-              <strong>{signals?.should_buy ? "매수 조건 충족" : "대기"}</strong>
-              <p>{signals?.buy_reason ?? signals?.reason ?? "매수 신호 없음"}</p>
+              <strong>{signals?.should_buy ? "매수 조건 충족" : "매수 신호 없음"}</strong>
+              <p>{translateReason(signals?.buy_reason ?? signals?.reason)}</p>
             </div>
             <button type="button" onClick={() => prefill("buy")} disabled={!signals?.available}>
               <Play aria-hidden="true" size={16} />
@@ -95,13 +115,30 @@ export function SignalPanel({ dashboard, onExecute, executing = false }: SignalP
           <div className="signal-card">
             <div>
               <span className="signal-label">오늘의 매도</span>
-              <strong>{sellSignalCount > 0 ? `${sellSignalCount}건` : "대기"}</strong>
-              <p>{sellSignalCount > 0 ? "매도 후보 포지션이 있습니다." : "매도 신호 없음"}</p>
+              <strong>
+                {actionableSellSignals.length > 0
+                  ? `${actionableSellSignals.length}건`
+                  : "매도 신호 없음"}
+              </strong>
+              {actionableSellSignals.length > 0 ? (
+                <ul className="signal-list">
+                  {actionableSellSignals.map((signal) => (
+                    <li key={signal.position_id ?? `${signal.reason}-${signal.return_percent}`}>
+                      #{signal.position_id ?? "-"} {translateReason(signal.reason)}
+                      {signal.return_percent !== null && signal.return_percent !== undefined
+                        ? ` / ${formatPercent(Number(signal.return_percent) / 100)}`
+                        : ""}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p>실행 가능한 매도 신호가 없습니다.</p>
+              )}
             </div>
             <button
               type="button"
-              onClick={() => prefill("sell", positions[0])}
-              disabled={!signals?.available || positions.length === 0}
+              onClick={() => prefill("sell", firstSellSignal?.position, firstSellSignal?.reason)}
+              disabled={!signals?.available || actionableSellSignals.length === 0 || !firstSellSignal?.position}
             >
               <Play aria-hidden="true" size={16} />
               실행
@@ -171,7 +208,7 @@ export function SignalPanel({ dashboard, onExecute, executing = false }: SignalP
                   <option value="">선택</option>
                   {positions.map((position) => (
                     <option key={position.id} value={position.id}>
-                      #{position.id} / {position.quantity}주
+                      #{position.id} / {position.quantity}주 / {translateMode(position.mode)}
                     </option>
                   ))}
                 </select>
@@ -193,8 +230,8 @@ export function SignalPanel({ dashboard, onExecute, executing = false }: SignalP
                 value={form.mode}
                 onChange={(event) => setForm((current) => ({ ...current, mode: event.target.value }))}
               >
-                <option value="safe">안정</option>
-                <option value="aggressive">공격</option>
+                <option value="safe">안전</option>
+                <option value="aggressive">공세</option>
               </select>
             </label>
           )}
@@ -205,4 +242,16 @@ export function SignalPanel({ dashboard, onExecute, executing = false }: SignalP
       ) : null}
     </section>
   );
+}
+
+function toSellSignalRow(row: Record<string, unknown>): SellSignalRow {
+  return {
+    position_id: typeof row.position_id === "number" ? row.position_id : undefined,
+    should_sell: row.should_sell === true,
+    reason: typeof row.reason === "string" ? row.reason : null,
+    return_percent:
+      typeof row.return_percent === "string" || typeof row.return_percent === "number"
+        ? row.return_percent
+        : null,
+  };
 }

@@ -3,7 +3,7 @@ import { createStrategyConfig, getStrategySchema, listStrategies, listStrategyCo
 import { SettingsForm } from "../components/SettingsForm";
 import { Table, type TableColumn } from "../components/Table";
 import type { StrategyConfig, StrategyConfigCreateRequest, StrategyInfo, StrategySchema } from "../types/api";
-import { formatMoney } from "../utils/format";
+import { formatMoney, translateStrategyType } from "../utils/format";
 
 export function SettingsPage() {
   const [strategies, setStrategies] = useState<StrategyInfo[]>([]);
@@ -98,7 +98,7 @@ export function SettingsPage() {
 const configColumns: TableColumn<StrategyConfig>[] = [
   { key: "id", header: "ID", render: (row) => row.id },
   { key: "name", header: "이름", render: (row) => row.name },
-  { key: "strategy", header: "전략", render: (row) => row.strategy_type },
+  { key: "strategy", header: "전략", render: (row) => translateStrategyType(row.strategy_type) },
   { key: "symbol", header: "티커", render: (row) => row.symbol },
   { key: "capital", header: "초기 자본", align: "right", render: (row) => formatMoney(row.initial_capital) },
   { key: "fee", header: "수수료율", align: "right", render: (row) => row.fee_rate },

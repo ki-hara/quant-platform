@@ -13,7 +13,7 @@ import { BacktestChart } from "../components/BacktestChart";
 import { MetricStrip } from "../components/MetricStrip";
 import { Table, type TableColumn } from "../components/Table";
 import type { BacktestDailySnapshot, BacktestRun, BacktestTrade, StrategyConfig } from "../types/api";
-import { formatMoney, formatPercent, todayIso, translateSide } from "../utils/format";
+import { formatMoney, formatPercent, todayIso, translateReason, translateSide } from "../utils/format";
 
 export function BacktestPage() {
   const [configs, setConfigs] = useState<StrategyConfig[]>([]);
@@ -120,7 +120,7 @@ export function BacktestPage() {
         <div className="panel-header">
           <div>
             <h2>자산 곡선 / 낙폭</h2>
-            <span>총자산과 drawdown 시계열</span>
+            <span>총자산과 낙폭 시계열</span>
           </div>
         </div>
         <BacktestChart rows={dailyRows} />
@@ -169,7 +169,7 @@ const backtestTradeColumns: TableColumn<BacktestTrade>[] = [
   { key: "price", header: "가격", align: "right", render: (row) => formatMoney(row.price) },
   { key: "fee", header: "수수료", align: "right", render: (row) => formatMoney(row.fee) },
   { key: "pnl", header: "실현 손익", align: "right", render: (row) => formatMoney(row.realized_pnl) },
-  { key: "reason", header: "사유", render: (row) => row.sell_reason ?? "-" },
+  { key: "reason", header: "사유", render: (row) => translateReason(row.sell_reason) },
 ];
 
 function errorMessage(error: unknown): string {

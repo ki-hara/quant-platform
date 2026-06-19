@@ -1,6 +1,7 @@
 import { Save } from "lucide-react";
 import { FormEvent, useMemo, useState } from "react";
 import type { StrategyConfigCreateRequest, StrategyInfo, StrategySchema } from "../types/api";
+import { translateStrategyType } from "../utils/format";
 
 type FieldValue = string | number | boolean;
 
@@ -72,7 +73,7 @@ export function SettingsForm({
             >
               {strategies.map((strategy) => (
                 <option key={strategy.type} value={strategy.type}>
-                  {strategy.name}
+                  {translateStrategyType(strategy.type)}
                 </option>
               ))}
             </select>
@@ -206,14 +207,14 @@ function labelFor(key: string): string {
     loss_compounding_rate: "손실 복리 반영률",
     "capital_update.type": "자본 갱신 방식",
     "capital_update.interval": "자본 갱신 간격",
-    "safe.split_count": "안정 분할 수",
-    "safe.max_holding_days": "안정 최대 보유일",
-    "safe.buy_threshold_percent": "안정 매수 임계값(%)",
-    "safe.sell_threshold_percent": "안정 매도 임계값(%)",
-    "aggressive.split_count": "공격 분할 수",
-    "aggressive.max_holding_days": "공격 최대 보유일",
-    "aggressive.buy_threshold_percent": "공격 매수 임계값(%)",
-    "aggressive.sell_threshold_percent": "공격 매도 임계값(%)",
+    "safe.split_count": "안전 분할 수",
+    "safe.max_holding_days": "안전 최대 보유일",
+    "safe.buy_threshold_percent": "안전 매수 임계값(%)",
+    "safe.sell_threshold_percent": "안전 매도 임계값(%)",
+    "aggressive.split_count": "공세 분할 수",
+    "aggressive.max_holding_days": "공세 최대 보유일",
+    "aggressive.buy_threshold_percent": "공세 매수 임계값(%)",
+    "aggressive.sell_threshold_percent": "공세 매도 임계값(%)",
   };
   return labels[key] ?? key;
 }

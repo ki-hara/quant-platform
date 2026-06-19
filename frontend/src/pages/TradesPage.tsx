@@ -4,7 +4,15 @@ import { listStrategyConfigs } from "../api/strategies";
 import { listPositions, listTrades } from "../api/trades";
 import { Table, type TableColumn } from "../components/Table";
 import type { PositionRow, StrategyConfig, TradeRow } from "../types/api";
-import { formatMoney, todayIso, translateSide, translateStatus } from "../utils/format";
+import {
+  formatMoney,
+  todayIso,
+  translateMode,
+  translateReason,
+  translateSide,
+  translateSource,
+  translateStatus,
+} from "../utils/format";
 
 export function TradesPage() {
   const [configs, setConfigs] = useState<StrategyConfig[]>([]);
@@ -133,7 +141,7 @@ const positionColumns: TableColumn<PositionRow>[] = [
   { key: "quantity", header: "수량", align: "right", render: (row) => formatMoney(row.quantity) },
   { key: "price", header: "매수가", align: "right", render: (row) => formatMoney(row.buy_price) },
   { key: "fee", header: "수수료", align: "right", render: (row) => formatMoney(row.buy_fee) },
-  { key: "mode", header: "모드", render: (row) => row.mode },
+  { key: "mode", header: "모드", render: (row) => translateMode(row.mode) },
   { key: "status", header: "상태", render: (row) => translateStatus(row.status) },
 ];
 
@@ -144,8 +152,8 @@ const tradeColumns: TableColumn<TradeRow>[] = [
   { key: "price", header: "가격", align: "right", render: (row) => formatMoney(row.price) },
   { key: "fee", header: "수수료", align: "right", render: (row) => formatMoney(row.fee) },
   { key: "pnl", header: "실현 손익", align: "right", render: (row) => formatMoney(row.realized_pnl) },
-  { key: "reason", header: "사유", render: (row) => row.sell_reason ?? "-" },
-  { key: "source", header: "출처", render: (row) => row.source },
+  { key: "reason", header: "사유", render: (row) => translateReason(row.sell_reason) },
+  { key: "source", header: "출처", render: (row) => translateSource(row.source) },
 ];
 
 function errorMessage(error: unknown): string {

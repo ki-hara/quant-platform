@@ -411,6 +411,14 @@ button:disabled,
   line-height: 1.4;
 }
 
+.signal-list {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .execution-form {
   margin-top: 12px;
   border-top: 1px solid var(--border);
