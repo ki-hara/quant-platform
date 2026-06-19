@@ -139,3 +139,91 @@ def test_get_dashboard_returns_metric_fields(api_client: TestClient) -> None:
     assert body["latest_price"]["close"] == "102.000000"
     assert body["total_asset"] == "1000.000000"
     assert body["signals"]["available"] is True
+
+
+def test_positions_missing_config_returns_404(api_client: TestClient) -> None:
+    response = api_client.get("/api/positions/999")
+
+    assert response.status_code == 404
+    assert "Strategy config not found" in response.json()["detail"]
+
+
+def test_trades_missing_config_returns_404(api_client: TestClient) -> None:
+    response = api_client.get("/api/trades/999")
+
+    assert response.status_code == 404
+    assert "Strategy config not found" in response.json()["detail"]
+
+
+def test_signal_execution_missing_config_returns_404(api_client: TestClient) -> None:
+    response = api_client.post(
+        "/api/strategy-configs/999/signals/execute",
+        json={
+            "side": "buy",
+            "trade_date": "2026-01-02",
+            "quantity": "1",
+            "price": "100",
+            "fee": "0",
+        },
+    )
+
+    assert response.status_code == 404
+
+
+def test_signal_execution_missing_position_returns_404(api_client: TestClient) -> None:
+    create_response = api_client.post(
+        "/api/strategy-configs",
+        json={
+            "name": "Sell Strategy",
+            "strategy_type": "dynamic_wave",
+            "symbol": "TEST",
+            "initial_capital": "1000",
+            "fee_rate": "0.001",
+            "slippage_rate": "0",
+            "settings_json": DynamicWaveStrategy.default_settings(),
+        },
+    )
+    config_id = create_response.json()["id"]
+
+    response = api_client.post(
+        f"/api/strategy-configs/{config_id}/signals/execute",
+        json={
+            "side": "sell",
+            "trade_date": "2026-01-02",
+            "quantity": "1",
+            "price": "100",
+            "fee": "0",
+            "position_id": 999,
+        },
+    )
+
+    assert response.status_code == 404
+
+
+def test_invalid_signal_fill_returns_400(api_client: TestClient) -> None:
+    create_response = api_client.post(
+        "/api/strategy-configs",
+        json={
+            "name": "Invalid Fill Strategy",
+            "strategy_type": "dynamic_wave",
+            "symbol": "TEST",
+            "initial_capital": "1000",
+            "fee_rate": "0.001",
+            "slippage_rate": "0",
+            "settings_json": DynamicWaveStrategy.default_settings(),
+        },
+    )
+    config_id = create_response.json()["id"]
+
+    response = api_client.post(
+        f"/api/strategy-configs/{config_id}/signals/execute",
+        json={
+            "side": "buy",
+            "trade_date": "2026-01-02",
+            "quantity": "0",
+            "price": "100",
+            "fee": "0",
+        },
+    )
+
+    assert response.status_code == 400

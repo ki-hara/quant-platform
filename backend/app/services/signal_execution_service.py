@@ -4,6 +4,7 @@ from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
+from app.core.errors import NotFoundError, ValidationAppError
 from app.domain.enums import PositionStatus, StrategyMode, TradeSide, TradeSource
 from app.domain.models import LivePortfolio, Trade
 from app.infrastructure.repositories.portfolios import PortfolioRepository, PositionRepository
@@ -47,16 +48,25 @@ class SignalExecutionService:
         try:
             self._validate_request(request)
             if self.configs.get(config_id) is None:
-                raise ValueError(f"Strategy config not found: {config_id}")
+                raise NotFoundError(
+                    "strategy_config_not_found",
+                    f"Strategy config not found: {config_id}",
+                )
             portfolio = self.portfolios.get_by_config(config_id)
             if portfolio is None:
-                raise ValueError(f"Live portfolio not found for config: {config_id}")
+                raise NotFoundError(
+                    "live_portfolio_not_found",
+                    f"Live portfolio not found for config: {config_id}",
+                )
             if request.side == TradeSide.BUY:
                 result = self._buy(config_id, request, portfolio)
             elif request.side == TradeSide.SELL:
                 result = self._sell(config_id, request, portfolio)
             else:
-                raise ValueError(f"Unsupported trade side: {request.side}")
+                raise ValidationAppError(
+                    "unsupported_trade_side",
+                    f"Unsupported trade side: {request.side}",
+                )
             self.session.commit()
             return result
         except Exception:
@@ -65,11 +75,17 @@ class SignalExecutionService:
 
     def _validate_request(self, request: SignalExecutionRequest) -> None:
         if request.quantity <= 0:
-            raise ValueError("quantity must be greater than zero.")
+            raise ValidationAppError(
+                "invalid_signal_fill",
+                "quantity must be greater than zero.",
+            )
         if request.price <= 0:
-            raise ValueError("price must be greater than zero.")
+            raise ValidationAppError("invalid_signal_fill", "price must be greater than zero.")
         if request.fee < 0:
-            raise ValueError("fee must be greater than or equal to zero.")
+            raise ValidationAppError(
+                "invalid_signal_fill",
+                "fee must be greater than or equal to zero.",
+            )
 
     def _buy(
         self,
@@ -80,7 +96,10 @@ class SignalExecutionService:
         gross = request.price * request.quantity
         total_cost = gross + request.fee
         if total_cost > portfolio.cash:
-            raise ValueError("Insufficient cash for buy signal.")
+            raise ValidationAppError(
+                "insufficient_cash",
+                "Insufficient cash for buy signal.",
+            )
         self.positions.create_open(
             strategy_config_id=config_id,
             buy_date=request.trade_date,
@@ -112,16 +131,31 @@ class SignalExecutionService:
         portfolio: LivePortfolio,
     ) -> SignalExecutionResult:
         if request.position_id is None:
-            raise ValueError("position_id is required for sell signals.")
+            raise ValidationAppError(
+                "missing_position_id",
+                "position_id is required for sell signals.",
+            )
         position = self.positions.get(request.position_id)
-        if (
-            position is None
-            or position.strategy_config_id != config_id
-            or position.status != PositionStatus.OPEN
-        ):
-            raise ValueError(f"Open position not found: {request.position_id}")
+        if position is None:
+            raise NotFoundError(
+                "open_position_not_found",
+                f"Open position not found: {request.position_id}",
+            )
+        if position.strategy_config_id != config_id:
+            raise ValidationAppError(
+                "position_config_mismatch",
+                f"Position does not belong to strategy config: {request.position_id}",
+            )
+        if position.status != PositionStatus.OPEN:
+            raise ValidationAppError(
+                "position_not_open",
+                f"Position is not open: {request.position_id}",
+            )
         if request.quantity != position.quantity:
-            raise ValueError("Sell quantity must match the open position quantity.")
+            raise ValidationAppError(
+                "invalid_signal_fill",
+                "Sell quantity must match the open position quantity.",
+            )
 
         gross = request.price * request.quantity
         net_proceeds = gross - request.fee

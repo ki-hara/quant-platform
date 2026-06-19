@@ -9,7 +9,7 @@ class NotFoundError(AppError):
     pass
 
 
-class ValidationAppError(AppError):
+class ValidationAppError(AppError, ValueError):
     pass
 
 
