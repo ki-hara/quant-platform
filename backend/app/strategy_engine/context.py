@@ -24,3 +24,4 @@ class StrategyContext:
     open_positions: list[StrategyPosition]
     settings: dict[str, Any]
     trading_day_index: int
+    effective_mode: StrategyMode = StrategyMode.SAFE

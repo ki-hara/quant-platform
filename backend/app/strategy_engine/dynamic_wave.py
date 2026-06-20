@@ -1,11 +1,9 @@
-from decimal import Decimal, ROUND_DOWN
+from decimal import Decimal
 
 from app.domain.enums import StrategyMode
 from app.strategy_engine.base import BuySignal, CapitalUpdate, PositionSize, SellSignal, Strategy
+from app.strategy_engine.aod import AodPlan, MONEY_QUANT, calculate_aod_plan
 from app.strategy_engine.context import StrategyContext, StrategyPosition
-
-
-MONEY_QUANT = Decimal("0.000001")
 
 
 class DynamicWaveStrategy(Strategy):
@@ -35,22 +33,26 @@ class DynamicWaveStrategy(Strategy):
         }
 
     def get_mode(self, context: StrategyContext) -> StrategyMode:
-        return StrategyMode.SAFE
+        return context.effective_mode
 
-    def should_buy(self, context: StrategyContext) -> BuySignal:
+    def _build_aod_plan(self, context: StrategyContext) -> AodPlan:
         mode = self.get_mode(context)
         mode_settings = context.settings[mode.value]
-        split_count = int(mode_settings["split_count"])
-        if len(context.open_positions) >= split_count:
-            return BuySignal(False, "split_limit_reached")
-        threshold = Decimal(str(mode_settings["buy_threshold_percent"])) / Decimal("100")
-        limit_price = context.previous_close * (Decimal("1") + threshold)
-        if context.current_close <= limit_price:
-            size = self.calculate_position_size(context)
-            if size.quantity <= 0:
-                return BuySignal(False, "quantity_zero")
-            if size.quantity * context.current_close > context.cash:
-                return BuySignal(False, "insufficient_cash")
+        return calculate_aod_plan(
+            previous_close=context.previous_close,
+            capital=context.capital,
+            cash=context.cash,
+            fee_rate=Decimal(str(context.settings.get("fee_rate_percent", "0"))),
+            split_count=int(mode_settings["split_count"]),
+            buy_threshold_percent=Decimal(str(mode_settings["buy_threshold_percent"])),
+            open_position_count=len(context.open_positions),
+        )
+
+    def should_buy(self, context: StrategyContext) -> BuySignal:
+        plan = self._build_aod_plan(context)
+        if plan.blocking_reason is not None:
+            return BuySignal(False, plan.blocking_reason)
+        if context.current_close <= plan.limit_price:
             return BuySignal(True, "aod_threshold")
         return BuySignal(False, "price_above_threshold")
 
@@ -65,11 +67,8 @@ class DynamicWaveStrategy(Strategy):
         return SellSignal(False, None, return_pct.quantize(MONEY_QUANT))
 
     def calculate_position_size(self, context: StrategyContext) -> PositionSize:
-        mode_settings = context.settings[self.get_mode(context).value]
-        split_count = Decimal(str(mode_settings["split_count"]))
-        amount = (context.capital / split_count).quantize(MONEY_QUANT)
-        quantity = int((amount / context.current_close).to_integral_value(rounding=ROUND_DOWN))
-        return PositionSize(amount, quantity)
+        plan = self._build_aod_plan(context)
+        return PositionSize(plan.allocation, plan.quantity)
 
     def update_capital(self, context: StrategyContext, realized_pnl: Decimal) -> CapitalUpdate:
         """Apply PCR/LCR to realized PnL after the caller has checked the update schedule."""
