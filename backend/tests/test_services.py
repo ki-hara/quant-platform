@@ -7,8 +7,9 @@ from sqlalchemy.orm import Session
 
 from app.db.base import Base
 from app.db.seed import seed_default_owner
-from app.domain.enums import PositionStatus, TradeSide, TradeSource
+from app.domain.enums import PositionStatus, StrategyMode, TradeSide, TradeSource
 from app.infrastructure.repositories.portfolios import PortfolioRepository, PositionRepository
+from app.infrastructure.repositories.modes import ModeStateRepository
 from app.infrastructure.repositories.trades import TradeRepository
 from app.services.dashboard_service import DashboardService
 from app.services.manual_trade_service import ManualTradeRequest, ManualTradeService
@@ -48,10 +49,13 @@ def test_strategy_config_service_create_config_creates_matching_live_portfolio()
     with create_session() as session:
         config = create_config(session)
         portfolio = PortfolioRepository(session).get_by_config(config.id)
+        state = ModeStateRepository(session).get(config.id)
 
         assert portfolio is not None
         assert portfolio.capital == Decimal("1000.000000")
         assert portfolio.cash == Decimal("1000.000000")
+        assert state is not None
+        assert state.confirmed_mode == StrategyMode.SAFE
 
 
 def test_signal_execution_buy_creates_position_with_fee_updates_cash_and_trade() -> None:

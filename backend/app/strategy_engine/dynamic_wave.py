@@ -2,7 +2,7 @@ from decimal import Decimal
 
 from app.domain.enums import StrategyMode
 from app.strategy_engine.base import BuySignal, CapitalUpdate, PositionSize, SellSignal, Strategy
-from app.strategy_engine.aod import AodPlan, MONEY_QUANT, calculate_aod_plan
+from app.strategy_engine.loc import LocPlan, MONEY_QUANT, calculate_loc_plan
 from app.strategy_engine.context import StrategyContext, StrategyPosition
 
 
@@ -35,10 +35,10 @@ class DynamicWaveStrategy(Strategy):
     def get_mode(self, context: StrategyContext) -> StrategyMode:
         return context.effective_mode
 
-    def _build_aod_plan(self, context: StrategyContext) -> AodPlan:
+    def _build_loc_plan(self, context: StrategyContext) -> LocPlan:
         mode = self.get_mode(context)
         mode_settings = context.settings[mode.value]
-        return calculate_aod_plan(
+        return calculate_loc_plan(
             previous_close=context.previous_close,
             capital=context.capital,
             cash=context.cash,
@@ -49,11 +49,11 @@ class DynamicWaveStrategy(Strategy):
         )
 
     def should_buy(self, context: StrategyContext) -> BuySignal:
-        plan = self._build_aod_plan(context)
+        plan = self._build_loc_plan(context)
         if plan.blocking_reason is not None:
             return BuySignal(False, plan.blocking_reason)
         if context.current_close <= plan.limit_price:
-            return BuySignal(True, "aod_threshold")
+            return BuySignal(True, "loc_threshold")
         return BuySignal(False, "price_above_threshold")
 
     def should_sell(self, context: StrategyContext, position: StrategyPosition) -> SellSignal:
@@ -67,7 +67,7 @@ class DynamicWaveStrategy(Strategy):
         return SellSignal(False, None, return_pct.quantize(MONEY_QUANT))
 
     def calculate_position_size(self, context: StrategyContext) -> PositionSize:
-        plan = self._build_aod_plan(context)
+        plan = self._build_loc_plan(context)
         return PositionSize(plan.allocation, plan.quantity)
 
     def update_capital(self, context: StrategyContext, realized_pnl: Decimal) -> CapitalUpdate:

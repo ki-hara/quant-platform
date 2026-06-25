@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add an exact weekly QQQ RSI mode recommendation, manually confirmed live mode, next-session AOD price and quantity, and an operational investment chart to the existing quant platform.
+**Goal:** Add an exact weekly QQQ RSI mode recommendation, manually confirmed live mode, next-session LOC price and quantity, and an operational investment chart to the existing quant platform.
 
-**Architecture:** Keep RSI and AOD calculations as deterministic strategy-engine functions. Persist confirmed/recommended mode state behind repositories, expose calculation results through focused FastAPI services and DTOs, and let React render typed backend results without duplicating finance logic. Reuse the same mode policy and AOD operation from the backtest engine.
+**Architecture:** Keep RSI and LOC calculations as deterministic strategy-engine functions. Persist confirmed/recommended mode state behind repositories, expose calculation results through focused FastAPI services and DTOs, and let React render typed backend results without duplicating finance logic. Reuse the same mode policy and LOC operation from the backtest engine.
 
 **Tech Stack:** Python 3.12, FastAPI, SQLAlchemy, SQLite, pytest, React 18, TypeScript, Vite, Lightweight Charts 4.
 
@@ -15,9 +15,9 @@
 **Backend strategy and domain**
 
 - Create `backend/app/strategy_engine/weekly_rsi.py`: weekly resampling, SMA RSI(14), S1-S3/A1-A3 resolver.
-- Create `backend/app/strategy_engine/aod.py`: pure AOD plan calculation shared by live and backtest paths.
+- Create `backend/app/strategy_engine/loc.py`: pure LOC plan calculation shared by live and backtest paths.
 - Modify `backend/app/strategy_engine/context.py`: carry an explicit effective mode.
-- Modify `backend/app/strategy_engine/dynamic_wave.py`: use effective mode and shared AOD operation.
+- Modify `backend/app/strategy_engine/dynamic_wave.py`: use effective mode and shared LOC operation.
 - Modify `backend/app/domain/enums.py`: mode source and backtest mode policy enums.
 - Modify `backend/app/domain/models.py`: mode state and immutable recommendation history models.
 
@@ -26,7 +26,7 @@
 - Create `backend/app/infrastructure/repositories/modes.py`: mode state/history persistence.
 - Modify `backend/app/infrastructure/repositories/trades.py`: date-range query for chart markers.
 - Create `backend/app/services/mode_service.py`: recommendation and confirmation workflows.
-- Create `backend/app/services/daily_plan_service.py`: next-session AOD plan orchestration.
+- Create `backend/app/services/daily_plan_service.py`: next-session LOC plan orchestration.
 - Create `backend/app/services/chart_service.py`: typed OHLCV, RSI, guide, and marker data.
 - Create `backend/app/services/market_refresh_service.py`: explicit investment/RSI symbol refresh.
 - Create `backend/app/dto/trading_plan.py`: request and response schemas for new APIs.
@@ -37,7 +37,7 @@
 **Backtest**
 
 - Modify `backend/app/backtest_engine/simulator.py`: snapshot effective mode and rule code.
-- Modify `backend/app/backtest_engine/engine.py`: resolve weekly/fixed mode without lookahead and use AOD limit fills.
+- Modify `backend/app/backtest_engine/engine.py`: resolve weekly/fixed mode without lookahead and use LOC close fills.
 - Modify `backend/app/services/backtest_service.py`: fetch QQQ initialization history and store mode policy.
 - Modify `backend/app/dto/backtests.py`: expose mode policy and daily mode metadata.
 
@@ -47,8 +47,8 @@
 - Modify `frontend/src/api/client.ts`: support bodyless POST requests.
 - Create `frontend/src/api/tradingPlan.ts`: new endpoint client functions.
 - Create `frontend/src/components/ModeControl.tsx`: confirmed/recommended mode controls.
-- Create `frontend/src/components/DailyPlanPanel.tsx`: Korean AOD instruction and blocking reason.
-- Create `frontend/src/components/MarketChart.tsx`: candlestick, volume, AOD, and trade markers.
+- Create `frontend/src/components/DailyPlanPanel.tsx`: Korean LOC instruction and blocking reason.
+- Create `frontend/src/components/MarketChart.tsx`: candlestick, volume, LOC, and trade markers.
 - Create `frontend/src/components/RsiChart.tsx`: weekly RSI guides and transition markers.
 - Modify `frontend/src/pages/DashboardPage.tsx`: integrated operational dashboard.
 - Modify `frontend/src/styles.css`: stable responsive chart and control layout.
@@ -131,20 +131,20 @@ git add backend/app/strategy_engine/weekly_rsi.py backend/tests/test_weekly_rsi.
 git commit -m "feat: add exact weekly RSI mode resolver"
 ```
 
-## Task 2: Shared AOD Calculation and Explicit Strategy Mode
+## Task 2: Shared LOC Calculation and Explicit Strategy Mode
 
 **Files:**
-- Create: `backend/app/strategy_engine/aod.py`
+- Create: `backend/app/strategy_engine/loc.py`
 - Modify: `backend/app/strategy_engine/context.py`
 - Modify: `backend/app/strategy_engine/dynamic_wave.py`
 - Modify: `backend/tests/test_dynamic_wave_strategy.py`
-- Create: `backend/tests/test_aod.py`
+- Create: `backend/tests/test_loc.py`
 
-- [ ] **Step 1: Write failing AOD and effective-mode tests**
+- [ ] **Step 1: Write failing LOC and effective-mode tests**
 
 ```python
-def test_aod_uses_previous_close_capital_and_confirmed_mode() -> None:
-    result = calculate_aod_plan(
+def test_loc_uses_previous_close_capital_and_confirmed_mode() -> None:
+    result = calculate_loc_plan(
         previous_close=Decimal("100"),
         capital=Decimal("1000"),
         cash=Decimal("1000"),
@@ -166,11 +166,11 @@ def test_dynamic_wave_get_mode_uses_context_effective_mode() -> None:
 
 - [ ] **Step 2: Run tests and verify failure**
 
-Run: `cd backend; uv run pytest tests/test_aod.py tests/test_dynamic_wave_strategy.py -q`
+Run: `cd backend; uv run pytest tests/test_loc.py tests/test_dynamic_wave_strategy.py -q`
 
-Expected: FAIL because `calculate_aod_plan` and `effective_mode` are missing.
+Expected: FAIL because `calculate_loc_plan` and `effective_mode` are missing.
 
-- [ ] **Step 3: Implement the pure AOD result and wire effective mode**
+- [ ] **Step 3: Implement the pure LOC result and wire effective mode**
 
 ```python
 @dataclass(frozen=True)
@@ -190,19 +190,19 @@ estimated_fee = quantize(limit_price * quantity * fee_rate / Decimal("100"))
 required_cash = quantize(limit_price * quantity + estimated_fee)
 ```
 
-Apply blocking reasons in this precedence: `split_limit_reached`, `quantity_zero`, `insufficient_cash`. Add `effective_mode: StrategyMode = StrategyMode.SAFE` to `StrategyContext`; make `DynamicWaveStrategy.get_mode()` return it. `should_buy()` compares the session price to the shared AOD limit, while `calculate_position_size()` uses the shared allocation and limit basis.
+Apply blocking reasons in this precedence: `split_limit_reached`, `quantity_zero`, `insufficient_cash`. Add `effective_mode: StrategyMode = StrategyMode.SAFE` to `StrategyContext`; make `DynamicWaveStrategy.get_mode()` return it. `should_buy()` compares the session close to the shared LOC limit, while `calculate_position_size()` uses the shared allocation and limit basis.
 
 - [ ] **Step 4: Run focused tests**
 
-Run: `cd backend; uv run pytest tests/test_aod.py tests/test_dynamic_wave_strategy.py -q`
+Run: `cd backend; uv run pytest tests/test_loc.py tests/test_dynamic_wave_strategy.py -q`
 
 Expected: PASS, including fee, zero quantity, insufficient Cash, and split limit.
 
 - [ ] **Step 5: Commit**
 
 ```text
-git add backend/app/strategy_engine/aod.py backend/app/strategy_engine/context.py backend/app/strategy_engine/dynamic_wave.py backend/tests/test_aod.py backend/tests/test_dynamic_wave_strategy.py
-git commit -m "refactor: share AOD calculation and explicit mode"
+git add backend/app/strategy_engine/loc.py backend/app/strategy_engine/context.py backend/app/strategy_engine/dynamic_wave.py backend/tests/test_loc.py backend/tests/test_dynamic_wave_strategy.py
+git commit -m "refactor: share LOC calculation and explicit mode"
 ```
 
 ## Task 3: Persist Confirmed and Recommended Modes
@@ -354,13 +354,13 @@ def test_daily_plan_uses_last_completed_close_and_confirmed_mode(service) -> Non
     plan = service.get(config_id=1, today=date(2026, 6, 20))
     assert plan.market_data_as_of == date(2026, 6, 19)
     assert plan.confirmed_mode is StrategyMode.SAFE
-    assert plan.aod_limit_price == Decimal("103.000000")
+    assert plan.loc_limit_price == Decimal("103.000000")
     assert plan.quantity == 1
 
-def test_chart_returns_sorted_ohlcv_aod_and_markers(service) -> None:
+def test_chart_returns_sorted_ohlcv_loc_and_markers(service) -> None:
     chart = service.get(config_id=1, range_key="6m", today=date(2026, 6, 20))
     assert [row.date for row in chart.candles] == sorted(row.date for row in chart.candles)
-    assert chart.aod.value == Decimal("103.000000")
+    assert chart.loc.value == Decimal("103.000000")
     assert {marker.kind for marker in chart.trade_markers} == {"buy", "sell"}
     assert chart.rsi.guides == [Decimal("35"), Decimal("40"), Decimal("50"), Decimal("60"), Decimal("65")]
 ```
@@ -375,9 +375,9 @@ Expected: FAIL importing daily plan and chart services.
 
 - [ ] **Step 3: Implement services and endpoints**
 
-`DailyTradingPlanService` loads config, portfolio, open positions, mode state, and the latest cached investment close not after today, then calls `calculate_aod_plan`. Return `buy_available=False` with a stable blocking code when any dependency is unavailable.
+`DailyTradingPlanService` loads config, portfolio, open positions, mode state, and the latest cached investment close not after today, then calls `calculate_loc_plan`. Return `buy_available=False` with a stable blocking code when any dependency is unavailable.
 
-`ChartService` maps range keys to 31, 93, 186, and 366 calendar days. It returns sorted daily candles and volume, one current AOD line, persisted trades in range, weekly RSI points, numeric guides `[35, 40, 50, 60, 65]`, and recommendation-history transition markers.
+`ChartService` maps range keys to 31, 93, 186, and 366 calendar days. It returns sorted daily candles and volume, one current LOC line, persisted trades in range, weekly RSI points, numeric guides `[35, 40, 50, 60, 65]`, and recommendation-history transition markers.
 
 `MarketRefreshService` explicitly fetches at least 400 calendar days for both the investment symbol and `mode_rsi_symbol`, upserts them, recalculates recommendation, and returns each symbol's last data date. It never changes confirmed mode.
 
@@ -399,10 +399,10 @@ Expected: PASS.
 
 ```text
 git add backend/app/services backend/app/infrastructure/repositories backend/app/dto/trading_plan.py backend/app/api/routes_trading_plan.py backend/tests/test_daily_plan_service.py backend/tests/test_chart_service.py backend/tests/test_api_trading_plan.py
-git commit -m "feat: add daily AOD plan chart and market refresh APIs"
+git commit -m "feat: add daily LOC plan chart and market refresh APIs"
 ```
 
-## Task 6: Backtest Mode Policy and AOD Fill Reuse
+## Task 6: Backtest Mode Policy and LOC Fill Reuse
 
 **Files:**
 - Modify: `backend/app/backtest_engine/simulator.py`
@@ -421,13 +421,13 @@ def test_weekly_rsi_mode_becomes_effective_next_week() -> None:
     assert result.daily_snapshots[monday_index].mode == "aggressive"
     assert result.daily_snapshots[monday_index].mode_rule_code == "A1"
 
-def test_aod_buy_fills_at_limit_when_daily_low_reaches_limit() -> None:
-    result = run_gap_fixture(previous_close=Decimal("100"), low=Decimal("104"), close=Decimal("110"))
+def test_loc_buy_fills_at_close_when_close_is_within_limit() -> None:
+    result = run_gap_fixture(previous_close=Decimal("100"), low=Decimal("90"), close=Decimal("104"))
     buy = next(trade for trade in result.trades if trade.side == "BUY")
-    assert buy.price == Decimal("105.000000")
+    assert buy.price == Decimal("104.000000")
 ```
 
-Also test `fixed_safe`, `fixed_aggressive`, daily low above AOD (no fill), slippage applied after the AOD fill price, and mode/rule persistence in API snapshots.
+Also test `fixed_safe`, `fixed_aggressive`, a daily low below the LOC limit with a close above it (no fill), slippage applied after the closing fill price, and mode/rule persistence in API snapshots.
 
 - [ ] **Step 2: Run tests and verify policy support is absent**
 
@@ -435,11 +435,11 @@ Run: `cd backend; uv run pytest tests/test_backtest_engine.py tests/test_api_bac
 
 Expected: FAIL because snapshots do not expose mode metadata and current buys use current close.
 
-- [ ] **Step 3: Implement backtest policy and AOD limit execution**
+- [ ] **Step 3: Implement backtest policy and LOC execution**
 
 Add `mode` and nullable `mode_rule_code` to `DailySnapshot`. `BacktestEngine.run()` accepts a mode policy and RSI-symbol prices. For `weekly_rsi`, precompute recommendations from data completed before each effective week; fixed policies return their fixed mode. Build every `StrategyContext` with that day's effective mode.
 
-For each investment session, calculate the AOD threshold from the preceding close. A buy is eligible when `daily.low <= limit_price`; use `min(daily.open, limit_price)` as the unadjusted fill to model favorable gap-down opens, then apply configured buy slippage. Quantity remains based on the AOD limit price so live instructions and simulations share allocation logic.
+For each investment session, calculate the LOC threshold from the preceding close. A buy is eligible only when `daily.close <= limit_price`; use `daily.close` as the unadjusted fill, then apply configured buy slippage. Daily open, high, and low do not trigger the order. Quantity remains based on the LOC limit price so live instructions and simulations share allocation logic.
 
 Fetch enough pre-start QQQ data to initialize RSI, exclude post-decision data, and store `mode_policy` in `strategy_config_snapshot_json`.
 
@@ -453,7 +453,7 @@ Expected: all backend tests PASS.
 
 ```text
 git add backend/app/backtest_engine backend/app/services/backtest_service.py backend/app/dto/backtests.py backend/tests/test_backtest_engine.py backend/tests/test_api_backtests.py
-git commit -m "feat: reuse RSI modes and AOD limits in backtests"
+git commit -m "feat: reuse RSI modes and LOC limits in backtests"
 ```
 
 ## Task 7: Typed Integrated Dashboard
@@ -488,7 +488,7 @@ export interface ModeRecommendation {
 }
 ```
 
-Define complete interfaces for daily plan, candles, volume, AOD line, trade markers, weekly RSI points, mode markers, and chart response matching backend DTO field names. Add `getDailyPlan`, `getChart`, `getModeRecommendation`, `setConfirmedMode`, and `refreshMarketData` functions.
+Define complete interfaces for daily plan, candles, volume, LOC line, trade markers, weekly RSI points, mode markers, and chart response matching backend DTO field names. Add `getDailyPlan`, `getChart`, `getModeRecommendation`, `setConfirmedMode`, and `refreshMarketData` functions.
 
 - [ ] **Step 2: Build and verify type errors identify missing components**
 
@@ -500,9 +500,9 @@ Expected: FAIL until the new component imports and response handling are impleme
 
 `ModeControl` renders a Safe/Aggressive segmented control, recommendation values/rule, Apply button, and a Korean mismatch warning. Buttons remain stable width and expose `aria-pressed`.
 
-`DailyPlanPanel` renders AOD limit, quantity, previous close, threshold, Capital, split count, allocation, fee, required Cash, and translated blocking reason. It never recalculates a value in TypeScript.
+`DailyPlanPanel` renders LOC limit, quantity, previous close, threshold, Capital, split count, allocation, fee, required Cash, and translated blocking reason. It never recalculates a value in TypeScript.
 
-`MarketChart` creates a candlestick series, volume histogram, dashed AOD price line, and buy/sell markers. `RsiChart` creates a weekly line, horizontal guides at 35/40/50/60/65, and Safe/Aggressive transition markers. Both observe container width and remove chart/observer on cleanup.
+`MarketChart` creates a candlestick series, volume histogram, dashed LOC price line, and buy/sell markers. `RsiChart` creates a weekly line, horizontal guides at 35/40/50/60/65, and Safe/Aggressive transition markers. Both observe container width and remove chart/observer on cleanup.
 
 `DashboardPage` loads dashboard, plan, chart, mode, and trades for the selected configuration; defaults to `6m`; reloads after confirmation; and invokes explicit refresh from the existing refresh button. Replace any mojibake visible in this page and the touched API error messages with Korean UTF-8 text.
 
@@ -526,7 +526,7 @@ git commit -m "feat: add Korean daily plan and RSI chart dashboard"
 
 - [ ] **Step 1: Document the operating flow**
 
-Add Korean README instructions covering explicit market refresh, recommendation interpretation, manual mode confirmation, AOD order placement, virtual fill recording, manual correction, chart ranges, and the three backtest mode policies. State that the system does not submit brokerage orders.
+Add Korean README instructions covering explicit market refresh, recommendation interpretation, manual mode confirmation, LOC order placement, virtual fill recording, manual correction, chart ranges, and the three backtest mode policies. State that the system does not submit brokerage orders.
 
 - [ ] **Step 2: Run static and automated verification**
 

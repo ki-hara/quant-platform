@@ -37,7 +37,7 @@ def test_should_buy_when_close_is_inside_safe_threshold() -> None:
     strategy = DynamicWaveStrategy()
     signal = strategy.should_buy(make_context(current_close=Decimal("103")))
     assert signal.should_buy is True
-    assert signal.reason == "aod_threshold"
+    assert signal.reason == "loc_threshold"
 
 
 def test_should_buy_uses_aggressive_mode_settings() -> None:
@@ -51,7 +51,7 @@ def test_should_buy_uses_aggressive_mode_settings() -> None:
     signal = strategy.should_buy(context)
 
     assert signal.should_buy is True
-    assert signal.reason == "aod_threshold"
+    assert signal.reason == "loc_threshold"
 
 
 def test_should_not_buy_when_split_limit_is_reached() -> None:
@@ -72,7 +72,7 @@ def test_position_size_uses_capital_not_cash() -> None:
     assert size.quantity == 1
 
 
-def test_position_size_uses_aod_limit_basis_for_safe_mode() -> None:
+def test_position_size_uses_loc_limit_basis_for_safe_mode() -> None:
     strategy = DynamicWaveStrategy()
     size = strategy.calculate_position_size(
         make_context(previous_close=Decimal("100"), capital=Decimal("1000"), effective_mode=StrategyMode.SAFE)
@@ -82,7 +82,7 @@ def test_position_size_uses_aod_limit_basis_for_safe_mode() -> None:
     assert size.quantity == 1
 
 
-def test_position_size_uses_aod_limit_basis_for_aggressive_mode() -> None:
+def test_position_size_uses_loc_limit_basis_for_aggressive_mode() -> None:
     strategy = DynamicWaveStrategy()
     size = strategy.calculate_position_size(
         make_context(previous_close=Decimal("100"), capital=Decimal("1000"), effective_mode=StrategyMode.AGGRESSIVE)
@@ -119,7 +119,7 @@ def test_should_not_reduce_quantity_to_fit_cash() -> None:
     assert signal.reason == "insufficient_cash"
 
 
-def test_should_buy_and_position_size_agree_on_aod_quantity() -> None:
+def test_should_buy_and_position_size_agree_on_loc_quantity() -> None:
     strategy = DynamicWaveStrategy()
     context = make_context(
         previous_close=Decimal("100"),
@@ -133,7 +133,7 @@ def test_should_buy_and_position_size_agree_on_aod_quantity() -> None:
     size = strategy.calculate_position_size(context)
 
     assert signal.should_buy is True
-    assert signal.reason == "aod_threshold"
+    assert signal.reason == "loc_threshold"
     assert size.quantity == 1
 
 

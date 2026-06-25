@@ -6,7 +6,7 @@ MONEY_QUANT = Decimal("0.000001")
 
 
 @dataclass(frozen=True)
-class AodPlan:
+class LocPlan:
     limit_price: Decimal
     allocation: Decimal
     quantity: int
@@ -20,7 +20,7 @@ def _money(value: Decimal) -> Decimal:
     return value.quantize(MONEY_QUANT)
 
 
-def calculate_aod_plan(
+def calculate_loc_plan(
     previous_close: Decimal,
     capital: Decimal,
     cash: Decimal,
@@ -28,7 +28,7 @@ def calculate_aod_plan(
     split_count: int,
     buy_threshold_percent: Decimal,
     open_position_count: int,
-) -> AodPlan:
+) -> LocPlan:
     if split_count <= 0:
         raise ValueError("split_count_must_be_positive")
 
@@ -55,7 +55,7 @@ def calculate_aod_plan(
     else:
         blocking_reason = None
 
-    return AodPlan(
+    return LocPlan(
         limit_price=limit_price,
         allocation=allocation,
         quantity=quantity,

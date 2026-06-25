@@ -47,3 +47,18 @@ class TradeRepository:
             .order_by(Trade.date, Trade.id)
         )
         return list(self.session.scalars(stmt))
+
+    def list_in_range(
+        self,
+        strategy_config_id: int,
+        start_date: date,
+        end_date: date,
+    ) -> list[Trade]:
+        stmt = (
+            select(Trade)
+            .where(Trade.strategy_config_id == strategy_config_id)
+            .where(Trade.date >= start_date)
+            .where(Trade.date <= end_date)
+            .order_by(Trade.date, Trade.id)
+        )
+        return list(self.session.scalars(stmt))

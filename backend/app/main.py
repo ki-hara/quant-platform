@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes_backtests import router as backtests_router
 from app.api.routes_dashboard import router as dashboard_router
+from app.api.routes_trading_plan import router as trading_plan_router
 from app.api.routes_strategies import router as strategies_router
 from app.api.routes_trades import router as trades_router
 from app.core.config import settings
@@ -26,6 +27,7 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     app.include_router(strategies_router)
+    app.include_router(trading_plan_router)
     app.include_router(dashboard_router)
     app.include_router(trades_router)
     app.include_router(backtests_router)

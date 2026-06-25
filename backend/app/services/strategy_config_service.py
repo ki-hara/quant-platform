@@ -5,6 +5,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.domain.models import StrategyConfig
+from app.infrastructure.repositories.modes import ModeStateRepository
 from app.infrastructure.repositories.portfolios import PortfolioRepository
 from app.infrastructure.repositories.strategies import StrategyConfigRepository
 from app.strategy_engine.registry import registry
@@ -37,6 +38,7 @@ class StrategyConfigService:
         self.session = session
         self.configs = StrategyConfigRepository(session)
         self.portfolios = PortfolioRepository(session)
+        self.mode_states = ModeStateRepository(session)
 
     def list_configs(self, owner_id: str) -> list[StrategyConfig]:
         return self.configs.list_by_owner(owner_id)
@@ -59,6 +61,7 @@ class StrategyConfigService:
                 settings_json=request.settings_json,
             )
             self.portfolios.create_for_config(config)
+            self.mode_states.get_or_create_safe(config.id)
             self.session.commit()
             return config
         except Exception:

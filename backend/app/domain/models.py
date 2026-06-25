@@ -8,6 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 from app.domain.enums import (
     BacktestStatus,
+    ModeConfirmationSource,
     PositionStatus,
     StrategyMode,
     TradeSide,
@@ -57,6 +58,13 @@ class StrategyConfig(Base):
     live_portfolio: Mapped["LivePortfolio"] = relationship(back_populates="strategy_config")
     positions: Mapped[list["Position"]] = relationship(back_populates="strategy_config")
     trades: Mapped[list["Trade"]] = relationship(back_populates="strategy_config")
+    mode_state: Mapped["StrategyModeState | None"] = relationship(
+        back_populates="strategy_config",
+        uselist=False,
+    )
+    mode_recommendations: Mapped[list["ModeRecommendation"]] = relationship(
+        back_populates="strategy_config",
+    )
 
 
 class MarketPrice(Base):
@@ -75,6 +83,55 @@ class MarketPrice(Base):
     close: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
     volume: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
     adjusted: Mapped[bool] = mapped_column(default=False, nullable=False)
+
+
+class StrategyModeState(Base):
+    __tablename__ = "strategy_mode_states"
+
+    strategy_config_id: Mapped[int] = mapped_column(
+        ForeignKey("strategy_configs.id"),
+        primary_key=True,
+    )
+    confirmed_mode: Mapped[StrategyMode] = mapped_column(enum_column(StrategyMode), nullable=False)
+    confirmed_source: Mapped[ModeConfirmationSource] = mapped_column(
+        enum_column(ModeConfirmationSource),
+        nullable=False,
+    )
+    confirmed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    recommended_mode: Mapped[StrategyMode | None] = mapped_column(
+        enum_column(StrategyMode),
+    )
+    recommendation_effective_week: Mapped[date | None] = mapped_column(Date)
+    recommendation_data_as_of: Mapped[date | None] = mapped_column(Date)
+    recommendation_previous_rsi: Mapped[Decimal | None] = mapped_column(Numeric(18, 10))
+    recommendation_current_rsi: Mapped[Decimal | None] = mapped_column(Numeric(18, 10))
+    recommendation_rule_code: Mapped[str | None] = mapped_column(String(16))
+    recommendation_calculated_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    strategy_config: Mapped[StrategyConfig] = relationship(back_populates="mode_state")
+
+
+class ModeRecommendation(Base):
+    __tablename__ = "mode_recommendations"
+    __table_args__ = (
+        UniqueConstraint("strategy_config_id", "effective_week", name="uq_mode_recommendations_week"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    strategy_config_id: Mapped[int] = mapped_column(
+        ForeignKey("strategy_configs.id"),
+        nullable=False,
+        index=True,
+    )
+    effective_week: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    data_as_of: Mapped[date] = mapped_column(Date, nullable=False)
+    previous_rsi: Mapped[Decimal] = mapped_column(Numeric(18, 10), nullable=False)
+    current_rsi: Mapped[Decimal] = mapped_column(Numeric(18, 10), nullable=False)
+    recommended_mode: Mapped[StrategyMode] = mapped_column(enum_column(StrategyMode), nullable=False)
+    rule_code: Mapped[str | None] = mapped_column(String(16))
+    calculated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    strategy_config: Mapped[StrategyConfig] = relationship(back_populates="mode_recommendations")
 
 
 class LivePortfolio(Base):

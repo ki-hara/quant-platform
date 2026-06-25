@@ -2,11 +2,11 @@ from decimal import Decimal
 
 import pytest
 
-from app.strategy_engine.aod import AodPlan, calculate_aod_plan
+from app.strategy_engine.loc import LocPlan, calculate_loc_plan
 
 
-def test_calculate_aod_plan_returns_expected_values_for_exact_case() -> None:
-    plan = calculate_aod_plan(
+def test_calculate_loc_plan_returns_expected_values_for_exact_case() -> None:
+    plan = calculate_loc_plan(
         previous_close=Decimal("100"),
         capital=Decimal("1000"),
         cash=Decimal("5"),
@@ -16,7 +16,7 @@ def test_calculate_aod_plan_returns_expected_values_for_exact_case() -> None:
         open_position_count=0,
     )
 
-    assert plan == AodPlan(
+    assert plan == LocPlan(
         limit_price=Decimal("105.000000"),
         allocation=Decimal("200.000000"),
         quantity=1,
@@ -27,8 +27,8 @@ def test_calculate_aod_plan_returns_expected_values_for_exact_case() -> None:
     )
 
 
-def test_calculate_aod_plan_blocks_when_split_limit_is_reached() -> None:
-    plan = calculate_aod_plan(
+def test_calculate_loc_plan_blocks_when_split_limit_is_reached() -> None:
+    plan = calculate_loc_plan(
         previous_close=Decimal("100"),
         capital=Decimal("1000"),
         cash=Decimal("1000"),
@@ -41,8 +41,8 @@ def test_calculate_aod_plan_blocks_when_split_limit_is_reached() -> None:
     assert plan.blocking_reason == "split_limit_reached"
 
 
-def test_calculate_aod_plan_blocks_when_quantity_is_zero() -> None:
-    plan = calculate_aod_plan(
+def test_calculate_loc_plan_blocks_when_quantity_is_zero() -> None:
+    plan = calculate_loc_plan(
         previous_close=Decimal("1000"),
         capital=Decimal("100"),
         cash=Decimal("1000"),
@@ -56,8 +56,8 @@ def test_calculate_aod_plan_blocks_when_quantity_is_zero() -> None:
     assert plan.quantity == 0
 
 
-def test_calculate_aod_plan_blocks_for_insufficient_cash_after_quantity_is_computed() -> None:
-    plan = calculate_aod_plan(
+def test_calculate_loc_plan_blocks_for_insufficient_cash_after_quantity_is_computed() -> None:
+    plan = calculate_loc_plan(
         previous_close=Decimal("100"),
         capital=Decimal("1000"),
         cash=Decimal("100"),
@@ -72,8 +72,8 @@ def test_calculate_aod_plan_blocks_for_insufficient_cash_after_quantity_is_compu
     assert plan.required_cash == Decimal("110.250000")
 
 
-def test_calculate_aod_plan_does_not_reduce_quantity_to_fit_cash() -> None:
-    plan = calculate_aod_plan(
+def test_calculate_loc_plan_does_not_reduce_quantity_to_fit_cash() -> None:
+    plan = calculate_loc_plan(
         previous_close=Decimal("100"),
         capital=Decimal("1000"),
         cash=Decimal("100"),
@@ -88,9 +88,9 @@ def test_calculate_aod_plan_does_not_reduce_quantity_to_fit_cash() -> None:
 
 
 @pytest.mark.parametrize("split_count", [0, -1])
-def test_calculate_aod_plan_rejects_non_positive_split_count(split_count: int) -> None:
+def test_calculate_loc_plan_rejects_non_positive_split_count(split_count: int) -> None:
     with pytest.raises(ValueError, match="split_count_must_be_positive"):
-        calculate_aod_plan(
+        calculate_loc_plan(
             previous_close=Decimal("100"),
             capital=Decimal("1000"),
             cash=Decimal("1000"),
@@ -101,8 +101,8 @@ def test_calculate_aod_plan_rejects_non_positive_split_count(split_count: int) -
         )
 
 
-def test_calculate_aod_plan_preserves_exact_six_decimal_boundary() -> None:
-    plan = calculate_aod_plan(
+def test_calculate_loc_plan_preserves_exact_six_decimal_boundary() -> None:
+    plan = calculate_loc_plan(
         previous_close=Decimal("100.000001"),
         capital=Decimal("1000.000001"),
         cash=Decimal("1000.000001"),
