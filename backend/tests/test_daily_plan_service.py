@@ -1,4 +1,3 @@
-from collections.abc import Generator
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -8,12 +7,11 @@ from sqlalchemy.orm import Session
 
 from app.db.base import Base
 from app.db.seed import seed_default_owner
-from app.domain.enums import ModeConfirmationSource, StrategyMode, TradeSide, TradeSource
+from app.domain.enums import ModeConfirmationSource, StrategyMode
 from app.dto.market_data import OhlcvDto
 from app.infrastructure.repositories.market_data import MarketPriceRepository
 from app.infrastructure.repositories.modes import ModeStateRepository
 from app.infrastructure.repositories.portfolios import PortfolioRepository, PositionRepository
-from app.infrastructure.repositories.trades import TradeRepository
 from app.services.daily_plan_service import DailyPlanService
 from app.services.mode_service import ModeService
 from app.services.strategy_config_service import StrategyConfigCreateRequest, StrategyConfigService

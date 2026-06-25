@@ -1,19 +1,15 @@
-from collections.abc import Generator
 from datetime import date, timedelta
 from decimal import Decimal
 
 import pytest
-from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
-from sqlalchemy.pool import StaticPool
 
 from app.db.base import Base
 from app.db.seed import seed_default_owner
 from app.domain.enums import ModeConfirmationSource, StrategyMode
 from app.dto.market_data import OhlcvDto
 from app.infrastructure.repositories.market_data import MarketPriceRepository
-from app.main import create_app
 from app.services.mode_service import ModeService
 from app.services.strategy_config_service import StrategyConfigCreateRequest, StrategyConfigService
 from app.strategy_engine.dynamic_wave import DynamicWaveStrategy

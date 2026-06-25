@@ -11,7 +11,6 @@ from app.domain.enums import StrategyMode, TradeSide, TradeSource
 from app.dto.market_data import OhlcvDto
 from app.infrastructure.repositories.market_data import MarketPriceRepository
 from app.infrastructure.repositories.modes import ModeStateRepository
-from app.infrastructure.repositories.portfolios import PositionRepository
 from app.infrastructure.repositories.trades import TradeRepository
 from app.services.chart_service import ChartService
 from app.services.mode_service import ModeService

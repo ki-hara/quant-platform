@@ -12,11 +12,9 @@ from app.db.base import Base
 from app.db.seed import seed_default_owner
 from app.db.session import get_session
 from app.dto.market_data import OhlcvDto
-from app.infrastructure.market_data.base import MarketDataProvider
 from app.infrastructure.repositories.market_data import MarketPriceRepository
 from app.main import create_app
 from app.services.market_refresh_service import get_market_data_provider
-from app.services.strategy_config_service import StrategyConfigCreateRequest, StrategyConfigService
 from app.strategy_engine.dynamic_wave import DynamicWaveStrategy
 
 
@@ -104,7 +102,6 @@ class FakeProvider:
             )
             for index in range((end_date - start_date).days + 1)
         ]
-        session.commit()
 
 
 def test_get_mode_recommendation_returns_differs_and_preserves_confirmed_mode(

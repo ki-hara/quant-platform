@@ -4,7 +4,6 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.domain.enums import ModeConfirmationSource, StrategyMode
 from app.dto.trading_plan import DailyPlanDto, LocPlanDto
 from app.infrastructure.repositories.market_data import MarketPriceRepository
 from app.infrastructure.repositories.modes import ModeStateRepository
