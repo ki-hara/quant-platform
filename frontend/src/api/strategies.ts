@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPut } from "./client";
+import { apiDelete, apiGet, apiPost, apiPut } from "./client";
 import type {
   StrategyConfig,
   StrategyConfigCreateRequest,
@@ -34,4 +34,8 @@ export function updateStrategyConfig(
   request: StrategyConfigUpdateRequest,
 ): Promise<StrategyConfig> {
   return apiPut<StrategyConfig>(`/api/strategy-configs/${configId}`, request);
+}
+
+export function deleteStrategyConfig(configId: number): Promise<void> {
+  return apiDelete(`/api/strategy-configs/${configId}`);
 }

@@ -27,6 +27,7 @@ export interface StrategyConfig {
   settings_json: Record<string, unknown>;
   created_at: ISODateTime;
   updated_at: ISODateTime;
+  archived_at: ISODateTime | null;
 }
 
 export interface StrategyConfigCreateRequest {
@@ -231,6 +232,7 @@ export interface LocOrder {
   limit_price: DecimalString;
   quantity: number;
   cumulative_quantity: number;
+  cumulative_amount: DecimalString;
   compressed: boolean;
 }
 
@@ -248,6 +250,9 @@ export interface DailyPlan {
   current_rsi: DecimalString | null;
   rule_code: string | null;
   previous_close: DecimalString | null;
+  loc_basis_date: ISODate | null;
+  loc_basis_close: DecimalString | null;
+  loc_formula: string | null;
   mode_buy_threshold_percent: DecimalString | null;
   capital: DecimalString | null;
   cash: DecimalString | null;
@@ -255,6 +260,23 @@ export interface DailyPlan {
   open_position_count: number;
   buy_available: boolean;
   LOC: LocPlan;
+}
+
+export interface PortfolioAdjustment {
+  id: number;
+  strategy_config_id: number;
+  date: ISODate;
+  cash_delta: DecimalString;
+  capital_delta: DecimalString;
+  memo: string | null;
+  created_at: ISODateTime;
+}
+
+export interface PortfolioAdjustmentCreateRequest {
+  date: ISODate;
+  cash_delta: DecimalString;
+  capital_delta: DecimalString;
+  memo?: string | null;
 }
 
 export interface ChartCandle {

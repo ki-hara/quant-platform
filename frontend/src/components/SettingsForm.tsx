@@ -1,11 +1,6 @@
 import { Save } from "lucide-react";
 import { FormEvent, useMemo, useState } from "react";
-import type {
-  StrategyConfig,
-  StrategyConfigCreateRequest,
-  StrategyInfo,
-  StrategySchema,
-} from "../types/api";
+import type { StrategyConfig, StrategyConfigCreateRequest, StrategyInfo, StrategySchema } from "../types/api";
 import { translateStrategyType } from "../utils/format";
 
 type FieldValue = string | number | boolean;
@@ -34,9 +29,10 @@ const commonDefaults = {
   slippage_rate: "0",
 };
 
-const investmentPresets: Array<{ label: string; values: Record<string, FieldValue> }> = [
+const investmentPresets: Array<{ label: string; summary: string; values: Record<string, FieldValue> }> = [
   {
     label: "적극투자형",
+    summary: "분할 7 / 10거래일 / PCR 60% / LCR 20%",
     values: {
       profit_compounding_rate: 60,
       loss_compounding_rate: 20,
@@ -48,6 +44,7 @@ const investmentPresets: Array<{ label: string; values: Record<string, FieldValu
   },
   {
     label: "공격투자형",
+    summary: "분할 7 / 10거래일 / PCR 80% / LCR 30%",
     values: {
       profit_compounding_rate: 80,
       loss_compounding_rate: 30,
@@ -80,13 +77,13 @@ export function SettingsForm({
       : commonDefaults,
   );
   const fields = useMemo(() => flattenSchemaFields(schema?.schema), [schema]);
+  const defaults = useMemo(() => defaultSettingsFromFields(fields), [fields]);
   const [settings, setSettings] = useState<Record<string, FieldValue>>(() =>
     flattenSettings(editingConfig?.settings_json),
   );
-
-  function valueFor(field: FieldDescriptor): FieldValue {
-    return settings[field.key] ?? field.defaultValue;
-  }
+  const mergedSettings = { ...defaults, ...settings };
+  const visibleFields = fields.filter((field) => isFieldVisible(field, fields, mergedSettings));
+  const activePreset = presetForSettings(mergedSettings);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -100,6 +97,36 @@ export function SettingsForm({
       setCommon(commonDefaults);
       setSettings({});
     }
+  }
+
+  function renderField(field: FieldDescriptor) {
+    const value = mergedSettings[field.key] ?? field.defaultValue;
+    return (
+      <label key={field.key}>
+        {field.label}
+        {field.key === "capital_update.type" ? (
+          <select value={String(value)} onChange={(event) => setSettings((current) => ({ ...current, [field.key]: event.target.value }))}>
+            <option value="trading_days">거래일 간격</option>
+            <option value="calendar">달력 주기</option>
+          </select>
+        ) : field.key === "capital_update.period" ? (
+          <select value={String(value)} onChange={(event) => setSettings((current) => ({ ...current, [field.key]: event.target.value }))}>
+            <option value="monthly">매월</option>
+            <option value="quarterly">매분기</option>
+            <option value="yearly">매년</option>
+          </select>
+        ) : (
+          <input
+            type={inputTypeFor(field.key)}
+            step={inputTypeFor(field.key) === "number" ? inputStepFor(field.key) : undefined}
+            value={String(value)}
+            onChange={(event) =>
+              setSettings((current) => ({ ...current, [field.key]: valueForInput(field.key, event.target.value) }))
+            }
+          />
+        )}
+      </label>
+    );
   }
 
   return (
@@ -126,112 +153,49 @@ export function SettingsForm({
           </label>
           <label>
             이름
-            <input
-              value={common.name}
-              onChange={(event) => setCommon((current) => ({ ...current, name: event.target.value }))}
-              placeholder="전략 이름"
-              required
-            />
+            <input value={common.name} onChange={(event) => setCommon((current) => ({ ...current, name: event.target.value }))} placeholder="전략 이름" required />
           </label>
           <label>
             종목 코드
-            <input
-              value={common.symbol}
-              onChange={(event) =>
-                setCommon((current) => ({ ...current, symbol: event.target.value.toUpperCase() }))
-              }
-              placeholder="SOXL 또는 005930.KS"
-              required
-            />
+            <input value={common.symbol} onChange={(event) => setCommon((current) => ({ ...current, symbol: event.target.value.toUpperCase() }))} placeholder="SOXL 또는 005930.KS" required />
           </label>
           <label>
             초기 투자금
-            <input
-              value={common.initial_capital}
-              onChange={(event) =>
-                setCommon((current) => ({ ...current, initial_capital: event.target.value }))
-              }
-              readOnly={Boolean(editingConfig)}
-              aria-describedby={editingConfig ? "initial-capital-edit-note" : undefined}
-              required
-            />
-            {editingConfig ? (
-              <small id="initial-capital-edit-note" className="form-status">
-                실전 포트폴리오 장부 보호를 위해 생성 후에는 수정할 수 없습니다.
-              </small>
-            ) : null}
+            <input value={common.initial_capital} onChange={(event) => setCommon((current) => ({ ...current, initial_capital: event.target.value }))} readOnly={Boolean(editingConfig)} required />
+            {editingConfig ? <small className="form-status">생성 후 변경은 거래/포지션 탭의 자본 조정에서 기록합니다.</small> : null}
           </label>
           <label>
             거래 수수료율 (%)
-            <input
-              type="number"
-              step="any"
-              value={common.fee_rate}
-              onChange={(event) =>
-                setCommon((current) => ({ ...current, fee_rate: event.target.value }))
-              }
-              required
-            />
+            <input type="number" step="any" value={common.fee_rate} onChange={(event) => setCommon((current) => ({ ...current, fee_rate: event.target.value }))} required />
           </label>
         </div>
       </div>
 
       <div className="form-section">
         <h2>전략별 설정</h2>
-        <div className="segmented-control" role="group" aria-label="투자 성향">
+        <div className="preset-row" role="group" aria-label="투자 성향">
           {investmentPresets.map((preset) => (
             <button
+              className={activePreset === preset.label ? "is-active" : undefined}
               key={preset.label}
               type="button"
               onClick={() => setSettings((current) => ({ ...current, ...preset.values }))}
             >
-              {preset.label}
+              <strong>{preset.label}</strong>
+              <span>{preset.summary}</span>
             </button>
           ))}
+          <span className={`status-pill compact ${activePreset === "사용자 설정" ? "is-muted" : "is-ok"}`}>
+            {activePreset}
+          </span>
         </div>
         {fields.length === 0 ? (
           <div className="empty-state">설정 스키마가 없습니다.</div>
         ) : (
-          <div className="form-grid">
-            {fields.filter((field) => isFieldVisible(field, fields, settings)).map((field) => (
-              <label key={field.key}>
-                {field.label}
-                {field.key === "capital_update.type" ? (
-                  <select
-                    value={String(valueFor(field))}
-                    onChange={(event) =>
-                      setSettings((current) => ({ ...current, [field.key]: event.target.value }))
-                    }
-                  >
-                    <option value="trading_days">거래일 간격</option>
-                    <option value="calendar">달력 주기</option>
-                  </select>
-                ) : field.key === "capital_update.period" ? (
-                  <select
-                    value={String(valueFor(field))}
-                    onChange={(event) =>
-                      setSettings((current) => ({ ...current, [field.key]: event.target.value }))
-                    }
-                  >
-                    <option value="monthly">매월</option>
-                    <option value="quarterly">매분기</option>
-                    <option value="yearly">매년</option>
-                  </select>
-                ) : (
-                  <input
-                    type={inputTypeFor(field.key)}
-                    step={inputTypeFor(field.key) === "number" ? inputStepFor(field.key) : undefined}
-                    value={String(valueFor(field))}
-                    onChange={(event) =>
-                      setSettings((current) => ({
-                        ...current,
-                        [field.key]: valueForInput(field.key, event.target.value),
-                      }))
-                    }
-                  />
-                )}
-              </label>
-            ))}
+          <div className="setting-sections">
+            <SettingSection title="RSI / 투자금 갱신" fields={visibleFields.filter((field) => sectionForField(field.key) === "rsi")} renderField={renderField} />
+            <SettingSection title="안전모드" fields={visibleFields.filter((field) => sectionForField(field.key) === "safe")} renderField={renderField} />
+            <SettingSection title="공세모드" fields={visibleFields.filter((field) => sectionForField(field.key) === "aggressive")} renderField={renderField} />
           </div>
         )}
       </div>
@@ -243,6 +207,24 @@ export function SettingsForm({
         </button>
       </div>
     </form>
+  );
+}
+
+function SettingSection({
+  title,
+  fields,
+  renderField,
+}: {
+  title: string;
+  fields: FieldDescriptor[];
+  renderField: (field: FieldDescriptor) => JSX.Element;
+}) {
+  if (fields.length === 0) return null;
+  return (
+    <section className="setting-section">
+      <h3>{title}</h3>
+      <div className="form-grid">{fields.map(renderField)}</div>
+    </section>
   );
 }
 
@@ -267,6 +249,10 @@ function flattenSettings(value: Record<string, unknown> | undefined): Record<str
   return Object.fromEntries(flattenObject(value).map((field) => [field.key, field.defaultValue]));
 }
 
+function defaultSettingsFromFields(fields: FieldDescriptor[]): Record<string, FieldValue> {
+  return Object.fromEntries(fields.map((field) => [field.key, field.defaultValue]));
+}
+
 function buildNestedSettings(fields: FieldDescriptor[], values: Record<string, FieldValue>) {
   const root: Record<string, unknown> = {};
   fields.forEach((field) => {
@@ -281,18 +267,26 @@ function buildNestedSettings(fields: FieldDescriptor[], values: Record<string, F
   return root;
 }
 
-function isFieldVisible(
-  field: FieldDescriptor,
-  fields: FieldDescriptor[],
-  values: Record<string, FieldValue>,
-): boolean {
+function presetForSettings(settings: Record<string, FieldValue>): string {
+  return (
+    investmentPresets.find((preset) =>
+      Object.entries(preset.values).every(([key, value]) => settings[key] === value),
+    )?.label ?? "사용자 설정"
+  );
+}
+
+function sectionForField(key: string): "rsi" | "safe" | "aggressive" {
+  if (key.startsWith("safe.")) return "safe";
+  if (key.startsWith("aggressive.")) return "aggressive";
+  return "rsi";
+}
+
+function isFieldVisible(field: FieldDescriptor, fields: FieldDescriptor[], values: Record<string, FieldValue>): boolean {
   if (field.key === "base_index") return false;
   if (field.key !== "capital_update.interval" && field.key !== "capital_update.period") return true;
   const typeField = fields.find((candidate) => candidate.key === "capital_update.type");
   const updateType = String(values["capital_update.type"] ?? typeField?.defaultValue ?? "trading_days");
-  return field.key === "capital_update.interval"
-    ? updateType === "trading_days"
-    : updateType === "calendar";
+  return field.key === "capital_update.interval" ? updateType === "trading_days" : updateType === "calendar";
 }
 
 function coerceValue(value: string): FieldValue {
@@ -320,7 +314,6 @@ function inputStepFor(key: string): string {
 function labelFor(key: string): string {
   const labels: Record<string, string> = {
     mode_rsi_symbol: "모드 변경 RSI 종목",
-    base_index: "기초지수",
     profit_compounding_rate: "이익복리율 (PCR)",
     loss_compounding_rate: "손실복리율 (LCR)",
     "capital_update.type": "투자금 갱신 방식",

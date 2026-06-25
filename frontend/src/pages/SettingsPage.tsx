@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   createStrategyConfig,
+  deleteStrategyConfig,
   getStrategySchema,
   listStrategies,
   listStrategyConfigs,
   updateStrategyConfig,
 } from "../api/strategies";
+import { Trash2 } from "lucide-react";
 import { SettingsForm } from "../components/SettingsForm";
 import { Table, type TableColumn } from "../components/Table";
 import type { StrategyConfig, StrategyConfigCreateRequest, StrategyInfo, StrategySchema } from "../types/api";
@@ -77,6 +79,37 @@ export function SettingsPage() {
     }
   }
 
+  async function handleDeleteConfig(config: StrategyConfig) {
+    if (!window.confirm(`${config.name} / ${config.symbol} 전략을 삭제할까요? 거래내역은 보존됩니다.`)) return;
+    try {
+      setSaving(true);
+      setError("");
+      setMessage("");
+      await deleteStrategyConfig(config.id);
+      setConfigs((current) => current.filter((row) => row.id !== config.id));
+      if (editingId === config.id) setEditingId(null);
+      setMessage("전략을 삭제했습니다. 기존 거래내역은 보존됩니다.");
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const columns: TableColumn<StrategyConfig>[] = [
+    ...configColumns,
+    {
+      key: "delete",
+      header: "삭제",
+      align: "center",
+      render: (row) => (
+        <button className="icon-button" type="button" disabled={saving} onClick={() => handleDeleteConfig(row)}>
+          <Trash2 aria-hidden="true" size={15} />
+        </button>
+      ),
+    },
+  ];
+
   return (
     <div className="page-stack">
       {loading ? <div className="notice">불러오는 중</div> : null}
@@ -118,7 +151,7 @@ export function SettingsPage() {
 
       <section className="panel">
         <div className="panel-header"><div><h2>설정 목록</h2><span>저장된 전략 설정</span></div></div>
-        <Table columns={configColumns} rows={configs} getRowKey={(row) => row.id} />
+        <Table columns={columns} rows={configs} getRowKey={(row) => row.id} />
       </section>
     </div>
   );
