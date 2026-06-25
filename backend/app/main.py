@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
 from app.api.routes_backtests import router as backtests_router
 from app.api.routes_dashboard import router as dashboard_router
@@ -35,6 +36,7 @@ def create_app() -> FastAPI:
     @app.on_event("startup")
     def startup() -> None:
         Base.metadata.create_all(engine)
+        ensure_sqlite_schema()
         with SessionLocal() as session:
             seed_default_owner(session, settings.default_owner_id)
 
@@ -42,3 +44,24 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
+
+
+def ensure_sqlite_schema() -> None:
+    if engine.dialect.name != "sqlite":
+        return
+    with engine.begin() as connection:
+        columns = {
+            row[1]
+            for row in connection.execute(text("PRAGMA table_info(backtest_daily_snapshots)"))
+        }
+        if "mode" not in columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE backtest_daily_snapshots "
+                    "ADD COLUMN mode VARCHAR(10) NOT NULL DEFAULT 'safe'"
+                )
+            )
+        if "mode_rule_code" not in columns:
+            connection.execute(
+                text("ALTER TABLE backtest_daily_snapshots ADD COLUMN mode_rule_code VARCHAR(32)")
+            )

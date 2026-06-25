@@ -2,16 +2,30 @@ import { RefreshCw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { getDashboard } from "../api/dashboard";
 import { listStrategyConfigs } from "../api/strategies";
-import { executeSignal, listTrades } from "../api/trades";
+import { listTrades } from "../api/trades";
+import {
+  getChart,
+  getDailyPlan,
+  getModeRecommendation,
+  refreshMarketData,
+  setConfirmedMode,
+} from "../api/tradingPlan";
+import { DailyPlanPanel } from "../components/DailyPlanPanel";
+import { MarketChart } from "../components/MarketChart";
 import { MetricStrip } from "../components/MetricStrip";
-import { SignalPanel } from "../components/SignalPanel";
+import { ModeControl } from "../components/ModeControl";
+import { RsiChart } from "../components/RsiChart";
 import { Table, type TableColumn } from "../components/Table";
 import type {
+  ChartRange,
+  DailyPlan,
   DashboardResponse,
+  ModeRecommendation,
   PositionRow,
-  SignalExecutionRequest,
   StrategyConfig,
+  StrategyMode,
   TradeRow,
+  TradingChart,
 } from "../types/api";
 import {
   formatMoney,
@@ -26,9 +40,13 @@ export function DashboardPage() {
   const [configs, setConfigs] = useState<StrategyConfig[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
+  const [plan, setPlan] = useState<DailyPlan | null>(null);
+  const [mode, setMode] = useState<ModeRecommendation | null>(null);
+  const [chart, setChart] = useState<TradingChart | null>(null);
   const [recentTrades, setRecentTrades] = useState<TradeRow[]>([]);
+  const [range, setRange] = useState<ChartRange>("6m");
   const [loading, setLoading] = useState(true);
-  const [executing, setExecuting] = useState(false);
+  const [working, setWorking] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -47,7 +65,7 @@ export function DashboardPage() {
         if (active) setLoading(false);
       }
     }
-    loadConfigs();
+    void loadConfigs();
     return () => {
       active = false;
     };
@@ -55,16 +73,25 @@ export function DashboardPage() {
 
   useEffect(() => {
     if (!selectedId) return;
-    void loadDashboard(selectedId);
-  }, [selectedId]);
+    void loadOperationalData(selectedId, range);
+  }, [selectedId, range]);
 
-  async function loadDashboard(configId = selectedId) {
+  async function loadOperationalData(configId = selectedId, chartRange = range) {
     if (!configId) return;
     try {
       setLoading(true);
       setError("");
-      const [dashboardData, trades] = await Promise.all([getDashboard(configId), listTrades(configId)]);
+      const [dashboardData, planData, modeData, chartData, trades] = await Promise.all([
+        getDashboard(configId),
+        getDailyPlan(configId),
+        getModeRecommendation(configId),
+        getChart(configId, chartRange),
+        listTrades(configId),
+      ]);
       setDashboard(dashboardData);
+      setPlan(planData);
+      setMode(modeData);
+      setChart(chartData);
       setRecentTrades(trades.slice(0, 8));
     } catch (caught) {
       setError(errorMessage(caught));
@@ -73,28 +100,66 @@ export function DashboardPage() {
     }
   }
 
-  async function handleExecute(request: SignalExecutionRequest) {
+  async function handleRefresh() {
     if (!selectedId) return;
     try {
-      setExecuting(true);
+      setWorking(true);
       setMessage("");
       setError("");
-      await executeSignal(selectedId, request);
-      setMessage("신호 실행이 저장되었습니다.");
-      await loadDashboard(selectedId);
+      const result = await refreshMarketData(selectedId);
+      setMessage(
+        `시장 데이터 갱신 완료: 투자종목 ${result.investment_data_as_of ?? "-"}, RSI ${result.rsi_data_as_of ?? "-"}`,
+      );
+      await loadOperationalData(selectedId, range);
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
-      setExecuting(false);
+      setWorking(false);
+    }
+  }
+
+  async function handleSetMode(nextMode: StrategyMode) {
+    if (!selectedId) return;
+    try {
+      setWorking(true);
+      setMessage("");
+      setError("");
+      const next = await setConfirmedMode(selectedId, { action: "set", mode: nextMode });
+      setMode(next);
+      await loadOperationalData(selectedId, range);
+      setMessage(`${translateMode(nextMode)} 모드로 확정했습니다.`);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function handleApplyRecommendation() {
+    if (!selectedId) return;
+    try {
+      setWorking(true);
+      setMessage("");
+      setError("");
+      const next = await setConfirmedMode(selectedId, { action: "apply_recommendation" });
+      setMode(next);
+      await loadOperationalData(selectedId, range);
+      setMessage("추천 모드를 확정 모드로 적용했습니다.");
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setWorking(false);
     }
   }
 
   const metrics = useMemo(() => {
     const portfolio = dashboard?.portfolio;
     return [
-      { label: "총자산", value: formatMoney(dashboard?.total_asset), helper: dashboard?.config.symbol },
-      { label: "현금", value: formatMoney(portfolio?.cash), helper: "매수 가능 현금" },
-      { label: "실현 손익", value: formatMoney(portfolio?.realized_pnl), helper: "누적 기준" },
+      { label: "총 평가금액", value: formatMoney(dashboard?.total_asset), helper: dashboard?.config.symbol },
+      { label: "Capital", value: formatMoney(portfolio?.capital), helper: "전략 기준 투자금" },
+      { label: "Cash", value: formatMoney(portfolio?.cash), helper: "매수 가능 현금" },
+      { label: "실현손익", value: formatMoney(portfolio?.realized_pnl), helper: "누적 기준" },
+      { label: "누적 수수료", value: formatMoney(portfolio?.cumulative_fees), helper: "매수/매도 반영" },
       { label: "보유 포지션", value: String(dashboard?.open_positions.length ?? 0), helper: "미청산" },
     ];
   }, [dashboard]);
@@ -115,33 +180,33 @@ export function DashboardPage() {
             ))}
           </select>
         </label>
-        <button type="button" onClick={() => loadDashboard()} disabled={!selectedId || loading}>
+        <button type="button" onClick={handleRefresh} disabled={!selectedId || loading || working}>
           <RefreshCw aria-hidden="true" size={16} />
-          새로고침
+          시장 데이터 갱신
         </button>
       </section>
 
-      {loading ? <div className="notice">불러오는 중</div> : null}
+      {loading ? <div className="notice">불러오는 중입니다.</div> : null}
       {error ? <div className="notice notice-error">{error}</div> : null}
       {message ? <div className="notice notice-success">{message}</div> : null}
       {!loading && configs.length === 0 ? <div className="empty-state">전략 설정 데이터 없음</div> : null}
 
-      <section className="panel">
-        <div className="panel-header">
-          <div>
-            <h2>계좌 요약</h2>
-            <span>
-              {dashboard?.latest_price
-                ? `최근 종가 ${formatMoney(dashboard.latest_price.close)}`
-                : "시장 데이터 대기"}
-            </span>
-          </div>
-        </div>
-        <MetricStrip metrics={metrics} />
-      </section>
+      <MetricStrip metrics={metrics} />
+
+      <div className="dashboard-top-grid">
+        <DailyPlanPanel plan={plan} />
+        <ModeControl
+          mode={mode}
+          loading={working}
+          onSetMode={handleSetMode}
+          onApplyRecommendation={handleApplyRecommendation}
+        />
+      </div>
+
+      <MarketChart chart={chart} range={range} onRangeChange={setRange} />
+      <RsiChart chart={chart} />
 
       <div className="page-grid">
-        <SignalPanel dashboard={dashboard} onExecute={handleExecute} executing={executing} />
         <section className="panel">
           <div className="panel-header">
             <div>
@@ -151,17 +216,17 @@ export function DashboardPage() {
           </div>
           <Table columns={positionColumns} rows={dashboard?.open_positions ?? []} getRowKey={(row) => row.id} />
         </section>
-      </div>
 
-      <section className="panel">
-        <div className="panel-header">
-          <div>
-            <h2>최근 거래내역</h2>
-            <span>최대 8건</span>
+        <section className="panel">
+          <div className="panel-header">
+            <div>
+              <h2>최근 거래내역</h2>
+              <span>최대 8건</span>
+            </div>
           </div>
-        </div>
-        <Table columns={tradeColumns} rows={recentTrades} getRowKey={(row) => row.id} />
-      </section>
+          <Table columns={tradeColumns} rows={recentTrades} getRowKey={(row) => row.id} />
+        </section>
+      </div>
     </div>
   );
 }
@@ -180,7 +245,7 @@ const tradeColumns: TableColumn<TradeRow>[] = [
   { key: "side", header: "구분", render: (row) => translateSide(row.side) },
   { key: "quantity", header: "수량", align: "right", render: (row) => formatMoney(row.quantity) },
   { key: "price", header: "가격", align: "right", render: (row) => formatMoney(row.price) },
-  { key: "pnl", header: "실현 손익", align: "right", render: (row) => formatMoney(row.realized_pnl) },
+  { key: "pnl", header: "실현손익", align: "right", render: (row) => formatMoney(row.realized_pnl) },
   { key: "reason", header: "사유", render: (row) => translateReason(row.sell_reason) },
   { key: "source", header: "출처", render: (row) => translateSource(row.source) },
 ];

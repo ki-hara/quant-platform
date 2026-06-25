@@ -37,6 +37,8 @@ export async function getBacktestDailyCsv(runId: number): Promise<BacktestDailyS
     total_asset: row.total_asset,
     drawdown: row.drawdown,
     cumulative_fees: row.cumulative_fees,
+    mode: row.mode === "aggressive" ? "aggressive" : "safe",
+    mode_rule_code: row.mode_rule_code || null,
   }));
 }
 

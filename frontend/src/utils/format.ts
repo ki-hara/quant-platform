@@ -11,6 +11,13 @@ export function formatMoney(value: string | number | null | undefined): string {
   }).format(number);
 }
 
+export function formatDecimal(value: string | number | null | undefined, digits = 2): string {
+  if (value === null || value === undefined || value === "") return "-";
+  const number = Number(value);
+  if (Number.isNaN(number)) return String(value);
+  return number.toFixed(digits);
+}
+
 export function formatPercent(value: string | number | null | undefined): string {
   if (value === null || value === undefined || value === "") return "-";
   const number = Number(value);
@@ -33,8 +40,8 @@ export function translateStrategyType(strategyType: string | null | undefined): 
 
 export function translateReason(reason: string | null | undefined): string {
   return translateCode(reason, {
-    price_above_threshold: "가격이 매수 기준보다 높음",
-    aod_threshold: "매수 기준 충족",
+    loc_threshold: "LOC 매수 기준 충족",
+    price_above_threshold: "종가가 LOC 지정가보다 높음",
     split_limit_reached: "분할 매수 한도 도달",
     quantity_zero: "계산 수량 0",
     insufficient_cash: "현금 부족",

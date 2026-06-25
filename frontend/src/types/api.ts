@@ -1,6 +1,9 @@
 export type DecimalString = string;
 export type ISODate = string;
 export type ISODateTime = string;
+export type StrategyMode = "safe" | "aggressive";
+export type ModeConfirmationSource = "manual" | "recommendation_applied";
+export type ChartRange = "1m" | "3m" | "6m" | "1y";
 
 export interface StrategyInfo {
   type: string;
@@ -159,6 +162,7 @@ export interface BacktestCreateRequest {
   config_id: number;
   start_date: ISODate;
   end_date: ISODate;
+  mode_policy?: "weekly_rsi" | "fixed_safe" | "fixed_aggressive";
 }
 
 export interface BacktestDailySnapshot {
@@ -170,6 +174,8 @@ export interface BacktestDailySnapshot {
   total_asset: DecimalString;
   drawdown: DecimalString;
   cumulative_fees: DecimalString;
+  mode: StrategyMode;
+  mode_rule_code: string | null;
 }
 
 export interface BacktestTrade {
@@ -185,4 +191,110 @@ export interface BacktestTrade {
   source: string;
   created_at: ISODateTime;
   updated_at: ISODateTime;
+}
+
+export interface ModeRecommendation {
+  confirmed_mode: StrategyMode;
+  confirmed_source: ModeConfirmationSource;
+  recommended_mode: StrategyMode | null;
+  differs: boolean;
+  effective_week: ISODate | null;
+  data_as_of: ISODate | null;
+  previous_rsi: DecimalString | null;
+  current_rsi: DecimalString | null;
+  rule_code: string | null;
+}
+
+export interface ConfirmedModeUpdateRequest {
+  action: "set" | "apply_recommendation";
+  mode?: StrategyMode | null;
+}
+
+export interface LocPlan {
+  limit_price: DecimalString;
+  allocation: DecimalString;
+  quantity: number;
+  estimated_fee: DecimalString;
+  required_cash: DecimalString;
+  available: DecimalString;
+  blocking_reason: string | null;
+}
+
+export interface DailyPlan {
+  plan_date: ISODate;
+  market_data_as_of: ISODate | null;
+  symbol: string;
+  confirmed_mode: StrategyMode;
+  confirmed_source: ModeConfirmationSource;
+  recommended_mode: StrategyMode | null;
+  differs: boolean;
+  effective_week: ISODate | null;
+  data_as_of: ISODate | null;
+  previous_rsi: DecimalString | null;
+  current_rsi: DecimalString | null;
+  rule_code: string | null;
+  previous_close: DecimalString | null;
+  mode_buy_threshold_percent: DecimalString | null;
+  capital: DecimalString | null;
+  cash: DecimalString | null;
+  mode_split_count: number | null;
+  open_position_count: number;
+  buy_available: boolean;
+  LOC: LocPlan;
+}
+
+export interface ChartCandle {
+  date: ISODate;
+  open: DecimalString;
+  high: DecimalString;
+  low: DecimalString;
+  close: DecimalString;
+  volume: DecimalString | number;
+}
+
+export interface ChartLine {
+  value: DecimalString;
+  as_of: ISODate | null;
+}
+
+export interface TradeMarker {
+  date: ISODate;
+  kind: "buy" | "sell";
+  price: DecimalString;
+  quantity: DecimalString;
+  source: string;
+  sell_reason: string | null;
+}
+
+export interface RsiPoint {
+  date: ISODate;
+  value: DecimalString;
+}
+
+export interface RsiSeries {
+  guides: DecimalString[];
+  points: RsiPoint[];
+}
+
+export interface ModeMarker {
+  date: ISODate;
+  mode: StrategyMode;
+  rule_code: string | null;
+}
+
+export interface TradingChart {
+  candles: ChartCandle[];
+  LOC: ChartLine;
+  trade_markers: TradeMarker[];
+  rsi: RsiSeries;
+  mode_markers: ModeMarker[];
+}
+
+export interface MarketRefreshResponse {
+  confirmed_mode: StrategyMode;
+  confirmed_source: ModeConfirmationSource;
+  recommended_mode: StrategyMode | null;
+  differs: boolean;
+  investment_data_as_of: ISODate | null;
+  rsi_data_as_of: ISODate | null;
 }

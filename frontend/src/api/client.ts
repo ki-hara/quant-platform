@@ -6,11 +6,11 @@ export async function apiGet<T>(path: string): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export async function apiPost<T>(path: string, body: unknown): Promise<T> {
+export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!response.ok) throw new Error(await errorMessage(response));
   return response.json() as Promise<T>;
@@ -45,7 +45,7 @@ async function errorMessage(response: Response): Promise<string> {
         })
         .filter(Boolean)
         .join(", ");
-      if (messages) return `입력값을 확인해 주세요: ${messages}`;
+      if (messages) return `입력값을 확인해 주세요. ${messages}`;
     }
   } catch {
     const text = await response.text();

@@ -33,8 +33,8 @@ function App() {
         <div className="brand">
           <span className="brand-mark">Q</span>
           <div>
-            <p className="brand-title">퀀트 투자</p>
-            <p className="brand-subtitle">운영 콘솔</p>
+            <p className="brand-title">퀀트 운용</p>
+            <p className="brand-subtitle">매매 지원 콘솔</p>
           </div>
         </div>
 
@@ -61,7 +61,7 @@ function App() {
       <main className="content">
         <header className="page-header">
           <div>
-            <p className="eyebrow">실시간 전략 모니터링</p>
+            <p className="eyebrow">실전 매매 지원</p>
             <h1>{activeLabel}</h1>
           </div>
           <div className="status-pill" aria-label="API 연결 상태">
