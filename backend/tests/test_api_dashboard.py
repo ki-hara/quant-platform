@@ -124,6 +124,28 @@ def test_put_strategy_config_updates_existing_config(api_client: TestClient) -> 
     assert body["settings_json"]["capital_update"] == {"type": "calendar", "period": "monthly"}
 
 
+def test_delete_strategy_config_archives_and_hides_from_list(api_client: TestClient) -> None:
+    create_response = api_client.post(
+        "/api/strategy-configs",
+        json={
+            "name": "Delete Me",
+            "strategy_type": "dynamic_wave",
+            "symbol": "SOXL",
+            "initial_capital": "1000",
+            "fee_rate": "0.001",
+            "slippage_rate": "0",
+            "settings_json": DynamicWaveStrategy.default_settings(),
+        },
+    )
+    config_id = create_response.json()["id"]
+
+    delete_response = api_client.delete(f"/api/strategy-configs/{config_id}")
+    list_response = api_client.get("/api/strategy-configs")
+
+    assert delete_response.status_code == 204
+    assert config_id not in [row["id"] for row in list_response.json()]
+
+
 def test_get_dashboard_reads_cached_prices_with_configured_provider_key(api_client: TestClient) -> None:
     create_response = api_client.post(
         "/api/strategy-configs",

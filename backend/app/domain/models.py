@@ -53,6 +53,7 @@ class StrategyConfig(Base):
         onupdate=datetime.utcnow,
         nullable=False,
     )
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     owner: Mapped[Owner] = relationship(back_populates="strategy_configs")
     live_portfolio: Mapped["LivePortfolio"] = relationship(back_populates="strategy_config")

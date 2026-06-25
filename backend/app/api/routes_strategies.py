@@ -104,3 +104,11 @@ def update_strategy_config(
             else status.HTTP_400_BAD_REQUEST
         )
         raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+
+
+@router.delete("/strategy-configs/{config_id}", status_code=status.HTTP_204_NO_CONTENT)
+def archive_strategy_config(config_id: int, session: SessionDep) -> None:
+    try:
+        StrategyConfigService(session).archive_config(config_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc

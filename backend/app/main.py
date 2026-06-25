@@ -50,6 +50,12 @@ def ensure_sqlite_schema() -> None:
     if engine.dialect.name != "sqlite":
         return
     with engine.begin() as connection:
+        strategy_columns = {
+            row[1]
+            for row in connection.execute(text("PRAGMA table_info(strategy_configs)"))
+        }
+        if "archived_at" not in strategy_columns:
+            connection.execute(text("ALTER TABLE strategy_configs ADD COLUMN archived_at DATETIME"))
         snapshot_columns = {
             row[1]
             for row in connection.execute(text("PRAGMA table_info(backtest_daily_snapshots)"))

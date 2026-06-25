@@ -1,3 +1,4 @@
+from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
@@ -37,16 +38,25 @@ class StrategyConfigRepository:
         self.session.refresh(config)
         return config
 
-    def get(self, config_id: int) -> StrategyConfig | None:
-        return self.session.get(StrategyConfig, config_id)
+    def get(self, config_id: int, include_archived: bool = False) -> StrategyConfig | None:
+        config = self.session.get(StrategyConfig, config_id)
+        if config is None:
+            return None
+        if config.archived_at is not None and not include_archived:
+            return None
+        return config
 
     def list_by_owner(self, owner_id: str) -> list[StrategyConfig]:
         stmt = (
             select(StrategyConfig)
-            .where(StrategyConfig.owner_id == owner_id)
+            .where(StrategyConfig.owner_id == owner_id, StrategyConfig.archived_at.is_(None))
             .order_by(StrategyConfig.created_at, StrategyConfig.id)
         )
         return list(self.session.scalars(stmt))
+
+    def archive(self, config: StrategyConfig) -> StrategyConfig:
+        config.archived_at = datetime.utcnow()
+        return self.save(config)
 
     def save(self, config: StrategyConfig) -> StrategyConfig:
         self.session.add(config)

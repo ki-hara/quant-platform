@@ -74,6 +74,18 @@ class StrategyConfigService:
             raise ValueError(f"Strategy config not found: {config_id}")
         return config
 
+    def archive_config(self, config_id: int) -> StrategyConfig:
+        try:
+            config = self.configs.get(config_id)
+            if config is None:
+                raise ValueError(f"Strategy config not found: {config_id}")
+            archived = self.configs.archive(config)
+            self.session.commit()
+            return archived
+        except Exception:
+            self.session.rollback()
+            raise
+
     def update_config(
         self,
         config_id: int,

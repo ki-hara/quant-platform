@@ -58,6 +58,19 @@ def test_strategy_config_service_create_config_creates_matching_live_portfolio()
         assert state.confirmed_mode == StrategyMode.SAFE
 
 
+def test_strategy_config_service_archive_hides_config_from_live_lists() -> None:
+    with create_session() as session:
+        service = StrategyConfigService(session)
+        config = create_config(session)
+
+        archived = service.archive_config(config.id)
+
+        assert archived.archived_at is not None
+        assert config.id not in [row.id for row in service.list_configs("default")]
+        with pytest.raises(ValueError, match="not found"):
+            service.get_config(config.id)
+
+
 def test_signal_execution_buy_creates_position_with_fee_updates_cash_and_trade() -> None:
     with create_session() as session:
         config = create_config(session)
