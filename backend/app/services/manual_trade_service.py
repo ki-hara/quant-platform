@@ -27,6 +27,7 @@ class ManualTradeRequest:
     source: TradeSource = TradeSource.MANUAL
     mode: StrategyMode = StrategyMode.SAFE
     position_id: int | None = None
+    limit_price: Decimal | None = None
 
 
 @dataclass(frozen=True)
@@ -115,6 +116,8 @@ class ManualTradeService:
             raise ValidationAppError("invalid_manual_trade", "quantity must be greater than zero.")
         if request.price <= 0:
             raise ValidationAppError("invalid_manual_trade", "price must be greater than zero.")
+        if request.limit_price is not None and request.limit_price <= 0:
+            raise ValidationAppError("invalid_manual_trade", "limit_price must be greater than zero.")
         if request.fee < 0:
             raise ValidationAppError(
                 "invalid_manual_trade",
@@ -139,6 +142,7 @@ class ManualTradeService:
             quantity=request.quantity,
             mode=request.mode,
             buy_fee=request.fee,
+            limit_price=request.limit_price,
         )
         portfolio.cash -= total_cost
         portfolio.cumulative_fees += request.fee
@@ -153,6 +157,7 @@ class ManualTradeService:
             realized_pnl=Decimal("0"),
             sell_reason=None,
             source=request.source,
+            limit_price=request.limit_price,
         )
         return ManualTradeResult(trade=trade, cash=portfolio.cash, realized_pnl=Decimal("0"))
 
@@ -163,6 +168,7 @@ class ManualTradeService:
                 and position.buy_price == trade.price
                 and position.quantity == trade.quantity
                 and position.buy_fee == trade.fee
+                and position.limit_price == trade.limit_price
             ):
                 return position
         return None

@@ -124,7 +124,7 @@ def test_get_mode_recommendation_updates_only_recommendation_fields() -> None:
             ],
         )
 
-        result = service.get_mode_recommendation(config.id, as_of=date(2026, 6, 19))
+        result = service.get_mode_recommendation(config.id, as_of=date(2026, 6, 20))
         state = service.get_state(config.id)
         histories = service.list_mode_recommendations(config.id)
 
@@ -178,6 +178,40 @@ def test_get_mode_recommendation_ignores_incomplete_current_week() -> None:
         assert result.recommended_mode == StrategyMode.SAFE
 
 
+def test_get_mode_recommendation_excludes_current_week_until_weekend() -> None:
+    with create_session() as session:
+        config = create_config(session)
+        service = ModeService(session)
+        seed_weekly_prices(
+            session,
+            [
+                "99",
+                "100",
+                "101",
+                "102",
+                "103",
+                "104",
+                "105",
+                "106",
+                "107",
+                "108",
+                "109",
+                "110",
+                "111",
+                "112",
+                "113",
+                "114",
+                "113",
+                "112",
+            ],
+        )
+
+        result = service.get_mode_recommendation(config.id, as_of=date(2026, 6, 19))
+
+        assert result.effective_week == date(2026, 6, 15)
+        assert result.data_as_of == date(2026, 6, 12)
+
+
 def test_confirmed_mode_can_be_set_directly_and_apply_recommendation_uses_current_recommendation() -> None:
     with create_session() as session:
         config = create_config(session)
@@ -207,7 +241,7 @@ def test_confirmed_mode_can_be_set_directly_and_apply_recommendation_uses_curren
         )
 
         direct = service.set_confirmed_mode(config.id, StrategyMode.AGGRESSIVE)
-        recommendation = service.get_mode_recommendation(config.id, as_of=date(2026, 6, 19))
+        recommendation = service.get_mode_recommendation(config.id, as_of=date(2026, 6, 20))
         applied = service.apply_recommendation(config.id)
         state = service.get_state(config.id)
 
@@ -288,8 +322,8 @@ def test_mode_recommendation_history_is_newest_first() -> None:
             ],
         )
 
-        service.get_mode_recommendation(config.id, as_of=date(2026, 6, 19))
-        service.get_mode_recommendation(config.id, as_of=date(2026, 6, 26))
+        service.get_mode_recommendation(config.id, as_of=date(2026, 6, 20))
+        service.get_mode_recommendation(config.id, as_of=date(2026, 6, 27))
 
         histories = service.list_mode_recommendations(config.id)
 

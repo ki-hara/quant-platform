@@ -166,6 +166,7 @@ class Position(Base):
         index=True,
     )
     buy_date: Mapped[date] = mapped_column(Date, nullable=False)
+    limit_price: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))
     buy_price: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
     buy_fee: Mapped[Decimal] = mapped_column(Numeric(18, 6), default=Decimal("0"), nullable=False)
     quantity: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
@@ -195,6 +196,7 @@ class Trade(Base):
     date: Mapped[date] = mapped_column(Date, nullable=False)
     side: Mapped[TradeSide] = mapped_column(enum_column(TradeSide), nullable=False)
     quantity: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
+    limit_price: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))
     price: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
     fee: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
     realized_pnl: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)

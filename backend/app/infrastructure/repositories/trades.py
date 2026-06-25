@@ -23,12 +23,14 @@ class TradeRepository:
         realized_pnl: Decimal,
         sell_reason: str | None,
         source: TradeSource,
+        limit_price: Decimal | None = None,
     ) -> Trade:
         trade = Trade(
             strategy_config_id=strategy_config_id,
             date=trade_date,
             side=side,
             quantity=quantity,
+            limit_price=limit_price,
             price=price,
             fee=fee,
             realized_pnl=realized_pnl,

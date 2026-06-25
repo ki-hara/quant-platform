@@ -64,10 +64,12 @@ class PositionRepository:
         quantity: Decimal,
         mode: StrategyMode,
         buy_fee: Decimal = Decimal("0"),
+        limit_price: Decimal | None = None,
     ) -> Position:
         position = Position(
             strategy_config_id=strategy_config_id,
             buy_date=buy_date,
+            limit_price=limit_price,
             buy_price=buy_price,
             buy_fee=buy_fee,
             quantity=quantity,

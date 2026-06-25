@@ -15,6 +15,7 @@ class TradeResponseDto(BaseModel):
     date: date
     side: str
     quantity: Decimal
+    limit_price: Decimal | None = None
     price: Decimal
     fee: Decimal
     realized_pnl: Decimal
@@ -28,6 +29,7 @@ class SignalExecutionRequestDto(BaseModel):
     side: TradeSide
     trade_date: date
     quantity: Decimal
+    limit_price: Decimal | None = None
     price: Decimal
     fee: Decimal
     source: TradeSource = TradeSource.SIGNAL_EXECUTION
@@ -47,6 +49,7 @@ class ManualTradeRequestDto(BaseModel):
     trade_date: date
     side: TradeSide
     quantity: Decimal
+    limit_price: Decimal | None = None
     price: Decimal
     fee: Decimal
     sell_reason: str | None = None

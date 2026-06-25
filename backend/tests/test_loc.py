@@ -130,3 +130,26 @@ def test_calculate_loc_plan_preserves_exact_six_decimal_boundary() -> None:
     assert plan.allocation == Decimal("200.000000")
     assert plan.estimated_fee == Decimal("5.000000")
     assert plan.required_cash == Decimal("105.000001")
+
+
+def test_calculate_loc_plan_compacts_large_ladder_orders_by_allocation() -> None:
+    plan = calculate_loc_plan(
+        previous_close=Decimal("30"),
+        capital=Decimal("604100"),
+        cash=Decimal("604100"),
+        fee_rate=Decimal("0"),
+        split_count=1,
+        buy_threshold_percent=0,
+        open_position_count=0,
+    )
+
+    assert plan.quantity == 20136
+    assert len(plan.orders) == 11
+    assert plan.orders[0] == LocOrder(
+        step=1,
+        limit_price=Decimal("30.000000"),
+        quantity=20136,
+        cumulative_quantity=20136,
+    )
+    assert all(order.limit_price * Decimal(order.cumulative_quantity) <= plan.allocation for order in plan.orders[1:])
+    assert plan.orders[-1].limit_price >= Decimal("21.000000")

@@ -137,7 +137,7 @@ def test_get_mode_recommendation_returns_differs_and_preserves_confirmed_mode(
         json={"action": "set", "mode": "aggressive"},
     )
 
-    response = api_client.get(f"/api/strategy-configs/{config_id}/mode-recommendation?as_of=2026-06-19")
+    response = api_client.get(f"/api/strategy-configs/{config_id}/mode-recommendation?as_of=2026-06-20")
 
     assert response.status_code == 200
     body = response.json()
@@ -280,8 +280,8 @@ def test_get_mode_recommendations_returns_newest_history_first(api_client: TestC
         ],
     )
 
-    api_client.get(f"/api/strategy-configs/{config_id}/mode-recommendation?as_of=2026-06-19")
-    api_client.get(f"/api/strategy-configs/{config_id}/mode-recommendation?as_of=2026-06-26")
+    api_client.get(f"/api/strategy-configs/{config_id}/mode-recommendation?as_of=2026-06-20")
+    api_client.get(f"/api/strategy-configs/{config_id}/mode-recommendation?as_of=2026-06-27")
 
     response = api_client.get(f"/api/strategy-configs/{config_id}/mode-recommendations")
 

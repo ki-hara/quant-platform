@@ -157,6 +157,32 @@ def test_manual_trade_buy_creates_independent_open_position_and_updates_cash() -
         assert trades[0].source == TradeSource.MANUAL
 
 
+def test_manual_trade_buy_keeps_loc_limit_separate_from_execution_price() -> None:
+    with create_session() as session:
+        config = create_config(session)
+
+        ManualTradeService(session).record_manual_trade(
+            ManualTradeRequest(
+                config_id=config.id,
+                side=TradeSide.BUY,
+                trade_date=date(2026, 1, 2),
+                quantity=Decimal("4"),
+                price=Decimal("25"),
+                fee=Decimal("0.10"),
+                source=TradeSource.MANUAL,
+                limit_price=Decimal("30"),
+            ),
+        )
+
+        positions = PositionRepository(session).list_open(config.id)
+        trades = TradeRepository(session).list_by_strategy_config(config.id)
+
+        assert positions[0].limit_price == Decimal("30.000000")
+        assert positions[0].buy_price == Decimal("25.000000")
+        assert trades[0].limit_price == Decimal("30.000000")
+        assert trades[0].price == Decimal("25.000000")
+
+
 def test_manual_trade_sell_requires_position_id() -> None:
     with create_session() as session:
         config = create_config(session)

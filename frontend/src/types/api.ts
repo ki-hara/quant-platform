@@ -53,6 +53,7 @@ export interface PositionRow {
   id: number;
   strategy_config_id: number;
   buy_date: ISODate;
+  limit_price: DecimalString | null;
   buy_price: DecimalString;
   buy_fee: DecimalString;
   quantity: DecimalString;
@@ -94,6 +95,7 @@ export interface TradeRow {
   date: ISODate;
   side: string;
   quantity: DecimalString;
+  limit_price: DecimalString | null;
   price: DecimalString;
   fee: DecimalString;
   realized_pnl: DecimalString;
@@ -107,6 +109,7 @@ export interface SignalExecutionRequest {
   side: "buy" | "sell";
   trade_date: ISODate;
   quantity: DecimalString;
+  limit_price?: DecimalString | null;
   price: DecimalString;
   fee: DecimalString;
   source?: string;
@@ -126,6 +129,7 @@ export interface ManualTradeRequest {
   trade_date: ISODate;
   side: "buy" | "sell";
   quantity: DecimalString;
+  limit_price?: DecimalString | null;
   price: DecimalString;
   fee: DecimalString;
   sell_reason?: string | null;
@@ -184,6 +188,7 @@ export interface BacktestTrade {
   date: ISODate;
   side: string;
   quantity: DecimalString;
+  limit_price?: DecimalString | null;
   price: DecimalString;
   fee: DecimalString;
   realized_pnl: DecimalString;
@@ -226,6 +231,7 @@ export interface LocOrder {
   limit_price: DecimalString;
   quantity: number;
   cumulative_quantity: number;
+  compressed: boolean;
 }
 
 export interface DailyPlan {

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
@@ -83,12 +83,13 @@ class ModeService:
             date(1970, 1, 1),
             as_of,
         )
+        latest_completed_week_ending = _latest_completed_mode_week_ending(as_of)
         weekly_closes = [
             weekly_close
             for weekly_close in aggregate_daily_closes_to_weekly_closes(
                 [DailyClose(date=price.date, close=price.close) for price in prices]
             )
-            if weekly_close.week_ending <= as_of
+            if weekly_close.week_ending <= latest_completed_week_ending
         ]
         if len(weekly_closes) < 16:
             raise ValueError("At least 16 completed weekly closes are required.")
@@ -154,3 +155,11 @@ class ModeService:
     @staticmethod
     def _utc_now() -> datetime:
         return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _latest_completed_mode_week_ending(as_of: date) -> date:
+    week_start = as_of - timedelta(days=as_of.weekday())
+    current_friday = week_start + timedelta(days=4)
+    if as_of.weekday() >= 5:
+        return current_friday
+    return current_friday - timedelta(days=7)

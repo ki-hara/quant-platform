@@ -3,6 +3,7 @@ from decimal import Decimal, ROUND_DOWN
 
 
 MONEY_QUANT = Decimal("0.000001")
+MAX_LADDER_EXTRA_ORDERS = 10
 
 
 @dataclass(frozen=True)
@@ -11,6 +12,7 @@ class LocOrder:
     limit_price: Decimal
     quantity: int
     cumulative_quantity: int
+    compressed: bool = False
 
 
 @dataclass(frozen=True)
@@ -27,6 +29,10 @@ class LocPlan:
 
 def _money(value: Decimal) -> Decimal:
     return value.quantize(MONEY_QUANT)
+
+
+def _money_down(value: Decimal) -> Decimal:
+    return value.quantize(MONEY_QUANT, rounding=ROUND_DOWN)
 
 
 def calculate_loc_plan(
@@ -89,20 +95,36 @@ def _ladder_orders(base_limit: Decimal, allocation: Decimal, base_quantity: int)
             cumulative_quantity=base_quantity,
         )
     ]
+
+    max_total = int((allocation / floor_limit).to_integral_value(rounding=ROUND_DOWN))
+    extra_quantity = max_total - base_quantity
+    if extra_quantity <= 0:
+        return orders
+
+    if extra_quantity <= MAX_LADDER_EXTRA_ORDERS:
+        increments = [1 for _ in range(extra_quantity)]
+    else:
+        base_increment = extra_quantity // MAX_LADDER_EXTRA_ORDERS
+        remainder = extra_quantity % MAX_LADDER_EXTRA_ORDERS
+        increments = [
+            base_increment + (1 if index < remainder else 0)
+            for index in range(MAX_LADDER_EXTRA_ORDERS)
+        ]
+
     previous_total = base_quantity
-    target_total = base_quantity + 1
-    while True:
-        trigger_price = _money(allocation / Decimal(target_total))
+    for increment in increments:
+        target_total = previous_total + increment
+        trigger_price = _money_down(allocation / Decimal(target_total))
         if trigger_price < floor_limit:
-            break
+            trigger_price = floor_limit
         orders.append(
             LocOrder(
                 step=len(orders) + 1,
                 limit_price=trigger_price,
-                quantity=target_total - previous_total,
+                quantity=increment,
                 cumulative_quantity=target_total,
+                compressed=increment > 1,
             )
         )
         previous_total = target_total
-        target_total += 1
     return orders

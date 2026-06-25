@@ -46,6 +46,7 @@ class LocOrderDto(BaseModel):
     limit_price: Decimal
     quantity: int
     cumulative_quantity: int
+    compressed: bool = False
 
 
 class DailyPlanDto(BaseModel):

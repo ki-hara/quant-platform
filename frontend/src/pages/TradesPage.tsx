@@ -26,6 +26,7 @@ const initialManualForm = {
   trade_date: todayIso(),
   side: "buy" as "buy" | "sell",
   quantity: "",
+  limit_price: "",
   price: "",
   fee: "0",
   source: "manual" as "manual" | "correction",
@@ -115,8 +116,9 @@ export function TradesPage() {
       trade_date: plan.plan_date,
       side: "buy",
       quantity: String(plan.LOC.quantity),
-      price: plan.LOC.limit_price,
-      fee: plan.LOC.estimated_fee,
+      limit_price: plan.LOC.limit_price,
+      price: "",
+      fee: "0",
       mode: plan.confirmed_mode,
       position_id: "",
       sell_reason: "",
@@ -131,6 +133,7 @@ export function TradesPage() {
       trade_date: todayIso(),
       side: "sell",
       quantity: position.quantity,
+      limit_price: "",
       price,
       fee,
       position_id: String(position.id),
@@ -154,6 +157,7 @@ export function TradesPage() {
         trade_date: manualForm.trade_date,
         side: manualForm.side,
         quantity: manualForm.quantity,
+        limit_price: manualForm.side === "buy" && manualForm.limit_price ? manualForm.limit_price : null,
         price: manualForm.price,
         fee: manualForm.fee,
         sell_reason: manualForm.side === "sell" ? manualForm.sell_reason.trim() || null : null,
@@ -255,7 +259,7 @@ export function TradesPage() {
                       <strong>
                         {formatMoney(order.limit_price)} × {order.quantity}주
                       </strong>
-                      <small>누적 {order.cumulative_quantity}주</small>
+                      <small>{order.compressed ? "축약 / " : ""}누적 {order.cumulative_quantity}주</small>
                     </div>
                   ))}
                 </div>
@@ -335,6 +339,7 @@ export function TradesPage() {
                     side: event.target.value as "buy" | "sell",
                     position_id: "",
                     sell_reason: "",
+                    limit_price: event.target.value === "buy" ? current.limit_price : "",
                   }))
                 }
               >
@@ -365,7 +370,8 @@ export function TradesPage() {
                   <option value="">포지션 선택</option>
                   {openPositions.map((position) => (
                     <option key={position.id} value={position.id}>
-                      #{position.id} / {position.buy_date} / {formatMoney(position.quantity)}주 / {formatMoney(position.buy_price)}
+                      #{position.id} / {position.buy_date} / LOC {formatOptionalMoney(position.limit_price)} / 매수가{" "}
+                      {formatMoney(position.buy_price)}
                     </option>
                   ))}
                 </select>
@@ -382,6 +388,17 @@ export function TradesPage() {
                 </select>
               </label>
             )}
+            {manualForm.side === "buy" ? (
+              <label>
+                LOC 주문가
+                <input
+                  value={manualForm.limit_price}
+                  onChange={(event) => setManualForm((current) => ({ ...current, limit_price: event.target.value }))}
+                  placeholder="추천 LOC가"
+                  inputMode="decimal"
+                />
+              </label>
+            ) : null}
             <label>
               실제 체결 수량
               <input
@@ -447,6 +464,7 @@ const positionColumns: TableColumn<PositionRow>[] = [
   { key: "id", header: "ID", render: (row) => row.id },
   { key: "buy_date", header: "매수일", render: (row) => row.buy_date },
   { key: "quantity", header: "수량", align: "right", render: (row) => formatMoney(row.quantity) },
+  { key: "limit_price", header: "LOC가", align: "right", render: (row) => formatOptionalMoney(row.limit_price) },
   { key: "price", header: "매수가", align: "right", render: (row) => formatMoney(row.buy_price) },
   { key: "fee", header: "매수 수수료", align: "right", render: (row) => formatMoney(row.buy_fee) },
   { key: "mode", header: "모드", render: (row) => translateMode(row.mode) },
@@ -457,12 +475,17 @@ const tradeColumns: TableColumn<TradeRow>[] = [
   { key: "date", header: "일자", render: (row) => row.date },
   { key: "side", header: "구분", render: (row) => translateSide(row.side) },
   { key: "quantity", header: "수량", align: "right", render: (row) => formatMoney(row.quantity) },
-  { key: "price", header: "가격", align: "right", render: (row) => formatMoney(row.price) },
+  { key: "limit_price", header: "LOC가", align: "right", render: (row) => formatOptionalMoney(row.limit_price) },
+  { key: "price", header: "체결가", align: "right", render: (row) => formatMoney(row.price) },
   { key: "fee", header: "수수료", align: "right", render: (row) => formatMoney(row.fee) },
   { key: "pnl", header: "실현손익", align: "right", render: (row) => formatMoney(row.realized_pnl) },
   { key: "reason", header: "사유", render: (row) => translateReason(row.sell_reason) },
   { key: "source", header: "출처", render: (row) => translateSource(row.source) },
 ];
+
+function formatOptionalMoney(value: string | null | undefined): string {
+  return value ? formatMoney(value) : "-";
+}
 
 function toSellSignalRow(row: Record<string, unknown>): SellSignalRow {
   return {

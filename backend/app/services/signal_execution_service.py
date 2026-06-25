@@ -23,6 +23,7 @@ class SignalExecutionRequest:
     mode: StrategyMode = StrategyMode.SAFE
     position_id: int | None = None
     sell_reason: str | None = None
+    limit_price: Decimal | None = None
 
 
 @dataclass(frozen=True)
@@ -81,6 +82,8 @@ class SignalExecutionService:
             )
         if request.price <= 0:
             raise ValidationAppError("invalid_signal_fill", "price must be greater than zero.")
+        if request.limit_price is not None and request.limit_price <= 0:
+            raise ValidationAppError("invalid_signal_fill", "limit_price must be greater than zero.")
         if request.fee < 0:
             raise ValidationAppError(
                 "invalid_signal_fill",
@@ -107,6 +110,7 @@ class SignalExecutionService:
             quantity=request.quantity,
             mode=request.mode,
             buy_fee=request.fee,
+            limit_price=request.limit_price,
         )
         portfolio.cash -= total_cost
         portfolio.cumulative_fees += request.fee
@@ -121,6 +125,7 @@ class SignalExecutionService:
             realized_pnl=Decimal("0"),
             sell_reason=None,
             source=request.source,
+            limit_price=request.limit_price,
         )
         return SignalExecutionResult(trade=trade, cash=portfolio.cash, realized_pnl=Decimal("0"))
 

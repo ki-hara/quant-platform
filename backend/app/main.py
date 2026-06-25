@@ -50,18 +50,30 @@ def ensure_sqlite_schema() -> None:
     if engine.dialect.name != "sqlite":
         return
     with engine.begin() as connection:
-        columns = {
+        snapshot_columns = {
             row[1]
             for row in connection.execute(text("PRAGMA table_info(backtest_daily_snapshots)"))
         }
-        if "mode" not in columns:
+        if "mode" not in snapshot_columns:
             connection.execute(
                 text(
                     "ALTER TABLE backtest_daily_snapshots "
                     "ADD COLUMN mode VARCHAR(10) NOT NULL DEFAULT 'safe'"
                 )
             )
-        if "mode_rule_code" not in columns:
+        if "mode_rule_code" not in snapshot_columns:
             connection.execute(
                 text("ALTER TABLE backtest_daily_snapshots ADD COLUMN mode_rule_code VARCHAR(32)")
             )
+        position_columns = {
+            row[1]
+            for row in connection.execute(text("PRAGMA table_info(positions)"))
+        }
+        if "limit_price" not in position_columns:
+            connection.execute(text("ALTER TABLE positions ADD COLUMN limit_price NUMERIC(18, 6)"))
+        trade_columns = {
+            row[1]
+            for row in connection.execute(text("PRAGMA table_info(trades)"))
+        }
+        if "limit_price" not in trade_columns:
+            connection.execute(text("ALTER TABLE trades ADD COLUMN limit_price NUMERIC(18, 6)"))
