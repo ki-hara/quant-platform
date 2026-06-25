@@ -47,6 +47,18 @@ export function DailyPlanPanel({ plan }: DailyPlanPanelProps) {
           <dd>{formatMoney(plan?.previous_close, plan?.symbol)}</dd>
         </div>
         <div>
+          <dt>LOC 기준일</dt>
+          <dd>{plan?.loc_basis_date ?? "-"}</dd>
+        </div>
+        <div>
+          <dt>기준 종가</dt>
+          <dd>{formatMoney(plan?.loc_basis_close, plan?.symbol)}</dd>
+        </div>
+        <div className="detail-grid-wide">
+          <dt>계산식</dt>
+          <dd>{plan?.loc_formula ?? "-"}</dd>
+        </div>
+        <div>
           <dt>매수조건</dt>
           <dd>{plan?.mode_buy_threshold_percent ? `${plan.mode_buy_threshold_percent}%` : "-"}</dd>
         </div>

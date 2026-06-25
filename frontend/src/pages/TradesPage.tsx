@@ -1,6 +1,7 @@
 import { RefreshCw, Save, Trash2, Wand2 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { getDashboard } from "../api/dashboard";
+import { createPortfolioAdjustment, listPortfolioAdjustments } from "../api/portfolios";
 import { listStrategyConfigs } from "../api/strategies";
 import { deleteTrade, listPositions, listTrades, recordManualTrade } from "../api/trades";
 import { getDailyPlan } from "../api/tradingPlan";
@@ -8,6 +9,7 @@ import { Table, type TableColumn } from "../components/Table";
 import type {
   DailyPlan,
   DashboardResponse,
+  PortfolioAdjustment,
   PositionRow,
   StrategyConfig,
   TradeRow,
@@ -48,6 +50,15 @@ export function TradesPage() {
   const [trades, setTrades] = useState<TradeRow[]>([]);
   const [plan, setPlan] = useState<DailyPlan | null>(null);
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
+  const [adjustments, setAdjustments] = useState<PortfolioAdjustment[]>([]);
+  const [adjustBoth, setAdjustBoth] = useState(true);
+  const [adjustmentForm, setAdjustmentForm] = useState({
+    date: todayIso(),
+    amount: "",
+    cash_delta: "",
+    capital_delta: "",
+    memo: "",
+  });
   const [manualForm, setManualForm] = useState(initialManualForm);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -92,16 +103,18 @@ export function TradesPage() {
     try {
       setLoading(true);
       setError("");
-      const [positionRows, tradeRows, dailyPlan, dashboardData] = await Promise.all([
+      const [positionRows, tradeRows, dailyPlan, dashboardData, adjustmentRows] = await Promise.all([
         listPositions(configId),
         listTrades(configId),
         getDailyPlan(configId),
         getDashboard(configId),
+        listPortfolioAdjustments(configId),
       ]);
       setPositions(positionRows);
       setTrades(tradeRows);
       setPlan(dailyPlan);
       setDashboard(dashboardData);
+      setAdjustments(adjustmentRows);
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
@@ -191,6 +204,31 @@ export function TradesPage() {
     }
   }
 
+  async function handleAdjustmentSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedId) return;
+    const cashDelta = adjustBoth ? adjustmentForm.amount : adjustmentForm.cash_delta;
+    const capitalDelta = adjustBoth ? adjustmentForm.amount : adjustmentForm.capital_delta;
+    try {
+      setSaving(true);
+      setError("");
+      setMessage("");
+      await createPortfolioAdjustment(selectedId, {
+        date: adjustmentForm.date,
+        cash_delta: cashDelta || "0",
+        capital_delta: capitalDelta || "0",
+        memo: adjustmentForm.memo.trim() || null,
+      });
+      setMessage("자본 조정을 저장했습니다.");
+      setAdjustmentForm({ date: todayIso(), amount: "", cash_delta: "", capital_delta: "", memo: "" });
+      await loadRows(selectedId);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   const tradeColumnsWithActions: TableColumn<TradeRow>[] = [
     ...tradeColumns,
     {
@@ -253,13 +291,13 @@ export function TradesPage() {
               <small>{translateReason(plan?.LOC.blocking_reason)}</small>
               {plan?.LOC.orders?.length ? (
                 <div className="loc-order-list">
-                  {plan.LOC.orders.map((order) => (
-                    <div key={order.step}>
+                  {plan.LOC.orders.slice(0, 5).map((order) => (
+                    <div className="loc-order-row" key={order.step}>
                       <span>{order.step}차 LOC</span>
                       <strong>
                         {formatMoney(order.limit_price)} × {order.quantity}주
                       </strong>
-                      <small>{order.compressed ? "축약 / " : ""}누적 {order.cumulative_quantity}주</small>
+                      <small>누적 {order.cumulative_quantity}주 / {formatMoney(order.cumulative_amount)}</small>
                     </div>
                   ))}
                 </div>
@@ -444,6 +482,75 @@ export function TradesPage() {
           </form>
         </section>
       </div>
+
+      <section className="panel">
+        <div className="panel-header">
+          <div>
+            <h2>자본 조정</h2>
+            <span>현금 입출금과 전략 기준금 조정을 기록합니다.</span>
+          </div>
+        </div>
+        <form className="form-stack adjustment-form" onSubmit={handleAdjustmentSubmit}>
+          <label>
+            날짜
+            <input
+              type="date"
+              value={adjustmentForm.date}
+              onChange={(event) => setAdjustmentForm((current) => ({ ...current, date: event.target.value }))}
+            />
+          </label>
+          <label className="checkbox-row">
+            <input type="checkbox" checked={adjustBoth} onChange={(event) => setAdjustBoth(event.target.checked)} />
+            Cash와 Capital을 같은 금액만큼 조정
+          </label>
+          {adjustBoth ? (
+            <label>
+              조정 금액
+              <input
+                value={adjustmentForm.amount}
+                inputMode="decimal"
+                placeholder="입금은 양수, 출금은 음수"
+                onChange={(event) => setAdjustmentForm((current) => ({ ...current, amount: event.target.value }))}
+              />
+            </label>
+          ) : (
+            <>
+              <label>
+                Cash 조정액
+                <input
+                  value={adjustmentForm.cash_delta}
+                  inputMode="decimal"
+                  onChange={(event) => setAdjustmentForm((current) => ({ ...current, cash_delta: event.target.value }))}
+                />
+              </label>
+              <label>
+                Capital 조정액
+                <input
+                  value={adjustmentForm.capital_delta}
+                  inputMode="decimal"
+                  onChange={(event) => setAdjustmentForm((current) => ({ ...current, capital_delta: event.target.value }))}
+                />
+              </label>
+            </>
+          )}
+          <label>
+            메모
+            <input
+              value={adjustmentForm.memo}
+              onChange={(event) => setAdjustmentForm((current) => ({ ...current, memo: event.target.value }))}
+            />
+          </label>
+          <button type="submit" disabled={!selectedId || saving}>
+            <Save aria-hidden="true" size={16} /> 자본 조정 저장
+          </button>
+        </form>
+        {adjustments.length > 0 ? (
+          <div className="adjustment-summary">
+            최근 조정: {adjustments[0].date} / Cash {formatMoney(adjustments[0].cash_delta)} / Capital{" "}
+            {formatMoney(adjustments[0].capital_delta)}
+          </div>
+        ) : null}
+      </section>
 
       <section className="panel">
         <div className="panel-header">

@@ -267,6 +267,50 @@ h2 {
   font-size: 15px;
 }
 
+.detail-grid-wide {
+  grid-column: 1 / -1;
+}
+
+.loc-order-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.loc-order-row {
+  display: grid;
+  grid-template-columns: minmax(76px, auto) minmax(140px, 1fr) minmax(170px, auto);
+  gap: 8px;
+  align-items: center;
+}
+
+.loc-order-row strong,
+.loc-order-row small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.checkbox-row {
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+  align-items: center;
+}
+
+.checkbox-row input {
+  width: auto;
+}
+
+.adjustment-form {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.adjustment-summary {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .metric-strip {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
