@@ -65,6 +65,8 @@ class BacktestRepository:
                 total_asset=snapshot.total_asset,
                 drawdown=snapshot.drawdown,
                 cumulative_fees=snapshot.cumulative_fees,
+                mode=snapshot.mode,
+                mode_rule_code=snapshot.mode_rule_code,
             )
             for snapshot in snapshots
         ]

@@ -10,9 +10,10 @@ from app.backtest_engine.simulator import (
     SimulatedTrade,
 )
 from app.dto.market_data import OhlcvDto
-from app.domain.enums import StrategyMode
+from app.domain.enums import BacktestModePolicy, StrategyMode
 from app.strategy_engine.base import Strategy
 from app.strategy_engine.context import StrategyContext, StrategyPosition
+from app.strategy_engine.weekly_rsi import DailyClose, WeeklyRsiTransition, aggregate_daily_closes_to_weekly_closes, resolve_weekly_rsi_transition
 
 
 MONEY_QUANT = Decimal("0.000001")
@@ -46,10 +47,13 @@ class BacktestEngine:
         slippage_rate: Decimal,
         settings: dict,
         lookahead_date: date | None = None,
+        mode_policy: BacktestModePolicy = BacktestModePolicy.FIXED_SAFE,
+        rsi_prices: list[OhlcvDto] | None = None,
     ) -> BacktestResult:
         sorted_prices = sorted(prices, key=lambda price: price.date)
         if len(sorted_prices) < 2:
             raise ValueError("Backtest requires at least two price rows.")
+        mode_schedule = self._build_mode_schedule(mode_policy, rsi_prices or [])
 
         cash = initial_capital
         capital = initial_capital
@@ -63,6 +67,11 @@ class BacktestEngine:
 
         for index, price in enumerate(sorted_prices):
             previous_close = sorted_prices[index - 1].close if index > 0 else price.close
+            effective_mode, mode_rule_code = self._mode_for_date(
+                price.date,
+                mode_policy,
+                mode_schedule,
+            )
             context = self._build_context(
                 price=price,
                 previous_close=previous_close,
@@ -71,6 +80,7 @@ class BacktestEngine:
                 open_positions=open_positions,
                 settings=settings,
                 trading_day_index=index,
+                effective_mode=effective_mode,
             )
 
             if index > 0:
@@ -95,6 +105,7 @@ class BacktestEngine:
                     open_positions=open_positions,
                     settings=settings,
                     trading_day_index=index,
+                    effective_mode=effective_mode,
                 )
                 buy_signal = strategy.should_buy(context)
                 if buy_signal.should_buy:
@@ -147,6 +158,7 @@ class BacktestEngine:
                         open_positions=open_positions,
                         settings=settings,
                         trading_day_index=index,
+                        effective_mode=effective_mode,
                     )
                     capital = strategy.update_capital(context, interval_realized_pnl).capital
                     interval_realized_pnl = Decimal("0")
@@ -165,6 +177,8 @@ class BacktestEngine:
                     total_asset=total_asset.quantize(MONEY_QUANT),
                     drawdown=drawdown,
                     cumulative_fees=cumulative_fees.quantize(MONEY_QUANT),
+                    mode=effective_mode,
+                    mode_rule_code=mode_rule_code,
                 )
             )
 
@@ -190,6 +204,7 @@ class BacktestEngine:
         open_positions: list[_OpenPosition],
         settings: dict,
         trading_day_index: int,
+        effective_mode: StrategyMode,
     ) -> StrategyContext:
         return StrategyContext(
             current_date=price.date,
@@ -200,7 +215,52 @@ class BacktestEngine:
             open_positions=[position.as_strategy_position() for position in open_positions],
             settings=settings,
             trading_day_index=trading_day_index,
+            effective_mode=effective_mode,
         )
+
+    def _build_mode_schedule(
+        self,
+        mode_policy: BacktestModePolicy,
+        rsi_prices: list[OhlcvDto],
+    ) -> list[WeeklyRsiTransition]:
+        if mode_policy is not BacktestModePolicy.WEEKLY_RSI:
+            return []
+        weekly_closes = aggregate_daily_closes_to_weekly_closes(
+            [DailyClose(date=price.date, close=price.close) for price in rsi_prices]
+        )
+        schedule: list[WeeklyRsiTransition] = []
+        prior_mode = StrategyMode.SAFE
+        for end_index in range(16, len(weekly_closes) + 1):
+            transition = resolve_weekly_rsi_transition(
+                weekly_closes[:end_index],
+                prior_mode=prior_mode,
+            )
+            if transition is None:
+                continue
+            prior_mode = transition.recommended_mode
+            schedule.append(transition)
+        return schedule
+
+    def _mode_for_date(
+        self,
+        current_date: date,
+        mode_policy: BacktestModePolicy,
+        mode_schedule: list[WeeklyRsiTransition],
+    ) -> tuple[StrategyMode, str | None]:
+        if mode_policy is BacktestModePolicy.FIXED_AGGRESSIVE:
+            return StrategyMode.AGGRESSIVE, BacktestModePolicy.FIXED_AGGRESSIVE.value
+        if mode_policy is BacktestModePolicy.FIXED_SAFE:
+            return StrategyMode.SAFE, BacktestModePolicy.FIXED_SAFE.value
+
+        active_transition: WeeklyRsiTransition | None = None
+        for transition in mode_schedule:
+            if transition.effective_week <= current_date:
+                active_transition = transition
+            else:
+                break
+        if active_transition is None:
+            return StrategyMode.SAFE, None
+        return active_transition.recommended_mode, active_transition.rule_code
 
     def _sell_positions(
         self,

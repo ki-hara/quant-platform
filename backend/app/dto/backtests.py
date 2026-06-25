@@ -4,11 +4,14 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
+from app.domain.enums import BacktestModePolicy
+
 
 class BacktestCreateDto(BaseModel):
     config_id: int
     start_date: date
     end_date: date
+    mode_policy: BacktestModePolicy = BacktestModePolicy.FIXED_SAFE
 
 
 class BacktestRunResponseDto(BaseModel):

@@ -2,6 +2,7 @@ from datetime import date
 from decimal import Decimal
 
 from app.backtest_engine.engine import BacktestEngine
+from app.domain.enums import BacktestModePolicy, StrategyMode
 from app.dto.market_data import OhlcvDto
 from app.strategy_engine.dynamic_wave import DynamicWaveStrategy
 from tests.fixtures import simple_prices
@@ -137,13 +138,145 @@ def test_calendar_yearly_update_requires_lookahead_in_next_year() -> None:
     ) is True
 
 
-def _price(day: date) -> OhlcvDto:
+def test_fixed_aggressive_policy_sets_snapshot_and_position_modes() -> None:
+    result = BacktestEngine().run(
+        strategy=DynamicWaveStrategy(),
+        prices=simple_prices(),
+        initial_capital=Decimal("1000"),
+        fee_rate=Decimal("0"),
+        slippage_rate=Decimal("0"),
+        settings=DynamicWaveStrategy.default_settings(),
+        mode_policy=BacktestModePolicy.FIXED_AGGRESSIVE,
+    )
+
+    assert {snapshot.mode for snapshot in result.daily_snapshots} == {StrategyMode.AGGRESSIVE}
+    assert result.daily_snapshots[0].mode_rule_code == "fixed_aggressive"
+    assert all(trade.side != "BUY" or trade.price for trade in result.trades)
+
+
+def test_weekly_rsi_mode_becomes_effective_next_week_without_friday_lookahead() -> None:
+    prices = [
+        _price(date(2026, 6, 19), "100"),
+        _price(date(2026, 6, 22), "100"),
+    ]
+    rsi_prices = _weekly_prices(
+        [
+            "100",
+            "101",
+            "102",
+            "103",
+            "104",
+            "105",
+            "106",
+            "107",
+            "108",
+            "109",
+            "110",
+            "111",
+            "112",
+            "113",
+            "114",
+            "113",
+        ],
+        first_week_ending=date(2026, 3, 6),
+    )
+
+    result = BacktestEngine().run(
+        strategy=DynamicWaveStrategy(),
+        prices=prices,
+        initial_capital=Decimal("1000"),
+        fee_rate=Decimal("0"),
+        slippage_rate=Decimal("0"),
+        settings=DynamicWaveStrategy.default_settings(),
+        mode_policy=BacktestModePolicy.WEEKLY_RSI,
+        rsi_prices=rsi_prices,
+    )
+
+    assert result.daily_snapshots[0].date == date(2026, 6, 19)
+    assert result.daily_snapshots[0].mode == StrategyMode.SAFE
+    assert result.daily_snapshots[0].mode_rule_code is None
+    assert result.daily_snapshots[1].date == date(2026, 6, 22)
+    assert result.daily_snapshots[1].mode == StrategyMode.SAFE
+    assert result.daily_snapshots[1].mode_rule_code == "S1"
+
+
+def test_loc_buy_fills_at_close_when_close_is_within_limit() -> None:
+    prices = [
+        _price(date(2026, 1, 1), "100"),
+        OhlcvDto(
+            symbol="TEST",
+            date=date(2026, 1, 2),
+            open=Decimal("120"),
+            high=Decimal("130"),
+            low=Decimal("90"),
+            close=Decimal("103"),
+            volume=Decimal("1000"),
+        ),
+    ]
+
+    result = BacktestEngine().run(
+        strategy=DynamicWaveStrategy(),
+        prices=prices,
+        initial_capital=Decimal("1000"),
+        fee_rate=Decimal("0"),
+        slippage_rate=Decimal("0"),
+        settings=DynamicWaveStrategy.default_settings(),
+    )
+
+    buy = next(trade for trade in result.trades if trade.side == "BUY")
+    assert buy.price == Decimal("103.000000")
+
+
+def test_loc_buy_does_not_fill_when_only_low_touches_limit() -> None:
+    prices = [
+        _price(date(2026, 1, 1), "100"),
+        OhlcvDto(
+            symbol="TEST",
+            date=date(2026, 1, 2),
+            open=Decimal("120"),
+            high=Decimal("130"),
+            low=Decimal("90"),
+            close=Decimal("106"),
+            volume=Decimal("1000"),
+        ),
+    ]
+
+    result = BacktestEngine().run(
+        strategy=DynamicWaveStrategy(),
+        prices=prices,
+        initial_capital=Decimal("1000"),
+        fee_rate=Decimal("0"),
+        slippage_rate=Decimal("0"),
+        settings=DynamicWaveStrategy.default_settings(),
+    )
+
+    assert result.trades == []
+
+
+def _price(day: date, close: str = "100") -> OhlcvDto:
     return OhlcvDto(
         symbol="TEST",
         date=day,
-        open=Decimal("100"),
-        high=Decimal("100"),
-        low=Decimal("100"),
-        close=Decimal("100"),
+        open=Decimal(close),
+        high=Decimal(close),
+        low=Decimal(close),
+        close=Decimal(close),
         volume=Decimal("1000"),
     )
+
+
+def _weekly_prices(closes: list[str], first_week_ending: date) -> list[OhlcvDto]:
+    from datetime import timedelta
+
+    return [
+        OhlcvDto(
+            symbol="QQQ",
+            date=first_week_ending + timedelta(days=7 * index),
+            open=Decimal(close),
+            high=Decimal(close),
+            low=Decimal(close),
+            close=Decimal(close),
+            volume=Decimal("1000"),
+        )
+        for index, close in enumerate(closes)
+    ]

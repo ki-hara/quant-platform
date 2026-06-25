@@ -53,6 +53,7 @@ def create_backtest(
                 config_id=request.config_id,
                 start_date=request.start_date,
                 end_date=request.end_date,
+                mode_policy=request.mode_policy,
             )
         )
     except MarketDataError as exc:
@@ -79,7 +80,17 @@ def download_daily_csv(run_id: int, session: SessionDep) -> StreamingResponse:
     output = StringIO()
     writer = csv.writer(output)
     writer.writerow(
-        ["date", "capital", "cash", "position_value", "total_asset", "drawdown", "cumulative_fees"]
+        [
+            "date",
+            "capital",
+            "cash",
+            "position_value",
+            "total_asset",
+            "drawdown",
+            "cumulative_fees",
+            "mode",
+            "mode_rule_code",
+        ]
     )
     for snapshot in sorted(run.daily_snapshots, key=lambda item: item.date):
         writer.writerow(
@@ -91,6 +102,8 @@ def download_daily_csv(run_id: int, session: SessionDep) -> StreamingResponse:
                 snapshot.total_asset,
                 snapshot.drawdown,
                 snapshot.cumulative_fees,
+                snapshot.mode,
+                snapshot.mode_rule_code or "",
             ]
         )
     return _csv_response(output, f"backtest-{run_id}-daily.csv")

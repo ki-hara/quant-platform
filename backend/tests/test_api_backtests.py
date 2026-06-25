@@ -13,6 +13,7 @@ from app.db.seed import seed_default_owner
 from app.db.session import get_session
 from app.main import create_app
 from app.dto.market_data import OhlcvDto
+from app.domain.enums import BacktestModePolicy
 from app.strategy_engine.dynamic_wave import DynamicWaveStrategy
 from tests.fixtures import simple_prices
 
@@ -142,7 +143,7 @@ def test_backtest_csv_endpoints_stream_attachments(api_client: TestClient) -> No
     assert daily.headers["content-disposition"] == (
         f'attachment; filename="backtest-{run["id"]}-daily.csv"'
     )
-    assert "date,capital,cash,position_value,total_asset,drawdown,cumulative_fees" in daily.text
+    assert "date,capital,cash,position_value,total_asset,drawdown,cumulative_fees,mode,mode_rule_code" in daily.text
 
     assert trades.status_code == 200
     assert trades.headers["content-type"].startswith("text/csv")
@@ -157,3 +158,25 @@ def test_backtest_csv_endpoints_stream_attachments(api_client: TestClient) -> No
         f'attachment; filename="backtest-{run["id"]}-summary.csv"'
     )
     assert "id,status,start_date,end_date,initial_capital,final_capital" in summary.text
+
+
+def test_post_backtest_accepts_fixed_aggressive_policy_and_exports_mode(
+    api_client: TestClient,
+) -> None:
+    config_id = create_config(api_client)
+
+    response = api_client.post(
+        "/api/backtests",
+        json={
+            "config_id": config_id,
+            "start_date": "2026-01-01",
+            "end_date": "2026-01-06",
+            "mode_policy": BacktestModePolicy.FIXED_AGGRESSIVE.value,
+        },
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["strategy_config_snapshot_json"]["mode_policy"] == "fixed_aggressive"
+    daily = api_client.get(f"/api/backtests/{body['id']}/daily.csv")
+    assert "aggressive,fixed_aggressive" in daily.text

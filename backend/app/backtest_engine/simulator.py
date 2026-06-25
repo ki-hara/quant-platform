@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 
+from app.domain.enums import StrategyMode
+
 
 @dataclass(frozen=True)
 class SimulatedTrade:
@@ -25,6 +27,8 @@ class DailySnapshot:
     total_asset: Decimal
     drawdown: Decimal
     cumulative_fees: Decimal
+    mode: StrategyMode = StrategyMode.SAFE
+    mode_rule_code: str | None = None
 
 
 @dataclass(frozen=True)

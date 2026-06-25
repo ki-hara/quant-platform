@@ -256,6 +256,12 @@ class BacktestDailySnapshot(Base):
     total_asset: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
     drawdown: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
     cumulative_fees: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
+    mode: Mapped[StrategyMode] = mapped_column(
+        enum_column(StrategyMode),
+        default=StrategyMode.SAFE,
+        nullable=False,
+    )
+    mode_rule_code: Mapped[str | None] = mapped_column(String(32))
 
     backtest_run: Mapped[BacktestRun] = relationship(back_populates="daily_snapshots")
 
