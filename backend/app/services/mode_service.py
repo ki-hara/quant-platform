@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 
 from sqlalchemy.orm import Session
 
@@ -10,7 +10,12 @@ from app.dto.trading_plan import ModeRecommendationDto
 from app.infrastructure.repositories.market_data import MarketPriceRepository
 from app.infrastructure.repositories.modes import ModeRecommendationRepository, ModeStateRepository
 from app.infrastructure.repositories.strategies import StrategyConfigRepository
-from app.strategy_engine.weekly_rsi import DailyClose, aggregate_daily_closes_to_weekly_closes, resolve_weekly_rsi_transition
+from app.strategy_engine.weekly_rsi import (
+    DailyClose,
+    aggregate_daily_closes_to_weekly_closes,
+    latest_completed_mode_week_ending,
+    resolve_weekly_rsi_transition,
+)
 
 
 @dataclass(frozen=True)
@@ -83,7 +88,7 @@ class ModeService:
             date(1970, 1, 1),
             as_of,
         )
-        latest_completed_week_ending = _latest_completed_mode_week_ending(as_of)
+        latest_completed_week_ending = latest_completed_mode_week_ending(as_of)
         weekly_closes = [
             weekly_close
             for weekly_close in aggregate_daily_closes_to_weekly_closes(
@@ -155,11 +160,3 @@ class ModeService:
     @staticmethod
     def _utc_now() -> datetime:
         return datetime.now(timezone.utc).replace(tzinfo=None)
-
-
-def _latest_completed_mode_week_ending(as_of: date) -> date:
-    week_start = as_of - timedelta(days=as_of.weekday())
-    current_friday = week_start + timedelta(days=4)
-    if as_of.weekday() >= 5:
-        return current_friday
-    return current_friday - timedelta(days=7)

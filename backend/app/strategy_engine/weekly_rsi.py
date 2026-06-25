@@ -51,6 +51,14 @@ def aggregate_daily_closes_to_weekly_closes(daily_closes: Sequence[DailyClose]) 
     return weekly_closes
 
 
+def latest_completed_mode_week_ending(as_of: date) -> date:
+    week_start = as_of - timedelta(days=as_of.weekday())
+    current_friday = week_start + timedelta(days=TRADING_DAYS_PER_WEEK - 1)
+    if as_of.weekday() >= TRADING_DAYS_PER_WEEK:
+        return current_friday
+    return current_friday - timedelta(days=7)
+
+
 def calculate_simple_rsi(closes: Sequence[Decimal]) -> Decimal | None:
     if len(closes) < RSI_PERIOD + 1:
         return None

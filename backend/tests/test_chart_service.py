@@ -161,6 +161,54 @@ def test_chart_returns_sorted_ohlcv_loc_trade_markers_and_rsi_guides() -> None:
         assert chart.rsi.points
 
 
+def test_chart_rsi_excludes_current_week_until_weekend() -> None:
+    with create_session() as session:
+        config = create_config(session)
+        seed_prices(session, "TEST", date(2026, 1, 1), 400)
+        seed_weekly_prices(
+            session,
+            [
+                "99",
+                "100",
+                "101",
+                "102",
+                "103",
+                "104",
+                "105",
+                "106",
+                "107",
+                "108",
+                "109",
+                "110",
+                "111",
+                "112",
+                "113",
+                "114",
+                "113",
+                "112",
+            ],
+        )
+        MarketPriceRepository(session).upsert_prices(
+            "finance_data_reader",
+            [
+                OhlcvDto(
+                    symbol="QQQ",
+                    date=date(2026, 6, 25),
+                    open=Decimal("111"),
+                    high=Decimal("111"),
+                    low=Decimal("111"),
+                    close=Decimal("111"),
+                    volume=1000,
+                ),
+            ],
+        )
+
+        chart = ChartService(session).get_chart(config.id, range_key="6m", today=date(2026, 6, 25))
+
+        assert chart.rsi.points
+        assert max(point.date for point in chart.rsi.points) == date(2026, 6, 19)
+
+
 @pytest.mark.parametrize(
     ("range_key", "expected_days"),
     [("1m", 31), ("3m", 93), ("6m", 186), ("1y", 366)],

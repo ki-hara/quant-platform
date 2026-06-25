@@ -15,6 +15,16 @@ const ranges: Array<{ key: ChartRange; label: string }> = [
   { key: "1y", label: "1년" },
 ];
 
+function formatChartDate(time: unknown): string {
+  if (typeof time === "string") return time;
+  if (typeof time === "object" && time !== null && "year" in time && "month" in time && "day" in time) {
+    const value = time as { year: number; month: number; day: number };
+    return `${value.year}-${String(value.month).padStart(2, "0")}-${String(value.day).padStart(2, "0")}`;
+  }
+  if (typeof time === "number") return new Date(time * 1000).toISOString().slice(0, 10);
+  return "";
+}
+
 export function MarketChart({ chart, range, onRangeChange }: MarketChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -26,7 +36,13 @@ export function MarketChart({ chart, range, onRangeChange }: MarketChartProps) {
       layout: { background: { color: "#ffffff" }, textColor: "#2b3036" },
       grid: { vertLines: { color: "#eef0f2" }, horzLines: { color: "#eef0f2" } },
       rightPriceScale: { borderColor: "#d9dde3" },
-      timeScale: { borderColor: "#d9dde3" },
+      timeScale: {
+        borderColor: "#d9dde3",
+        tickMarkFormatter: formatChartDate,
+      },
+      localization: {
+        timeFormatter: formatChartDate,
+      },
     });
     const candles: ISeriesApi<"Candlestick"> = instance.addCandlestickSeries({
       upColor: "#24745a",

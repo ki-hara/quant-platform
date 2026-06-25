@@ -20,7 +20,12 @@ from app.infrastructure.repositories.portfolios import PositionRepository
 from app.infrastructure.repositories.strategies import StrategyConfigRepository
 from app.infrastructure.repositories.trades import TradeRepository
 from app.strategy_engine.loc import calculate_loc_plan
-from app.strategy_engine.weekly_rsi import DailyClose, aggregate_daily_closes_to_weekly_closes, calculate_simple_rsi
+from app.strategy_engine.weekly_rsi import (
+    DailyClose,
+    aggregate_daily_closes_to_weekly_closes,
+    calculate_simple_rsi,
+    latest_completed_mode_week_ending,
+)
 
 
 RANGE_DAYS = {"1m": 31, "3m": 93, "6m": 186, "1y": 366}
@@ -125,6 +130,12 @@ class ChartService:
         weekly_closes = aggregate_daily_closes_to_weekly_closes(
             [DailyClose(date=price.date, close=price.close) for price in prices]
         )
+        latest_completed_week_ending = latest_completed_mode_week_ending(today)
+        weekly_closes = [
+            weekly_close
+            for weekly_close in weekly_closes
+            if weekly_close.week_ending <= latest_completed_week_ending
+        ]
         points: list[RsiPointDto] = []
         for index in range(14, len(weekly_closes)):
             rsi = calculate_simple_rsi([item.close for item in weekly_closes[index - 14 : index + 1]])
