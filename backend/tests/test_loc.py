@@ -30,12 +30,14 @@ def test_calculate_loc_plan_returns_expected_values_for_exact_case() -> None:
                 limit_price=Decimal("105.000000"),
                 quantity=1,
                 cumulative_quantity=1,
+                cumulative_amount=Decimal("105.000000"),
             ),
             LocOrder(
                 step=2,
                 limit_price=Decimal("100.000000"),
                 quantity=1,
                 cumulative_quantity=2,
+                cumulative_amount=Decimal("200.000000"),
             ),
         ],
     )
@@ -144,12 +146,13 @@ def test_calculate_loc_plan_compacts_large_ladder_orders_by_allocation() -> None
     )
 
     assert plan.quantity == 20136
-    assert len(plan.orders) == 11
+    assert len(plan.orders) == 5
     assert plan.orders[0] == LocOrder(
         step=1,
         limit_price=Decimal("30.000000"),
         quantity=20136,
         cumulative_quantity=20136,
+        cumulative_amount=Decimal("604080.000000"),
     )
-    assert all(order.limit_price * Decimal(order.cumulative_quantity) <= plan.allocation for order in plan.orders[1:])
+    assert all(order.cumulative_amount <= plan.allocation for order in plan.orders)
     assert plan.orders[-1].limit_price >= Decimal("21.000000")

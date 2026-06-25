@@ -46,6 +46,7 @@ class LocOrderDto(BaseModel):
     limit_price: Decimal
     quantity: int
     cumulative_quantity: int
+    cumulative_amount: Decimal
     compressed: bool = False
 
 

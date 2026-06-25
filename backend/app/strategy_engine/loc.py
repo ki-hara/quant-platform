@@ -3,7 +3,8 @@ from decimal import Decimal, ROUND_DOWN
 
 
 MONEY_QUANT = Decimal("0.000001")
-MAX_LADDER_EXTRA_ORDERS = 10
+MAX_LOC_ORDER_ROWS = 5
+MAX_LADDER_EXTRA_ORDERS = MAX_LOC_ORDER_ROWS - 1
 
 
 @dataclass(frozen=True)
@@ -12,6 +13,7 @@ class LocOrder:
     limit_price: Decimal
     quantity: int
     cumulative_quantity: int
+    cumulative_amount: Decimal
     compressed: bool = False
 
 
@@ -93,6 +95,7 @@ def _ladder_orders(base_limit: Decimal, allocation: Decimal, base_quantity: int)
             limit_price=base_limit,
             quantity=base_quantity,
             cumulative_quantity=base_quantity,
+            cumulative_amount=_money(base_limit * Decimal(base_quantity)),
         )
     ]
 
@@ -123,6 +126,7 @@ def _ladder_orders(base_limit: Decimal, allocation: Decimal, base_quantity: int)
                 limit_price=trigger_price,
                 quantity=increment,
                 cumulative_quantity=target_total,
+                cumulative_amount=_money(trigger_price * Decimal(target_total)),
                 compressed=increment > 1,
             )
         )
