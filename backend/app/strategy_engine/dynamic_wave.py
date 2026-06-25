@@ -14,7 +14,6 @@ class DynamicWaveStrategy(Strategy):
     def default_settings() -> dict:
         return {
             "mode_rsi_symbol": "QQQ",
-            "base_index": "QQQ",
             "profit_compounding_rate": 60,
             "loss_compounding_rate": 20,
             "capital_update": {"type": "trading_days", "interval": 10, "period": "monthly"},

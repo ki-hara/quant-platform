@@ -219,11 +219,14 @@ export function SettingsForm({
                   </select>
                 ) : (
                   <input
-                    type="number"
-                    step={inputStepFor(field.key)}
+                    type={inputTypeFor(field.key)}
+                    step={inputTypeFor(field.key) === "number" ? inputStepFor(field.key) : undefined}
                     value={String(valueFor(field))}
                     onChange={(event) =>
-                      setSettings((current) => ({ ...current, [field.key]: coerceValue(event.target.value) }))
+                      setSettings((current) => ({
+                        ...current,
+                        [field.key]: valueForInput(field.key, event.target.value),
+                      }))
                     }
                   />
                 )}
@@ -283,6 +286,7 @@ function isFieldVisible(
   fields: FieldDescriptor[],
   values: Record<string, FieldValue>,
 ): boolean {
+  if (field.key === "base_index") return false;
   if (field.key !== "capital_update.interval" && field.key !== "capital_update.period") return true;
   const typeField = fields.find((candidate) => candidate.key === "capital_update.type");
   const updateType = String(values["capital_update.type"] ?? typeField?.defaultValue ?? "trading_days");
@@ -296,6 +300,15 @@ function coerceValue(value: string): FieldValue {
   if (value === "false") return false;
   if (value.trim() !== "" && !Number.isNaN(Number(value))) return Number(value);
   return value;
+}
+
+function inputTypeFor(key: string): "number" | "text" {
+  return key === "mode_rsi_symbol" ? "text" : "number";
+}
+
+function valueForInput(key: string, value: string): FieldValue {
+  if (key === "mode_rsi_symbol") return value.toUpperCase();
+  return coerceValue(value);
 }
 
 function inputStepFor(key: string): string {

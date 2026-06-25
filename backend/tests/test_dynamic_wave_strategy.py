@@ -33,6 +33,13 @@ def test_dynamic_wave_mode_uses_context_effective_mode() -> None:
     assert strategy.get_mode(make_context(effective_mode=StrategyMode.AGGRESSIVE)) == StrategyMode.AGGRESSIVE
 
 
+def test_default_settings_keep_rsi_symbol_and_omit_unused_base_index() -> None:
+    settings = DynamicWaveStrategy.default_settings()
+
+    assert settings["mode_rsi_symbol"] == "QQQ"
+    assert "base_index" not in settings
+
+
 def test_should_buy_when_close_is_inside_safe_threshold() -> None:
     strategy = DynamicWaveStrategy()
     signal = strategy.should_buy(make_context(current_close=Decimal("103")))
