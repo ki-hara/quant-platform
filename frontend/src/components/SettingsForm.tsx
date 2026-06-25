@@ -185,9 +185,6 @@ export function SettingsForm({
               <span>{preset.summary}</span>
             </button>
           ))}
-          <span className={`status-pill compact ${activePreset === "사용자 설정" ? "is-muted" : "is-ok"}`}>
-            {activePreset}
-          </span>
         </div>
         {fields.length === 0 ? (
           <div className="empty-state">설정 스키마가 없습니다.</div>
