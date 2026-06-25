@@ -1,5 +1,6 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 import pytest
 from sqlalchemy import create_engine
@@ -186,6 +187,29 @@ def test_daily_plan_calculates_exact_loc_price_and_quantity_from_previous_close(
         assert plan.buy_available is True
         assert plan.open_position_count == 0
         assert plan.mode_split_count == 7
+
+
+def test_daily_plan_uses_last_confirmed_us_close_before_cutoff() -> None:
+    with create_session() as session:
+        config = create_config(session)
+        config.symbol = "SOXL"
+        session.commit()
+        seed_daily_prices(
+            session,
+            "SOXL",
+            date(2026, 6, 24),
+            ["229.570007", "243.809998"],
+        )
+
+        plan = DailyPlanService(session).get_daily_plan(
+            config.id,
+            today=date(2026, 6, 26),
+            now=datetime(2026, 6, 26, 1, 0, tzinfo=ZoneInfo("Asia/Seoul")),
+        )
+
+        assert plan.loc_basis_date == date(2026, 6, 24)
+        assert plan.previous_close == Decimal("229.570007")
+        assert plan.LOC.limit_price == Decimal("236.457107")
 
 
 @pytest.mark.parametrize(

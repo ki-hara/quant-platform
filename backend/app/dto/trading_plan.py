@@ -65,6 +65,9 @@ class DailyPlanDto(BaseModel):
     current_rsi: Decimal | None
     rule_code: str | None
     previous_close: Decimal | None
+    loc_basis_date: date | None
+    loc_basis_close: Decimal | None
+    loc_formula: str | None
     mode_buy_threshold_percent: Decimal | None
     capital: Decimal | None
     cash: Decimal | None

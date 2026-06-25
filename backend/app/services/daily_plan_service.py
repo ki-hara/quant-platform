@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy.orm import Session
@@ -9,6 +9,7 @@ from app.infrastructure.repositories.market_data import MarketPriceRepository
 from app.infrastructure.repositories.modes import ModeStateRepository
 from app.infrastructure.repositories.portfolios import PortfolioRepository, PositionRepository
 from app.infrastructure.repositories.strategies import StrategyConfigRepository
+from app.services.market_session_service import latest_confirmed_market_date
 from app.strategy_engine.loc import LocPlan, calculate_loc_plan
 
 
@@ -21,7 +22,7 @@ class DailyPlanService:
         self.portfolios = PortfolioRepository(session)
         self.positions = PositionRepository(session)
 
-    def get_daily_plan(self, config_id: int, today: date) -> DailyPlanDto:
+    def get_daily_plan(self, config_id: int, today: date, now: datetime | None = None) -> DailyPlanDto:
         config = self.configs.get(config_id)
         if config is None:
             raise ValueError(f"Strategy config not found: {config_id}")
@@ -29,10 +30,11 @@ class DailyPlanService:
         state = self.mode_states.get_or_create_safe(config_id)
         portfolio = self.portfolios.get_by_config(config_id)
         open_positions = self.positions.list_open(config_id)
+        basis_date = latest_confirmed_market_date(config.symbol, now)
         latest_price = self.market_prices.latest_price_on_or_before(
             settings.market_data_provider,
             config.symbol,
-            today,
+            basis_date,
         )
         mode_settings = config.settings_json[state.confirmed_mode.value]
         split_count = int(mode_settings["split_count"])
@@ -82,6 +84,13 @@ class DailyPlanService:
             current_rsi=state.recommendation_current_rsi,
             rule_code=state.recommendation_rule_code,
             previous_close=previous_close,
+            loc_basis_date=data_as_of,
+            loc_basis_close=previous_close,
+            loc_formula=(
+                f"{previous_close} * (1 + {buy_threshold} / 100) = {loc_plan.limit_price}"
+                if previous_close is not None
+                else None
+            ),
             mode_buy_threshold_percent=buy_threshold,
             capital=capital,
             cash=cash,

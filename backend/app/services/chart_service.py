@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 
 from sqlalchemy.orm import Session
@@ -19,6 +19,7 @@ from app.infrastructure.repositories.modes import ModeRecommendationRepository, 
 from app.infrastructure.repositories.portfolios import PositionRepository
 from app.infrastructure.repositories.strategies import StrategyConfigRepository
 from app.infrastructure.repositories.trades import TradeRepository
+from app.services.market_session_service import latest_confirmed_market_date
 from app.strategy_engine.loc import calculate_loc_plan
 from app.strategy_engine.weekly_rsi import (
     DailyClose,
@@ -85,10 +86,14 @@ class ChartService:
 
     def _loc_line(self, config_id: int, symbol: str, config_settings: dict, today: date) -> ChartLineDto:
         state = self.mode_states.get_or_create_safe(config_id)
+        basis_date = latest_confirmed_market_date(
+            symbol,
+            datetime.combine(today, time(23, 59)).astimezone(),
+        )
         latest_price = self.market_prices.latest_price_on_or_before(
             settings.market_data_provider,
             symbol,
-            today,
+            basis_date,
         )
         if latest_price is None:
             return ChartLineDto(value=Decimal("0.000000"), as_of=None)
