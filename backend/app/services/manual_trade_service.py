@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import NotFoundError, ValidationAppError
 from app.domain.enums import PositionStatus, StrategyMode, TradeSide, TradeSource
-from app.domain.models import LivePortfolio, Position, Trade
+from app.domain.models import LivePortfolio, Position, StrategyConfig, Trade
 from app.infrastructure.repositories.portfolios import PortfolioRepository, PositionRepository
 from app.infrastructure.repositories.strategies import StrategyConfigRepository
 from app.infrastructure.repositories.trades import TradeRepository
@@ -84,10 +84,11 @@ class ManualTradeService:
                     "trade_delete_not_allowed",
                     "Only manual or correction trades can be deleted.",
                 )
-            if trade.side != TradeSide.BUY:
-                raise ValidationAppError(
-                    "trade_delete_not_allowed",
-                    "Sell trades cannot be safely deleted. Record a correction trade instead.",
+            config = self.configs.get(trade.strategy_config_id)
+            if config is None:
+                raise NotFoundError(
+                    "strategy_config_not_found",
+                    f"Strategy config not found: {trade.strategy_config_id}",
                 )
             portfolio = self.portfolios.get_by_config(trade.strategy_config_id)
             if portfolio is None:
@@ -95,17 +96,8 @@ class ManualTradeService:
                     "live_portfolio_not_found",
                     f"Live portfolio not found for config: {trade.strategy_config_id}",
                 )
-            position = self._matching_open_buy_position(trade)
-            if position is None:
-                raise ValidationAppError(
-                    "trade_delete_not_allowed",
-                    "This buy trade no longer has an unchanged open position.",
-                )
-            portfolio.cash += trade.price * trade.quantity + trade.fee
-            portfolio.cumulative_fees -= trade.fee
-            self.session.delete(position)
-            self.portfolios.save(portfolio)
             self.trades.delete(trade)
+            self._rebuild_live_ledger(config, portfolio)
             self.session.commit()
         except Exception:
             self.session.rollback()
@@ -172,6 +164,59 @@ class ManualTradeService:
             ):
                 return position
         return None
+
+    def _rebuild_live_ledger(self, config: StrategyConfig, portfolio: LivePortfolio) -> None:
+        self.positions.delete_by_strategy_config(config.id)
+        portfolio.capital = config.initial_capital
+        portfolio.cash = config.initial_capital
+        portfolio.realized_pnl = Decimal("0")
+        portfolio.cumulative_fees = Decimal("0")
+        open_positions: list[Position] = []
+        for trade in self.trades.list_by_strategy_config(config.id):
+            if trade.side == TradeSide.BUY:
+                position = self.positions.create_open(
+                    strategy_config_id=config.id,
+                    buy_date=trade.date,
+                    buy_price=trade.price,
+                    quantity=trade.quantity,
+                    mode=StrategyMode.SAFE,
+                    buy_fee=trade.fee,
+                    limit_price=trade.limit_price,
+                )
+                open_positions.append(position)
+                portfolio.cash -= trade.price * trade.quantity + trade.fee
+                portfolio.cumulative_fees += trade.fee
+            elif trade.side == TradeSide.SELL:
+                realized_pnl = self._replay_sell(trade, open_positions)
+                trade.realized_pnl = realized_pnl
+                portfolio.cash += trade.price * trade.quantity - trade.fee
+                portfolio.realized_pnl += realized_pnl
+                portfolio.cumulative_fees += trade.fee
+                self.session.add(trade)
+        self.portfolios.save(portfolio)
+
+    def _replay_sell(self, trade: Trade, open_positions: list[Position]) -> Decimal:
+        remaining_quantity = trade.quantity
+        realized_pnl = Decimal("0")
+        for position in list(open_positions):
+            if remaining_quantity <= 0:
+                break
+            sell_quantity = min(remaining_quantity, position.quantity)
+            allocated_buy_fee = (position.buy_fee * sell_quantity / position.quantity).quantize(MONEY_QUANT)
+            cost_basis = position.buy_price * sell_quantity + allocated_buy_fee
+            proceeds = trade.price * sell_quantity - (trade.fee * sell_quantity / trade.quantity).quantize(MONEY_QUANT)
+            realized_pnl += proceeds - cost_basis
+            remaining_quantity -= sell_quantity
+            if sell_quantity == position.quantity:
+                self.positions.close(position)
+                open_positions.remove(position)
+            else:
+                position.quantity = (position.quantity - sell_quantity).quantize(MONEY_QUANT)
+                position.buy_fee = (position.buy_fee - allocated_buy_fee).quantize(MONEY_QUANT)
+                self.positions.save(position)
+        if remaining_quantity > 0:
+            realized_pnl += trade.price * remaining_quantity
+        return realized_pnl.quantize(MONEY_QUANT)
 
     def _sell(self, request: ManualTradeRequest, portfolio: LivePortfolio) -> ManualTradeResult:
         if request.position_id is None:

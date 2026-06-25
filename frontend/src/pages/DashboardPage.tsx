@@ -154,12 +154,13 @@ export function DashboardPage() {
 
   const metrics = useMemo(() => {
     const portfolio = dashboard?.portfolio;
+    const symbol = dashboard?.config.symbol;
     return [
-      { label: "총 평가금액", value: formatMoney(dashboard?.total_asset), helper: dashboard?.config.symbol },
-      { label: "Capital", value: formatMoney(portfolio?.capital), helper: "전략 기준 투자금" },
-      { label: "Cash", value: formatMoney(portfolio?.cash), helper: "매수 가능 현금" },
-      { label: "실현손익", value: formatMoney(portfolio?.realized_pnl), helper: "누적 기준" },
-      { label: "누적 수수료", value: formatMoney(portfolio?.cumulative_fees), helper: "매수/매도 반영" },
+      { label: "총 평가금액", value: formatMoney(dashboard?.total_asset, symbol), helper: dashboard?.config.symbol },
+      { label: "Capital", value: formatMoney(portfolio?.capital, symbol), helper: "전략 기준 투자금" },
+      { label: "Cash", value: formatMoney(portfolio?.cash, symbol), helper: "매수 가능 현금" },
+      { label: "실현손익", value: formatMoney(portfolio?.realized_pnl, symbol), helper: "누적 기준" },
+      { label: "누적 수수료", value: formatMoney(portfolio?.cumulative_fees, symbol), helper: "매수/매도 반영" },
       { label: "보유 포지션", value: String(dashboard?.open_positions.length ?? 0), helper: "미청산" },
     ];
   }, [dashboard]);

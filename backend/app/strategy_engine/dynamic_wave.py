@@ -15,20 +15,20 @@ class DynamicWaveStrategy(Strategy):
         return {
             "mode_rsi_symbol": "QQQ",
             "base_index": "QQQ",
-            "profit_compounding_rate": 50,
-            "loss_compounding_rate": 30,
-            "capital_update": {"type": "trading_days", "interval": 20, "period": "monthly"},
+            "profit_compounding_rate": 60,
+            "loss_compounding_rate": 20,
+            "capital_update": {"type": "trading_days", "interval": 10, "period": "monthly"},
             "safe": {
                 "split_count": 7,
-                "max_holding_days": 20,
+                "max_holding_days": 30,
                 "buy_threshold_percent": 3,
-                "sell_threshold_percent": 5,
+                "sell_threshold_percent": 0.2,
             },
             "aggressive": {
-                "split_count": 5,
-                "max_holding_days": 10,
+                "split_count": 7,
+                "max_holding_days": 7,
                 "buy_threshold_percent": 5,
-                "sell_threshold_percent": 7,
+                "sell_threshold_percent": 2.5,
             },
         }
 

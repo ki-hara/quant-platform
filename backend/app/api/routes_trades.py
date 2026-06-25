@@ -32,7 +32,7 @@ SessionDep = Annotated[Session, Depends(get_session)]
 @router.get("/strategy-configs/{config_id}/positions", response_model=list[PositionDto])
 def list_positions(config_id: int, session: SessionDep) -> list[object]:
     _ensure_config_exists(config_id, session)
-    return PositionRepository(session).list_by_strategy_config(config_id)
+    return PositionRepository(session).list_open(config_id)
 
 
 @router.get("/positions/{config_id}", response_model=list[PositionDto])

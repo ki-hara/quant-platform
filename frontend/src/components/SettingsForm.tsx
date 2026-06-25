@@ -34,6 +34,31 @@ const commonDefaults = {
   slippage_rate: "0",
 };
 
+const investmentPresets: Array<{ label: string; values: Record<string, FieldValue> }> = [
+  {
+    label: "적극투자형",
+    values: {
+      profit_compounding_rate: 60,
+      loss_compounding_rate: 20,
+      "capital_update.type": "trading_days",
+      "capital_update.interval": 10,
+      "safe.split_count": 7,
+      "aggressive.split_count": 7,
+    },
+  },
+  {
+    label: "공격투자형",
+    values: {
+      profit_compounding_rate: 80,
+      loss_compounding_rate: 30,
+      "capital_update.type": "trading_days",
+      "capital_update.interval": 10,
+      "safe.split_count": 7,
+      "aggressive.split_count": 7,
+    },
+  },
+];
+
 export function SettingsForm({
   strategies,
   schema,
@@ -67,6 +92,7 @@ export function SettingsForm({
     event.preventDefault();
     await onSubmit({
       ...common,
+      slippage_rate: common.slippage_rate || "0",
       strategy_type: selectedStrategyType,
       settings_json: buildNestedSettings(fields, settings),
     });
@@ -114,7 +140,7 @@ export function SettingsForm({
               onChange={(event) =>
                 setCommon((current) => ({ ...current, symbol: event.target.value.toUpperCase() }))
               }
-              placeholder="005930 또는 QQQ"
+              placeholder="SOXL 또는 005930.KS"
               required
             />
           </label>
@@ -131,26 +157,18 @@ export function SettingsForm({
             />
             {editingConfig ? (
               <small id="initial-capital-edit-note" className="form-status">
-                실전 포트폴리오 회계 보호를 위해 생성 후에는 수정할 수 없습니다.
+                실전 포트폴리오 장부 보호를 위해 생성 후에는 수정할 수 없습니다.
               </small>
             ) : null}
           </label>
           <label>
             거래 수수료율 (%)
             <input
+              type="number"
+              step="any"
               value={common.fee_rate}
               onChange={(event) =>
                 setCommon((current) => ({ ...current, fee_rate: event.target.value }))
-              }
-              required
-            />
-          </label>
-          <label>
-            슬리피지율 (%)
-            <input
-              value={common.slippage_rate}
-              onChange={(event) =>
-                setCommon((current) => ({ ...current, slippage_rate: event.target.value }))
               }
               required
             />
@@ -160,6 +178,17 @@ export function SettingsForm({
 
       <div className="form-section">
         <h2>전략별 설정</h2>
+        <div className="segmented-control" role="group" aria-label="투자 성향">
+          {investmentPresets.map((preset) => (
+            <button
+              key={preset.label}
+              type="button"
+              onClick={() => setSettings((current) => ({ ...current, ...preset.values }))}
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
         {fields.length === 0 ? (
           <div className="empty-state">설정 스키마가 없습니다.</div>
         ) : (
@@ -190,6 +219,8 @@ export function SettingsForm({
                   </select>
                 ) : (
                   <input
+                    type="number"
+                    step={inputStepFor(field.key)}
                     value={String(valueFor(field))}
                     onChange={(event) =>
                       setSettings((current) => ({ ...current, [field.key]: coerceValue(event.target.value) }))
@@ -265,6 +296,12 @@ function coerceValue(value: string): FieldValue {
   if (value === "false") return false;
   if (value.trim() !== "" && !Number.isNaN(Number(value))) return Number(value);
   return value;
+}
+
+function inputStepFor(key: string): string {
+  if (key.endsWith("_percent") || key.endsWith("_rate")) return "any";
+  if (key.endsWith("_days") || key.endsWith("split_count") || key === "capital_update.interval") return "1";
+  return "any";
 }
 
 function labelFor(key: string): string {

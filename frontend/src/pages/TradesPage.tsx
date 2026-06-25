@@ -159,7 +159,7 @@ export function TradesPage() {
         quantity: manualForm.quantity,
         limit_price: manualForm.side === "buy" && manualForm.limit_price ? manualForm.limit_price : null,
         price: manualForm.price,
-        fee: manualForm.fee,
+        fee: estimateFee(manualForm.price, manualForm.quantity, dashboard?.config.fee_rate),
         sell_reason: manualForm.side === "sell" ? manualForm.sell_reason.trim() || null : null,
         source: manualForm.source,
         mode: manualForm.side === "buy" ? manualForm.mode : undefined,
@@ -422,11 +422,9 @@ export function TradesPage() {
             <label>
               실제 수수료
               <input
-                value={manualForm.fee}
-                onChange={(event) => setManualForm((current) => ({ ...current, fee: event.target.value }))}
-                placeholder="0"
-                inputMode="decimal"
-                required
+                type="hidden"
+                value={estimateFee(manualForm.price, manualForm.quantity, dashboard?.config.fee_rate)}
+                readOnly
               />
             </label>
             {manualForm.side === "sell" ? (

@@ -273,6 +273,49 @@ def test_manual_trade_sell_rejects_quantity_above_open_position() -> None:
             )
 
 
+def test_delete_manual_sell_trade_rebuilds_portfolio_and_positions() -> None:
+    with create_session() as session:
+        config = create_config(session)
+        service = ManualTradeService(session)
+        service.record_manual_trade(
+            ManualTradeRequest(
+                config_id=config.id,
+                side=TradeSide.BUY,
+                trade_date=date(2026, 1, 2),
+                quantity=Decimal("2"),
+                price=Decimal("100"),
+                fee=Decimal("1.25"),
+            ),
+        )
+        position = PositionRepository(session).list_open(config.id)[0]
+        sell = service.record_manual_trade(
+            ManualTradeRequest(
+                config_id=config.id,
+                side=TradeSide.SELL,
+                trade_date=date(2026, 1, 3),
+                quantity=Decimal("1"),
+                price=Decimal("110"),
+                fee=Decimal("0.50"),
+                position_id=position.id,
+                source=TradeSource.MANUAL,
+            ),
+        ).trade
+
+        service.delete_trade(sell.id)
+
+        portfolio = PortfolioRepository(session).get_by_config(config.id)
+        positions = PositionRepository(session).list_open(config.id)
+        trades = TradeRepository(session).list_by_strategy_config(config.id)
+
+        assert portfolio is not None
+        assert portfolio.cash == Decimal("798.750000")
+        assert portfolio.realized_pnl == Decimal("0.000000")
+        assert portfolio.cumulative_fees == Decimal("1.250000")
+        assert len(positions) == 1
+        assert positions[0].quantity == Decimal("2.000000")
+        assert [trade.side for trade in trades] == [TradeSide.BUY]
+
+
 def test_strategy_config_update_rejects_initial_capital_change() -> None:
     with create_session() as session:
         config = create_config(session)

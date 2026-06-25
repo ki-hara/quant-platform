@@ -25,7 +25,7 @@ export function DailyPlanPanel({ plan }: DailyPlanPanelProps) {
       <div className="daily-plan-main">
         <div>
           <span>LOC 지정가</span>
-          <strong>{formatMoney(plan?.LOC.limit_price)}</strong>
+          <strong>{formatMoney(plan?.LOC.limit_price, plan?.symbol)}</strong>
         </div>
         <div>
           <span>매수 수량</span>
@@ -44,7 +44,7 @@ export function DailyPlanPanel({ plan }: DailyPlanPanelProps) {
         </div>
         <div>
           <dt>전일 종가</dt>
-          <dd>{formatMoney(plan?.previous_close)}</dd>
+          <dd>{formatMoney(plan?.previous_close, plan?.symbol)}</dd>
         </div>
         <div>
           <dt>매수조건</dt>
@@ -52,11 +52,11 @@ export function DailyPlanPanel({ plan }: DailyPlanPanelProps) {
         </div>
         <div>
           <dt>Capital</dt>
-          <dd>{formatMoney(plan?.capital)}</dd>
+          <dd>{formatMoney(plan?.capital, plan?.symbol)}</dd>
         </div>
         <div>
           <dt>Cash</dt>
-          <dd>{formatMoney(plan?.cash)}</dd>
+          <dd>{formatMoney(plan?.cash, plan?.symbol)}</dd>
         </div>
         <div>
           <dt>분할수</dt>
@@ -68,15 +68,15 @@ export function DailyPlanPanel({ plan }: DailyPlanPanelProps) {
         </div>
         <div>
           <dt>1회 배정금</dt>
-          <dd>{formatMoney(plan?.LOC.allocation)}</dd>
+          <dd>{formatMoney(plan?.LOC.allocation, plan?.symbol)}</dd>
         </div>
         <div>
           <dt>예상 수수료</dt>
-          <dd>{formatMoney(plan?.LOC.estimated_fee)}</dd>
+          <dd>{formatMoney(plan?.LOC.estimated_fee, plan?.symbol)}</dd>
         </div>
         <div>
           <dt>필요 현금</dt>
-          <dd>{formatMoney(plan?.LOC.required_cash)}</dd>
+          <dd>{formatMoney(plan?.LOC.required_cash, plan?.symbol)}</dd>
         </div>
         <div>
           <dt>차단 사유</dt>

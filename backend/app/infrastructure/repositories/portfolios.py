@@ -84,6 +84,11 @@ class PositionRepository:
     def get(self, position_id: int) -> Position | None:
         return self.session.get(Position, position_id)
 
+    def delete_by_strategy_config(self, strategy_config_id: int) -> None:
+        for position in self.list_by_strategy_config(strategy_config_id):
+            self.session.delete(position)
+        self.session.flush()
+
     def close(self, position: Position) -> Position:
         position.status = PositionStatus.CLOSED
         position.closed_at = datetime.utcnow()

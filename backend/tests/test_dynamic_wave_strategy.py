@@ -88,7 +88,7 @@ def test_position_size_uses_loc_limit_basis_for_aggressive_mode() -> None:
         make_context(previous_close=Decimal("100"), capital=Decimal("1000"), effective_mode=StrategyMode.AGGRESSIVE)
     )
 
-    assert size.amount == Decimal("200.000000")
+    assert size.amount == Decimal("142.857143")
     assert size.quantity == 1
 
 
@@ -148,7 +148,7 @@ def test_should_sell_when_profit_target_is_reached() -> None:
 def test_should_sell_when_max_holding_period_is_reached() -> None:
     strategy = DynamicWaveStrategy()
     position = StrategyPosition(date(2025, 12, 1), Decimal("100"), 1, StrategyMode.SAFE)
-    signal = strategy.should_sell(make_context(current_close=Decimal("101")), position)
+    signal = strategy.should_sell(make_context(current_close=Decimal("100")), position)
     assert signal.should_sell is True
     assert signal.reason == "max_holding_period"
 
@@ -156,8 +156,8 @@ def test_should_sell_when_max_holding_period_is_reached() -> None:
 def test_update_capital_applies_pcr_and_lcr() -> None:
     strategy = DynamicWaveStrategy()
     context = make_context(capital=Decimal("1000"))
-    assert strategy.update_capital(context, Decimal("100")).capital == Decimal("1050.000000")
-    assert strategy.update_capital(context, Decimal("-100")).capital == Decimal("970.000000")
+    assert strategy.update_capital(context, Decimal("100")).capital == Decimal("1060.000000")
+    assert strategy.update_capital(context, Decimal("-100")).capital == Decimal("980.000000")
 
 
 def test_registry_lists_creates_and_rejects_unknown_strategy_types() -> None:

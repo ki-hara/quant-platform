@@ -2,13 +2,22 @@ export function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-export function formatMoney(value: string | number | null | undefined): string {
+export function formatMoney(value: string | number | null | undefined, symbol?: string | null): string {
   if (value === null || value === undefined || value === "") return "-";
   const number = Number(value);
   if (Number.isNaN(number)) return String(value);
-  return new Intl.NumberFormat("ko-KR", {
+  const formatted = new Intl.NumberFormat("ko-KR", {
     maximumFractionDigits: 2,
   }).format(number);
+  const currency = currencyForSymbol(symbol);
+  return currency ? `${formatted} ${currency}` : formatted;
+}
+
+export function currencyForSymbol(symbol: string | null | undefined): "USD" | "KRW" | null {
+  if (!symbol) return null;
+  const normalized = symbol.toUpperCase();
+  if (normalized.endsWith(".KS") || normalized.endsWith(".KQ") || /^\d{6}$/.test(normalized)) return "KRW";
+  return "USD";
 }
 
 export function formatDecimal(value: string | number | null | undefined, digits = 2): string {
