@@ -36,6 +36,16 @@ class LocPlanDto(BaseModel):
     required_cash: Decimal
     available: Decimal
     blocking_reason: str | None
+    orders: list["LocOrderDto"] = []
+
+
+class LocOrderDto(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    step: int
+    limit_price: Decimal
+    quantity: int
+    cumulative_quantity: int
 
 
 class DailyPlanDto(BaseModel):

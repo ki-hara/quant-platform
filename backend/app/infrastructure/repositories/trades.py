@@ -48,6 +48,13 @@ class TradeRepository:
         )
         return list(self.session.scalars(stmt))
 
+    def get(self, trade_id: int) -> Trade | None:
+        return self.session.get(Trade, trade_id)
+
+    def delete(self, trade: Trade) -> None:
+        self.session.delete(trade)
+        self.session.flush()
+
     def list_in_range(
         self,
         strategy_config_id: int,

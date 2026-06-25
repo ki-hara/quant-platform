@@ -47,6 +47,7 @@ class DailyPlanService:
                 required_cash=Decimal("0.000000"),
                 available=(portfolio.cash if portfolio is not None else Decimal("0")).quantize(Decimal("0.000001")),
                 blocking_reason="market_data_unavailable",
+                orders=[],
             )
             previous_close: Decimal | None = None
             data_as_of: date | None = None

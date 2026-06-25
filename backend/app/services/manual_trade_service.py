@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import NotFoundError, ValidationAppError
 from app.domain.enums import PositionStatus, StrategyMode, TradeSide, TradeSource
-from app.domain.models import LivePortfolio, Trade
+from app.domain.models import LivePortfolio, Position, Trade
 from app.infrastructure.repositories.portfolios import PortfolioRepository, PositionRepository
 from app.infrastructure.repositories.strategies import StrategyConfigRepository
 from app.infrastructure.repositories.trades import TradeRepository
@@ -73,6 +73,43 @@ class ManualTradeService:
             self.session.rollback()
             raise
 
+    def delete_trade(self, trade_id: int) -> None:
+        try:
+            trade = self.trades.get(trade_id)
+            if trade is None:
+                raise NotFoundError("trade_not_found", f"Trade not found: {trade_id}")
+            if trade.source not in (TradeSource.MANUAL, TradeSource.CORRECTION):
+                raise ValidationAppError(
+                    "trade_delete_not_allowed",
+                    "Only manual or correction trades can be deleted.",
+                )
+            if trade.side != TradeSide.BUY:
+                raise ValidationAppError(
+                    "trade_delete_not_allowed",
+                    "Sell trades cannot be safely deleted. Record a correction trade instead.",
+                )
+            portfolio = self.portfolios.get_by_config(trade.strategy_config_id)
+            if portfolio is None:
+                raise NotFoundError(
+                    "live_portfolio_not_found",
+                    f"Live portfolio not found for config: {trade.strategy_config_id}",
+                )
+            position = self._matching_open_buy_position(trade)
+            if position is None:
+                raise ValidationAppError(
+                    "trade_delete_not_allowed",
+                    "This buy trade no longer has an unchanged open position.",
+                )
+            portfolio.cash += trade.price * trade.quantity + trade.fee
+            portfolio.cumulative_fees -= trade.fee
+            self.session.delete(position)
+            self.portfolios.save(portfolio)
+            self.trades.delete(trade)
+            self.session.commit()
+        except Exception:
+            self.session.rollback()
+            raise
+
     def _validate_request(self, request: ManualTradeRequest) -> None:
         if request.quantity <= 0:
             raise ValidationAppError("invalid_manual_trade", "quantity must be greater than zero.")
@@ -118,6 +155,17 @@ class ManualTradeService:
             source=request.source,
         )
         return ManualTradeResult(trade=trade, cash=portfolio.cash, realized_pnl=Decimal("0"))
+
+    def _matching_open_buy_position(self, trade: Trade) -> Position | None:
+        for position in self.positions.list_open(trade.strategy_config_id):
+            if (
+                position.buy_date == trade.date
+                and position.buy_price == trade.price
+                and position.quantity == trade.quantity
+                and position.buy_fee == trade.fee
+            ):
+                return position
+        return None
 
     def _sell(self, request: ManualTradeRequest, portfolio: LivePortfolio) -> ManualTradeResult:
         if request.position_id is None:

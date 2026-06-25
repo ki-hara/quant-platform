@@ -1,8 +1,16 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal, ROUND_DOWN
 
 
 MONEY_QUANT = Decimal("0.000001")
+
+
+@dataclass(frozen=True)
+class LocOrder:
+    step: int
+    limit_price: Decimal
+    quantity: int
+    cumulative_quantity: int
 
 
 @dataclass(frozen=True)
@@ -14,6 +22,7 @@ class LocPlan:
     required_cash: Decimal
     available: Decimal
     blocking_reason: str | None
+    orders: list[LocOrder] = field(default_factory=list)
 
 
 def _money(value: Decimal) -> Decimal:
@@ -54,6 +63,7 @@ def calculate_loc_plan(
         blocking_reason = "insufficient_cash"
     else:
         blocking_reason = None
+    orders = _ladder_orders(limit_price, allocation, quantity)
 
     return LocPlan(
         limit_price=limit_price,
@@ -63,4 +73,36 @@ def calculate_loc_plan(
         required_cash=required_cash,
         available=available,
         blocking_reason=blocking_reason,
+        orders=orders,
     )
+
+
+def _ladder_orders(base_limit: Decimal, allocation: Decimal, base_quantity: int) -> list[LocOrder]:
+    if base_quantity <= 0:
+        return []
+    floor_limit = _money(base_limit * Decimal("0.70"))
+    orders = [
+        LocOrder(
+            step=1,
+            limit_price=base_limit,
+            quantity=base_quantity,
+            cumulative_quantity=base_quantity,
+        )
+    ]
+    previous_total = base_quantity
+    target_total = base_quantity + 1
+    while True:
+        trigger_price = _money(allocation / Decimal(target_total))
+        if trigger_price < floor_limit:
+            break
+        orders.append(
+            LocOrder(
+                step=len(orders) + 1,
+                limit_price=trigger_price,
+                quantity=target_total - previous_total,
+                cumulative_quantity=target_total,
+            )
+        )
+        previous_total = target_total
+        target_total += 1
+    return orders

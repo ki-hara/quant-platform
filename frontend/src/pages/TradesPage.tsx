@@ -1,8 +1,8 @@
-import { RefreshCw, Save, Wand2 } from "lucide-react";
+import { RefreshCw, Save, Trash2, Wand2 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { getDashboard } from "../api/dashboard";
 import { listStrategyConfigs } from "../api/strategies";
-import { listPositions, listTrades, recordManualTrade } from "../api/trades";
+import { deleteTrade, listPositions, listTrades, recordManualTrade } from "../api/trades";
 import { getDailyPlan } from "../api/tradingPlan";
 import { Table, type TableColumn } from "../components/Table";
 import type {
@@ -50,6 +50,7 @@ export function TradesPage() {
   const [manualForm, setManualForm] = useState(initialManualForm);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -170,6 +171,42 @@ export function TradesPage() {
     }
   }
 
+  async function handleDeleteTrade(trade: TradeRow) {
+    if (!window.confirm(`${trade.date} ${translateSide(trade.side)} 거래를 삭제할까요?`)) return;
+    try {
+      setDeletingId(trade.id);
+      setError("");
+      setMessage("");
+      await deleteTrade(trade.id);
+      setMessage("거래내역을 삭제했습니다.");
+      await loadRows(selectedId);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  const tradeColumnsWithActions: TableColumn<TradeRow>[] = [
+    ...tradeColumns,
+    {
+      key: "delete",
+      header: "삭제",
+      align: "center",
+      render: (row) => (
+        <button
+          className="icon-button"
+          type="button"
+          title="수동/보정 매수 거래만 삭제할 수 있습니다."
+          disabled={deletingId === row.id || !["manual", "correction"].includes(row.source)}
+          onClick={() => handleDeleteTrade(row)}
+        >
+          <Trash2 aria-hidden="true" size={15} />
+        </button>
+      ),
+    },
+  ];
+
   return (
     <div className="page-stack">
       <section className="toolbar">
@@ -210,6 +247,19 @@ export function TradesPage() {
                   : "일일 계획 데이터가 없습니다."}
               </p>
               <small>{translateReason(plan?.LOC.blocking_reason)}</small>
+              {plan?.LOC.orders?.length ? (
+                <div className="loc-order-list">
+                  {plan.LOC.orders.map((order) => (
+                    <div key={order.step}>
+                      <span>{order.step}차 LOC</span>
+                      <strong>
+                        {formatMoney(order.limit_price)} × {order.quantity}주
+                      </strong>
+                      <small>누적 {order.cumulative_quantity}주</small>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </div>
             <button type="button" onClick={fillBuyRecommendation} disabled={!plan?.buy_available}>
               <Wand2 aria-hidden="true" size={16} /> 추천값 입력
@@ -387,7 +437,7 @@ export function TradesPage() {
             <span>체결 이력</span>
           </div>
         </div>
-        <Table columns={tradeColumns} rows={trades} getRowKey={(row) => row.id} />
+        <Table columns={tradeColumnsWithActions} rows={trades} getRowKey={(row) => row.id} />
       </section>
     </div>
   );

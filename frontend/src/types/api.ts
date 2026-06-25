@@ -218,6 +218,14 @@ export interface LocPlan {
   required_cash: DecimalString;
   available: DecimalString;
   blocking_reason: string | null;
+  orders: LocOrder[];
+}
+
+export interface LocOrder {
+  step: number;
+  limit_price: DecimalString;
+  quantity: number;
+  cumulative_quantity: number;
 }
 
 export interface DailyPlan {

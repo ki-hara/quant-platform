@@ -82,6 +82,16 @@ def record_manual_trade(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
+@router.delete("/trades/{trade_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_trade(trade_id: int, session: SessionDep) -> None:
+    try:
+        ManualTradeService(session).delete_trade(trade_id)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=exc.message) from exc
+    except ValidationAppError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=exc.message) from exc
+
+
 @router.post(
     "/strategy-configs/{config_id}/signals/execute",
     response_model=SignalExecutionResponseDto,

@@ -2,7 +2,7 @@ from decimal import Decimal
 
 import pytest
 
-from app.strategy_engine.loc import LocPlan, calculate_loc_plan
+from app.strategy_engine.loc import LocOrder, LocPlan, calculate_loc_plan
 
 
 def test_calculate_loc_plan_returns_expected_values_for_exact_case() -> None:
@@ -24,6 +24,20 @@ def test_calculate_loc_plan_returns_expected_values_for_exact_case() -> None:
         required_cash=Decimal("110.250000"),
         available=Decimal("5.000000"),
         blocking_reason="insufficient_cash",
+        orders=[
+            LocOrder(
+                step=1,
+                limit_price=Decimal("105.000000"),
+                quantity=1,
+                cumulative_quantity=1,
+            ),
+            LocOrder(
+                step=2,
+                limit_price=Decimal("100.000000"),
+                quantity=1,
+                cumulative_quantity=2,
+            ),
+        ],
     )
 
 
