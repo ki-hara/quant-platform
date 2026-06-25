@@ -515,6 +515,42 @@ button:disabled,
   gap: 8px;
 }
 
+.recommendation-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+}
+
+.recommendation-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fbfcfa;
+  padding: 12px;
+}
+
+.recommendation-card strong,
+.recommendation-card p,
+.recommendation-card small {
+  display: block;
+}
+
+.recommendation-card strong {
+  margin-top: 5px;
+}
+
+.recommendation-card p,
+.recommendation-card small {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .signal-card {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -617,6 +653,7 @@ button:disabled,
 @media (max-width: 520px) {
   .tab-nav,
   .signal-card,
+  .recommendation-card,
   .detail-grid,
   .daily-plan-main {
     grid-template-columns: 1fr;
