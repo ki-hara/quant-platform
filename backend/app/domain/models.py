@@ -59,6 +59,7 @@ class StrategyConfig(Base):
     live_portfolio: Mapped["LivePortfolio"] = relationship(back_populates="strategy_config")
     positions: Mapped[list["Position"]] = relationship(back_populates="strategy_config")
     trades: Mapped[list["Trade"]] = relationship(back_populates="strategy_config")
+    portfolio_adjustments: Mapped[list["PortfolioAdjustment"]] = relationship(back_populates="strategy_config")
     mode_state: Mapped["StrategyModeState | None"] = relationship(
         back_populates="strategy_config",
         uselist=False,
@@ -155,6 +156,24 @@ class LivePortfolio(Base):
     )
 
     strategy_config: Mapped[StrategyConfig] = relationship(back_populates="live_portfolio")
+
+
+class PortfolioAdjustment(Base):
+    __tablename__ = "portfolio_adjustments"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    strategy_config_id: Mapped[int] = mapped_column(
+        ForeignKey("strategy_configs.id"),
+        nullable=False,
+        index=True,
+    )
+    date: Mapped[date] = mapped_column(Date, nullable=False)
+    cash_delta: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
+    capital_delta: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
+    memo: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    strategy_config: Mapped[StrategyConfig] = relationship(back_populates="portfolio_adjustments")
 
 
 class Position(Base):

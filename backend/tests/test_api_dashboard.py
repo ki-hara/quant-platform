@@ -146,6 +146,40 @@ def test_delete_strategy_config_archives_and_hides_from_list(api_client: TestCli
     assert config_id not in [row["id"] for row in list_response.json()]
 
 
+def test_portfolio_adjustment_api_updates_cash_and_capital(api_client: TestClient) -> None:
+    create_response = api_client.post(
+        "/api/strategy-configs",
+        json={
+            "name": "Adjust",
+            "strategy_type": "dynamic_wave",
+            "symbol": "SOXL",
+            "initial_capital": "1000",
+            "fee_rate": "0.001",
+            "slippage_rate": "0",
+            "settings_json": DynamicWaveStrategy.default_settings(),
+        },
+    )
+    config_id = create_response.json()["id"]
+
+    response = api_client.post(
+        f"/api/strategy-configs/{config_id}/portfolio-adjustments",
+        json={
+            "date": "2026-06-26",
+            "cash_delta": "100",
+            "capital_delta": "50",
+            "memo": "deposit",
+        },
+    )
+    list_response = api_client.get(f"/api/strategy-configs/{config_id}/portfolio-adjustments")
+    dashboard_response = api_client.get(f"/api/dashboard/{config_id}")
+
+    assert response.status_code == 201
+    assert response.json()["cash_delta"] == "100.000000"
+    assert len(list_response.json()) == 1
+    assert dashboard_response.json()["portfolio"]["cash"] == "1100.000000"
+    assert dashboard_response.json()["portfolio"]["capital"] == "1050.000000"
+
+
 def test_get_dashboard_reads_cached_prices_with_configured_provider_key(api_client: TestClient) -> None:
     create_response = api_client.post(
         "/api/strategy-configs",

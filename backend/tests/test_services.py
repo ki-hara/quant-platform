@@ -13,6 +13,7 @@ from app.infrastructure.repositories.modes import ModeStateRepository
 from app.infrastructure.repositories.trades import TradeRepository
 from app.services.dashboard_service import DashboardService
 from app.services.manual_trade_service import ManualTradeRequest, ManualTradeService
+from app.services.portfolio_adjustment_service import PortfolioAdjustmentRequest, PortfolioAdjustmentService
 from app.services.signal_execution_service import SignalExecutionRequest, SignalExecutionService
 from app.services.strategy_config_service import (
     StrategyConfigCreateRequest,
@@ -69,6 +70,44 @@ def test_strategy_config_service_archive_hides_config_from_live_lists() -> None:
         assert config.id not in [row.id for row in service.list_configs("default")]
         with pytest.raises(ValueError, match="not found"):
             service.get_config(config.id)
+
+
+def test_portfolio_adjustment_updates_cash_and_capital() -> None:
+    with create_session() as session:
+        config = create_config(session)
+
+        adjustment = PortfolioAdjustmentService(session).create_adjustment(
+            config.id,
+            PortfolioAdjustmentRequest(
+                adjustment_date=date(2026, 6, 26),
+                cash_delta=Decimal("100"),
+                capital_delta=Decimal("50"),
+                memo="deposit",
+            ),
+        )
+
+        portfolio = PortfolioRepository(session).get_by_config(config.id)
+        assert adjustment.cash_delta == Decimal("100.000000")
+        assert adjustment.capital_delta == Decimal("50.000000")
+        assert portfolio is not None
+        assert portfolio.cash == Decimal("1100.000000")
+        assert portfolio.capital == Decimal("1050.000000")
+
+
+def test_portfolio_adjustment_rejects_negative_cash() -> None:
+    with create_session() as session:
+        config = create_config(session)
+
+        with pytest.raises(ValueError, match="Cash cannot be negative"):
+            PortfolioAdjustmentService(session).create_adjustment(
+                config.id,
+                PortfolioAdjustmentRequest(
+                    adjustment_date=date(2026, 6, 26),
+                    cash_delta=Decimal("-1001"),
+                    capital_delta=Decimal("0"),
+                    memo="withdrawal",
+                ),
+            )
 
 
 def test_signal_execution_buy_creates_position_with_fee_updates_cash_and_trade() -> None:

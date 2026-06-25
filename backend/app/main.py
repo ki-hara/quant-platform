@@ -4,6 +4,7 @@ from sqlalchemy import text
 
 from app.api.routes_backtests import router as backtests_router
 from app.api.routes_dashboard import router as dashboard_router
+from app.api.routes_portfolios import router as portfolios_router
 from app.api.routes_trading_plan import router as trading_plan_router
 from app.api.routes_strategies import router as strategies_router
 from app.api.routes_trades import router as trades_router
@@ -30,6 +31,7 @@ def create_app() -> FastAPI:
     app.include_router(strategies_router)
     app.include_router(trading_plan_router)
     app.include_router(dashboard_router)
+    app.include_router(portfolios_router)
     app.include_router(trades_router)
     app.include_router(backtests_router)
 
@@ -83,3 +85,19 @@ def ensure_sqlite_schema() -> None:
         }
         if "limit_price" not in trade_columns:
             connection.execute(text("ALTER TABLE trades ADD COLUMN limit_price NUMERIC(18, 6)"))
+        connection.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS portfolio_adjustments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    strategy_config_id INTEGER NOT NULL,
+                    date DATE NOT NULL,
+                    cash_delta NUMERIC(18, 6) NOT NULL,
+                    capital_delta NUMERIC(18, 6) NOT NULL,
+                    memo VARCHAR(500),
+                    created_at DATETIME NOT NULL,
+                    FOREIGN KEY(strategy_config_id) REFERENCES strategy_configs (id)
+                )
+                """
+            )
+        )
