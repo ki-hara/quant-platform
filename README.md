@@ -129,6 +129,19 @@ gcloud run deploy quant-platform --source . --region asia-northeast3 --allow-una
 
 주의: 이 구성은 최저비용 테스트용입니다. 여러 명이 지속적으로 사용하거나 데이터 손실 허용 범위가 낮아지면 PostgreSQL 전환을 권장합니다.
 
+## 무료 Oracle Cloud Always Free 배포
+
+완전 무료에 가깝게 테스트하려면 Oracle Cloud Always Free VM에 Docker 단일 컨테이너로 배포합니다.
+
+- 앱: Docker 단일 컨테이너
+- DB: VM 디스크의 SQLite
+- 데이터 경로: `/opt/quant-platform/data`
+- 서버 실행 파일: `deploy/oci/docker-compose.yml`
+- 서버 초기 설정: `deploy/oci/setup-ubuntu.sh`
+- 서버 백업 스크립트: `deploy/oci/backup-sqlite.sh`
+
+자세한 절차는 [Oracle Cloud Always Free 배포 가이드](docs/deployment/oracle-always-free.md)를 참고하세요.
+
 ## 검증
 
 백엔드 테스트:
