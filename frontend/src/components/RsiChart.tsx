@@ -53,7 +53,7 @@ export function RsiChart({ chart }: RsiChartProps) {
       });
     });
     rsi.setMarkers(
-      chart.mode_markers.map((marker) => ({
+      [...chart.mode_markers].sort((left, right) => left.date.localeCompare(right.date)).map((marker) => ({
         time: marker.date,
         position: marker.mode === "aggressive" ? "belowBar" : "aboveBar",
         color: marker.mode === "aggressive" ? "#d17a22" : "#24745a",

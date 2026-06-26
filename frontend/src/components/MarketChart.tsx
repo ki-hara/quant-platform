@@ -83,7 +83,7 @@ export function MarketChart({ chart, range, onRangeChange }: MarketChartProps) {
       title: "LOC",
     });
     candles.setMarkers(
-      chart.trade_markers.map((marker) => ({
+      [...chart.trade_markers].sort((left, right) => left.date.localeCompare(right.date)).map((marker) => ({
         time: marker.date,
         position: marker.kind === "buy" ? "belowBar" : "aboveBar",
         color: marker.kind === "buy" ? "#24745a" : "#b54b4b",
