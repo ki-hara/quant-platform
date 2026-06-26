@@ -5,6 +5,7 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.domain.enums import PositionStatus
 from app.domain.models import LivePortfolio, MarketPrice, Position, StrategyConfig
 from app.infrastructure.repositories.market_data import MarketPriceRepository
 from app.infrastructure.repositories.portfolios import PortfolioRepository, PositionRepository
@@ -104,29 +105,33 @@ class DashboardService:
         )
         strategy = registry.create(config.strategy_type)
         buy_signal = strategy.should_buy(context)
-        sell_signals = [
-            {
-                "position_id": position.id,
-                "should_sell": signal.should_sell,
-                "reason": signal.reason,
-                "return_percent": signal.return_percent,
-            }
-            for position, signal in (
-                (
-                    position,
-                    strategy.should_sell(
-                        context,
-                        StrategyPosition(
-                            buy_date=position.buy_date,
-                            buy_price=position.buy_price,
-                            quantity=int(position.quantity),
-                            mode=position.mode,
-                        ),
-                    ),
-                )
-                for position in open_positions
+        sell_signals = []
+        for position in open_positions:
+            if position.status != PositionStatus.OPEN:
+                continue
+            strategy_position = StrategyPosition(
+                buy_date=position.buy_date,
+                buy_price=position.buy_price,
+                quantity=int(position.quantity),
+                mode=position.mode,
             )
-        ]
+            signal = strategy.should_sell(context, strategy_position)
+            mode_settings = config.settings_json[position.mode.value]
+            holding_days = (current_price.date - position.buy_date).days
+            max_holding_days = int(mode_settings["max_holding_days"])
+            days_to_deadline = max_holding_days - holding_days
+            sell_signals.append(
+                {
+                    "position_id": position.id,
+                    "should_sell": signal.should_sell,
+                    "reason": signal.reason,
+                    "return_percent": signal.return_percent,
+                    "holding_days": holding_days,
+                    "max_holding_days": max_holding_days,
+                    "days_to_deadline": days_to_deadline,
+                    "urgency": _sell_urgency(signal.reason, days_to_deadline),
+                }
+            )
         return DashboardSignalDto(
             available=True,
             should_buy=buy_signal.should_buy,
@@ -139,3 +144,13 @@ class DashboardService:
         if config is None:
             raise ValueError(f"Strategy config not found: {config_id}")
         return config
+
+
+def _sell_urgency(reason: str | None, days_to_deadline: int) -> str:
+    if reason == "max_holding_period":
+        return "expired"
+    if reason == "profit_target":
+        return "profit_target"
+    if days_to_deadline <= 2:
+        return "near_deadline"
+    return "normal"

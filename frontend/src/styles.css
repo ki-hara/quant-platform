@@ -424,6 +424,36 @@ h2 {
   border-bottom: 1px solid var(--border);
 }
 
+.holding-status {
+  display: grid;
+  gap: 6px;
+  min-height: 38px;
+  align-content: end;
+}
+
+.holding-status span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.holding-status strong {
+  color: #333730;
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.holding-status.is-warning strong {
+  color: var(--warning);
+}
+
+.holding-status.is-danger strong {
+  color: var(--danger);
+}
+
+.holding-status.is-success strong {
+  color: var(--success);
+}
+
 .readonly-field {
   display: grid;
   gap: 6px;
@@ -474,6 +504,21 @@ h2 {
   background: #fbfcfa;
   font-size: 12px;
   white-space: nowrap;
+}
+
+.recommendation-card.recommendation-warning {
+  border-color: rgba(164, 100, 36, 0.45);
+  background: #fff8ef;
+}
+
+.recommendation-card.recommendation-danger {
+  border-color: rgba(176, 74, 74, 0.5);
+  background: #fff4f3;
+}
+
+.recommendation-card.recommendation-success {
+  border-color: rgba(36, 104, 75, 0.45);
+  background: #f1faf5;
 }
 
 .metric-strip {
