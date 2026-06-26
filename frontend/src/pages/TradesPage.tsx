@@ -72,20 +72,6 @@ export function TradesPage() {
     [positions],
   );
 
-  const sellRecommendations = useMemo(() => {
-    const signals = Array.isArray(dashboard?.signals.sell_signals)
-      ? dashboard.signals.sell_signals
-      : [];
-    return signals
-      .map(toSellSignalRow)
-      .filter((signal) => signal.should_sell)
-      .map((signal) => ({
-        ...signal,
-        position: openPositions.find((position) => position.id === signal.position_id),
-      }))
-      .filter((signal) => signal.position);
-  }, [dashboard?.signals.sell_signals, openPositions]);
-
   const sellSignalByPosition = useMemo(() => {
     const signals = Array.isArray(dashboard?.signals.sell_signals)
       ? dashboard.signals.sell_signals
@@ -97,6 +83,15 @@ export function TradesPage() {
         .map((signal) => [signal.position_id as number, signal]),
     );
   }, [dashboard?.signals.sell_signals]);
+
+  const sellOrderRows = useMemo(
+    () =>
+      openPositions.map((position) => ({
+        ...sellSignalByPosition.get(position.id),
+        position,
+      })),
+    [openPositions, sellSignalByPosition],
+  );
 
   useEffect(() => {
     listStrategyConfigs()
@@ -346,16 +341,16 @@ export function TradesPage() {
             </button>
           </div>
 
-          {sellRecommendations.length > 0 ? (
+          {sellOrderRows.length > 0 ? (
             <div className="recommendation-card recommendation-list-card">
               <div>
                 <span className="signal-label">오늘의 LOC 매도</span>
-                <strong>{sellRecommendations.length}건 주문 필요</strong>
+                <strong>{sellOrderRows.length}건</strong>
                 <div className="sell-order-list">
-                  {sellRecommendations.map((signal) => (
+                  {sellOrderRows.map((signal) => (
                     <div className={`sell-order-row ${sellCardClass(signal)}`} key={signal.position?.id}>
                       <div>
-                        <strong>#{signal.position?.id} {translateReason(signal.reason)}</strong>
+                        <strong>#{signal.position?.id} {translateReason(signal.reason ?? "sell_condition_waiting")}</strong>
                         <small>
                           {holdingDaysText(signal.holding_days)} / {deadlineText(signal.days_to_deadline)} / 수익률{" "}
                           {returnPercentText(signal.return_percent)}
