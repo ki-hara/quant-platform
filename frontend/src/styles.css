@@ -352,26 +352,6 @@ h2 {
   grid-column: 1 / -1;
 }
 
-.loc-order-list {
-  display: grid;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.loc-order-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-}
-
-.loc-order-row span,
-.loc-order-row strong,
-.loc-order-row small {
-  white-space: nowrap;
-  overflow-wrap: normal;
-}
-
 .checkbox-row {
   display: flex;
   flex-direction: row;
@@ -879,14 +859,18 @@ button:disabled,
 
 .recommendation-card {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
-  align-items: center;
+  align-items: start;
   min-width: 0;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: #fbfcfa;
   padding: 12px;
+}
+
+.recommendation-card > button {
+  justify-self: start;
 }
 
 .recommendation-card strong,
@@ -913,13 +897,14 @@ button:disabled,
   margin-top: 9px;
 }
 
-.loc-order-list div {
+.loc-order-row {
   display: grid;
-  grid-template-columns: 72px minmax(0, 1fr) auto;
-  gap: 8px;
+  grid-template-columns: minmax(72px, auto) minmax(112px, 1fr) minmax(128px, auto);
+  gap: 8px 12px;
   align-items: center;
   border-top: 1px solid #eef0eb;
   padding-top: 5px;
+  min-width: 0;
 }
 
 .loc-order-list span,
@@ -931,6 +916,14 @@ button:disabled,
 .loc-order-list strong {
   margin: 0;
   font-size: 12px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.loc-order-row span,
+.loc-order-row small {
+  min-width: 0;
+  white-space: nowrap;
 }
 
 .signal-card {
@@ -1046,8 +1039,13 @@ button:disabled,
     width: 100%;
   }
 
-  .loc-order-list div {
+  .recommendation-card > button {
+    width: 100%;
+  }
+
+  .loc-order-row {
     grid-template-columns: 1fr;
+    gap: 3px;
   }
 
   .position-edit-row {

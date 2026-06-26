@@ -331,8 +331,8 @@ export function TradesPage() {
                   {plan.LOC.orders.slice(0, 5).map((order) => (
                     <div className="loc-order-row" key={order.step}>
                       <span>{order.step}차 LOC</span>
-                      <strong>{formatMoney(order.limit_price)}</strong>
-                      <small>{order.quantity}주 / 누적 {order.cumulative_quantity}주</small>
+                      <strong>LOC {formatMoney(order.limit_price)}</strong>
+                      <small>주문 {order.quantity}주 / 누적 {order.cumulative_quantity}주</small>
                     </div>
                   ))}
                 </div>
