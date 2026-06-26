@@ -335,11 +335,39 @@ h2 {
 
 .position-edit-row {
   display: grid;
-  grid-template-columns: minmax(120px, 1fr) repeat(3, minmax(110px, 0.8fr)) auto;
+  grid-template-columns: minmax(120px, 1fr) repeat(4, minmax(96px, 0.8fr)) auto;
   gap: 8px;
   align-items: end;
   padding: 8px 0;
   border-bottom: 1px solid var(--border);
+}
+
+.order-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.order-tabs button.is-active {
+  border-color: var(--accent);
+  background: #eef7f1;
+  color: var(--accent-strong);
+}
+
+.compact-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.compact-facts span {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 7px;
+  background: #fbfcfa;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .metric-strip {
@@ -813,6 +841,10 @@ button:disabled,
   }
 
   .loc-order-list div {
+    grid-template-columns: 1fr;
+  }
+
+  .position-edit-row {
     grid-template-columns: 1fr;
   }
 }

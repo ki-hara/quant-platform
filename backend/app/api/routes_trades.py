@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import NotFoundError, ValidationAppError
 from app.db.session import get_session
+from app.domain.enums import TradeSide
 from app.dto.dashboard import PositionDto
 from app.dto.trades import (
     ManualTradeRequestDto,
@@ -56,17 +57,43 @@ def update_position(position_id: int, request: PositionUpdateDto, session: Sessi
     position = repo.get(position_id)
     if position is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Position not found: {position_id}")
+    config = StrategyConfigRepository(session).get(position.strategy_config_id)
+    matching_trade = _matching_buy_trade(position, session)
     if request.status == "unfilled":
-        session.delete(position)
+        if matching_trade is not None:
+            TradeRepository(session).delete(matching_trade)
+            if config is not None and config.live_portfolio is not None:
+                ManualTradeService(session)._rebuild_live_ledger(config, config.live_portfolio)
+        else:
+            session.delete(position)
         session.commit()
         return position
     if request.quantity is not None:
         position.quantity = request.quantity
     if request.buy_price is not None:
         position.buy_price = request.buy_price
+    if matching_trade is not None:
+        matching_trade.quantity = position.quantity
+        matching_trade.price = position.buy_price
+        session.add(matching_trade)
     saved = repo.save(position)
+    if config is not None and config.live_portfolio is not None:
+        ManualTradeService(session)._rebuild_live_ledger(config, config.live_portfolio)
     session.commit()
     return saved
+
+
+def _matching_buy_trade(position, session: Session):
+    for trade in TradeRepository(session).list_by_strategy_config(position.strategy_config_id):
+        if (
+            trade.side == TradeSide.BUY
+            and trade.date == position.buy_date
+            and trade.limit_price == position.limit_price
+            and trade.price == position.buy_price
+            and trade.quantity == position.quantity
+        ):
+            return trade
+    return None
 
 
 @router.get("/strategy-configs/{config_id}/trades", response_model=list[TradeResponseDto])

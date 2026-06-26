@@ -108,7 +108,11 @@ export function TradesPage() {
         Object.fromEntries(
           positionRows.map((position) => [
             position.id,
-            { quantity: position.quantity, buy_price: position.buy_price, status: "open" },
+            {
+              quantity: String(Math.trunc(Number(position.quantity))),
+              buy_price: Number(position.buy_price).toFixed(2),
+              status: "open",
+            },
           ]),
         ),
       );
@@ -276,21 +280,19 @@ export function TradesPage() {
             <div>
               <span className="signal-label">오늘의 LOC 매수</span>
               <strong>{plan?.buy_available ? "매수 가능" : "매수 불가"}</strong>
-              <p>
-                {plan
-                  ? `${plan.symbol} / 지정가 ${formatMoney(plan.LOC.limit_price)} / 수량 ${plan.LOC.quantity}`
-                  : "일일 계획 데이터가 없습니다."}
-              </p>
+              <div className="compact-facts">
+                <span>{plan?.symbol ?? "-"}</span>
+                <span>{formatMoney(plan?.LOC.limit_price)}</span>
+                <span>{plan?.LOC.quantity ?? "-"}주</span>
+              </div>
               <small>{translateReason(plan?.LOC.blocking_reason)}</small>
               {plan?.LOC.orders?.length ? (
                 <div className="loc-order-list">
                   {plan.LOC.orders.slice(0, 5).map((order) => (
                     <div className="loc-order-row" key={order.step}>
                       <span>{order.step}차 LOC</span>
-                      <strong>
-                        {formatMoney(order.limit_price)} × {order.quantity}주
-                      </strong>
-                      <small>누적 {order.cumulative_quantity}주 / {formatMoney(order.cumulative_amount)}</small>
+                      <strong>{formatMoney(order.limit_price)}</strong>
+                      <small>{order.quantity}주 / 누적 {order.cumulative_quantity}주</small>
                     </div>
                   ))}
                 </div>
@@ -352,10 +354,17 @@ export function TradesPage() {
                 <div className="position-edit-row" key={position.id}>
                   <span>#{position.id} / {position.buy_date}</span>
                   <label>
+                    LOC가
+                    <input value={formatOptionalMoney(position.limit_price)} readOnly />
+                  </label>
+                  <label>
                     수량
                     <input
+                      type="number"
+                      step="1"
+                      min="0"
                       value={edit.quantity}
-                      inputMode="decimal"
+                      inputMode="numeric"
                       onChange={(event) =>
                         setPositionEdits((current) => ({
                           ...current,
@@ -365,8 +374,10 @@ export function TradesPage() {
                     />
                   </label>
                   <label>
-                    매수가
+                    체결가
                     <input
+                      type="number"
+                      step="0.01"
                       value={edit.buy_price}
                       inputMode="decimal"
                       onChange={(event) =>
@@ -393,7 +404,7 @@ export function TradesPage() {
                     </select>
                   </label>
                   <button type="button" onClick={() => handleSavePosition(position.id)} disabled={saving}>
-                    저장
+                    {Number(position.buy_price) === Number(position.limit_price ?? position.buy_price) ? "등록" : "수정"}
                   </button>
                 </div>
               );
@@ -418,24 +429,26 @@ export function TradesPage() {
                 required
               />
             </label>
-            <label>
-              구분
-              <select
-                value={manualForm.side}
-                onChange={(event) =>
-                  setManualForm((current) => ({
-                    ...current,
-                    side: event.target.value as "buy" | "sell",
-                    position_id: "",
-                    sell_reason: "",
-                    limit_price: event.target.value === "buy" ? current.limit_price : "",
-                  }))
-                }
-              >
-                <option value="buy">매수</option>
-                <option value="sell">매도</option>
-              </select>
-            </label>
+            <div className="order-tabs" role="tablist" aria-label="주문 구분">
+              {(["buy", "sell"] as const).map((side) => (
+                <button
+                  key={side}
+                  type="button"
+                  className={manualForm.side === side ? "is-active" : undefined}
+                  onClick={() =>
+                    setManualForm((current) => ({
+                      ...current,
+                      side,
+                      position_id: "",
+                      sell_reason: "",
+                      limit_price: side === "buy" ? current.limit_price : "",
+                    }))
+                  }
+                >
+                  {side === "buy" ? "매수 주문" : "매도 주문"}
+                </button>
+              ))}
+            </div>
             {manualForm.side === "sell" ? (
               <div className="position-pick-list">
                 {openPositions.map((position) => (
@@ -482,10 +495,13 @@ export function TradesPage() {
             <label>
               {manualForm.side === "buy" ? "주문 수량" : "매도 수량"}
               <input
+                type="number"
+                step="1"
+                min="1"
                 value={manualForm.quantity}
                 onChange={(event) => setManualForm((current) => ({ ...current, quantity: event.target.value }))}
                 placeholder="0"
-                inputMode="decimal"
+                inputMode="numeric"
                 required
               />
             </label>
