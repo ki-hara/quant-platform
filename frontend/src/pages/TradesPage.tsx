@@ -52,6 +52,8 @@ interface SellSignalRow {
   urgency?: string | null;
 }
 
+type SellOrderRow = SellSignalRow & { position: PositionRow };
+
 export function TradesPage() {
   const [configs, setConfigs] = useState<StrategyConfig[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -67,9 +69,14 @@ export function TradesPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  const openPositions = useMemo(
-    () => positions.filter((position) => position.status.toLowerCase() === "open"),
+  const sortedPositions = useMemo(
+    () => [...positions].sort(comparePositionByDate),
     [positions],
+  );
+
+  const openPositions = useMemo(
+    () => sortedPositions.filter((position) => position.status.toLowerCase() === "open"),
+    [sortedPositions],
   );
 
   const sellSignalByPosition = useMemo(() => {
@@ -86,10 +93,12 @@ export function TradesPage() {
 
   const sellOrderRows = useMemo(
     () =>
-      openPositions.map((position) => ({
-        ...sellSignalByPosition.get(position.id),
-        position,
-      })),
+      openPositions
+        .map((position) => ({
+          ...sellSignalByPosition.get(position.id),
+          position,
+        }))
+        .sort(compareSellOrderRow),
     [openPositions, sellSignalByPosition],
   );
 
@@ -316,14 +325,7 @@ export function TradesPage() {
         <div className="recommendation-grid">
           <div className="recommendation-card">
             <div>
-              <span className="signal-label">오늘의 LOC 매수</span>
-              <strong>{plan?.buy_available ? "매수 가능" : "매수 불가"}</strong>
-              <div className="compact-facts">
-                <span>{plan?.symbol ?? "-"}</span>
-                <span>{formatMoney(plan?.LOC.limit_price)}</span>
-                <span>{plan?.LOC.quantity ?? "-"}주</span>
-              </div>
-              <small>{translateReason(plan?.LOC.blocking_reason)}</small>
+              <span className="signal-label">오늘의 LOC 매수 주문표</span>
               {plan?.LOC.orders?.length ? (
                 <div className="loc-order-list">
                   {plan.LOC.orders.slice(0, 5).map((order) => (
@@ -334,7 +336,9 @@ export function TradesPage() {
                     </div>
                   ))}
                 </div>
-              ) : null}
+              ) : (
+                <small>{translateReason(plan?.LOC.blocking_reason) || "오늘 입력할 LOC 매수 주문이 없습니다."}</small>
+              )}
             </div>
             <button type="button" onClick={fillBuyRecommendation} disabled={!plan?.buy_available || saving}>
               <Wand2 aria-hidden="true" size={16} /> 매수 주문 입력
@@ -344,20 +348,17 @@ export function TradesPage() {
           {sellOrderRows.length > 0 ? (
             <div className="recommendation-card recommendation-list-card">
               <div>
-                <span className="signal-label">오늘의 LOC 매도</span>
+                <span className="signal-label">오늘의 LOC 매도 주문표</span>
                 <strong>{sellOrderRows.length}건</strong>
                 <div className="sell-order-list">
                   {sellOrderRows.map((signal) => (
                     <div className={`sell-order-row ${sellCardClass(signal)}`} key={signal.position?.id}>
                       <div>
-                        <strong>#{signal.position?.id} {translateReason(signal.reason ?? "sell_condition_waiting")}</strong>
-                        <small>
-                          {holdingDaysText(signal.holding_days)} / {deadlineText(signal.days_to_deadline)} / 수익률{" "}
-                          {returnPercentText(signal.return_percent)}
-                        </small>
+                        <strong>{signal.position.buy_date} 체결분</strong>
+                        <small>{sellOrderDeadlineText(signal)}</small>
                       </div>
-                      <span>{wholeShare(signal.position?.quantity)}주</span>
-                      <strong>{formatMoney(signal.sell_limit_price, dashboard?.config.symbol)}</strong>
+                      <span>{wholeShare(signal.position.quantity)}주</span>
+                      <strong>{sellOrderPriceText(signal, dashboard?.config.symbol)}</strong>
                     </div>
                   ))}
                 </div>
@@ -366,9 +367,9 @@ export function TradesPage() {
           ) : (
             <div className="recommendation-card">
               <div>
-                <span className="signal-label">오늘의 LOC 매도</span>
+                <span className="signal-label">오늘의 LOC 매도 주문표</span>
                 <strong>주문 없음</strong>
-                <p>오늘 LOC 매도 주문이 필요한 포지션이 없습니다.</p>
+                <p>체결된 보유 포지션이 없습니다.</p>
               </div>
             </div>
           )}
@@ -385,7 +386,7 @@ export function TradesPage() {
           </div>
           <div className="position-edit-list">
             {positions.length === 0 ? <div className="empty-state">보유 포지션이 없습니다.</div> : null}
-            {positions.map((position) => {
+            {sortedPositions.map((position) => {
               const edit = positionEdits[position.id] ?? {
                 quantity: position.quantity,
                 buy_price: position.buy_price,
@@ -394,7 +395,7 @@ export function TradesPage() {
               const sellSignal = sellSignalByPosition.get(position.id);
               return (
                 <div className="position-edit-row" key={position.id}>
-                  <span>#{position.id} / {position.buy_date}</span>
+                  <span>{position.buy_date} 체결분</span>
                   <div className="readonly-field">
                     <span>LOC가</span>
                     <strong>{formatOptionalMoney(position.limit_price)}</strong>
@@ -514,7 +515,7 @@ export function TradesPage() {
                       }));
                     }}
                   >
-                    #{position.id} / {position.buy_date} / {wholeShare(position.quantity)}주 / 매수가{" "}
+                    {position.buy_date} 체결분 / {wholeShare(position.quantity)}주 / 매수가{" "}
                     {formatMoney(position.buy_price)}
                   </button>
                 ))}
@@ -636,12 +637,6 @@ function toSellSignalRow(row: Record<string, unknown>): SellSignalRow {
   };
 }
 
-function holdingDaysText(days: number | null | undefined): string {
-  if (days === null || days === undefined) return "보유기간 -";
-  if (days === 0) return "당일 체결";
-  return `${days}일 보유`;
-}
-
 function deadlineText(days: number | null | undefined): string {
   if (days === null || days === undefined) return "기한 -";
   if (days < 0) return `${Math.abs(days)}일 초과`;
@@ -649,16 +644,8 @@ function deadlineText(days: number | null | undefined): string {
   return `${days}일 남음`;
 }
 
-function returnPercentText(value: string | number | null | undefined): string {
-  if (value === null || value === undefined || value === "") return "-";
-  const number = Number(value);
-  if (Number.isNaN(number)) return String(value);
-  return `${number.toFixed(2)}%`;
-}
-
 function sellCardClass(signal: SellSignalRow): string {
-  if (signal.urgency === "expired") return "recommendation-danger";
-  if (signal.urgency === "profit_target") return "recommendation-success";
+  if (isExpiredSellOrder(signal)) return "recommendation-danger";
   if (signal.urgency === "near_deadline") return "recommendation-warning";
   return "";
 }
@@ -685,6 +672,36 @@ function holdingStatusClass(signal: SellSignalRow | undefined): string {
 function wholeShare(value: string | number | null | undefined): string {
   const number = Math.trunc(Number(value ?? 0));
   return Number.isFinite(number) && number > 0 ? String(number) : "";
+}
+
+function comparePositionByDate(left: PositionRow, right: PositionRow): number {
+  const byDate = left.buy_date.localeCompare(right.buy_date);
+  return byDate || left.id - right.id;
+}
+
+function compareSellOrderRow(left: SellOrderRow, right: SellOrderRow): number {
+  const leftDeadline = normalizedDeadline(left.days_to_deadline);
+  const rightDeadline = normalizedDeadline(right.days_to_deadline);
+  return leftDeadline - rightDeadline || comparePositionByDate(left.position, right.position);
+}
+
+function normalizedDeadline(days: number | null | undefined): number {
+  if (days === null || days === undefined) return Number.MAX_SAFE_INTEGER;
+  return days;
+}
+
+function isExpiredSellOrder(signal: SellSignalRow): boolean {
+  return typeof signal.days_to_deadline === "number" && signal.days_to_deadline < 0;
+}
+
+function sellOrderDeadlineText(signal: SellSignalRow): string {
+  if (isExpiredSellOrder(signal)) return "보유기간 초과: 시장가 전량 매도 필요";
+  return deadlineText(signal.days_to_deadline);
+}
+
+function sellOrderPriceText(signal: SellSignalRow, symbol: string | null | undefined): string {
+  if (isExpiredSellOrder(signal)) return "시장가";
+  return `LOC ${formatMoney(signal.sell_limit_price, symbol)}`;
 }
 
 function normalizeShareInput(value: string): string {

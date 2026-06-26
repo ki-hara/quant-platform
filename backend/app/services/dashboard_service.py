@@ -10,6 +10,7 @@ from app.domain.models import LivePortfolio, MarketPrice, Position, StrategyConf
 from app.infrastructure.repositories.market_data import MarketPriceRepository
 from app.infrastructure.repositories.portfolios import PortfolioRepository, PositionRepository
 from app.infrastructure.repositories.strategies import StrategyConfigRepository
+from app.services.market_session_service import current_market_date
 from app.strategy_engine.context import StrategyContext, StrategyPosition
 from app.strategy_engine.registry import registry
 
@@ -106,6 +107,7 @@ class DashboardService:
         strategy = registry.create(config.strategy_type)
         buy_signal = strategy.should_buy(context)
         sell_signals = []
+        holding_basis_date = current_market_date(config.symbol)
         for position in open_positions:
             if position.status != PositionStatus.OPEN:
                 continue
@@ -117,7 +119,7 @@ class DashboardService:
             )
             signal = strategy.should_sell(context, strategy_position)
             mode_settings = config.settings_json[position.mode.value]
-            holding_days = (current_price.date - position.buy_date).days
+            holding_days = max((holding_basis_date - position.buy_date).days, 0)
             max_holding_days = int(mode_settings["max_holding_days"])
             days_to_deadline = max_holding_days - holding_days
             sell_limit_price = (
