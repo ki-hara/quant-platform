@@ -2,11 +2,12 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.errors import NotFoundError, ValidationAppError
 from app.domain.enums import PositionStatus, StrategyMode, TradeSide, TradeSource
-from app.domain.models import LivePortfolio, Position, StrategyConfig, Trade
+from app.domain.models import LivePortfolio, PortfolioAdjustment, Position, StrategyConfig, Trade
 from app.infrastructure.repositories.portfolios import PortfolioRepository, PositionRepository
 from app.infrastructure.repositories.strategies import StrategyConfigRepository
 from app.infrastructure.repositories.trades import TradeRepository
@@ -171,6 +172,7 @@ class ManualTradeService:
         portfolio.cash = config.initial_capital
         portfolio.realized_pnl = Decimal("0")
         portfolio.cumulative_fees = Decimal("0")
+        self._replay_portfolio_adjustments(config.id, portfolio)
         open_positions: list[Position] = []
         for trade in self.trades.list_by_strategy_config(config.id):
             if trade.side == TradeSide.BUY:
@@ -194,6 +196,16 @@ class ManualTradeService:
                 portfolio.cumulative_fees += trade.fee
                 self.session.add(trade)
         self.portfolios.save(portfolio)
+
+    def _replay_portfolio_adjustments(self, config_id: int, portfolio: LivePortfolio) -> None:
+        stmt = (
+            select(PortfolioAdjustment)
+            .where(PortfolioAdjustment.strategy_config_id == config_id)
+            .order_by(PortfolioAdjustment.date, PortfolioAdjustment.id)
+        )
+        for adjustment in self.session.scalars(stmt):
+            portfolio.cash = (portfolio.cash + adjustment.cash_delta).quantize(MONEY_QUANT)
+            portfolio.capital = (portfolio.capital + adjustment.capital_delta).quantize(MONEY_QUANT)
 
     def _replay_sell(self, trade: Trade, open_positions: list[Position]) -> Decimal:
         remaining_quantity = trade.quantity

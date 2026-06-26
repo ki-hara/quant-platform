@@ -368,6 +368,39 @@ def test_delete_manual_sell_trade_rebuilds_portfolio_and_positions() -> None:
         assert [trade.side for trade in trades] == [TradeSide.BUY]
 
 
+def test_delete_trade_rebuild_preserves_portfolio_adjustments() -> None:
+    with create_session() as session:
+        config = create_config(session)
+        PortfolioAdjustmentService(session).create_adjustment(
+            config.id,
+            PortfolioAdjustmentRequest(
+                adjustment_date=date(2026, 1, 1),
+                cash_delta=Decimal("500"),
+                capital_delta=Decimal("300"),
+                memo="deposit",
+            ),
+        )
+        service = ManualTradeService(session)
+        buy = service.record_manual_trade(
+            ManualTradeRequest(
+                config_id=config.id,
+                side=TradeSide.BUY,
+                trade_date=date(2026, 1, 2),
+                quantity=Decimal("2"),
+                price=Decimal("100"),
+                fee=Decimal("1"),
+            ),
+        ).trade
+
+        service.delete_trade(buy.id)
+
+        portfolio = PortfolioRepository(session).get_by_config(config.id)
+        assert portfolio is not None
+        assert portfolio.cash == Decimal("1500.000000")
+        assert portfolio.capital == Decimal("1300.000000")
+        assert portfolio.cumulative_fees == Decimal("0.000000")
+
+
 def test_strategy_config_update_rejects_initial_capital_change() -> None:
     with create_session() as session:
         config = create_config(session)
