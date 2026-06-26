@@ -45,6 +45,7 @@ interface SellSignalRow {
   should_sell?: boolean;
   reason?: string | null;
   return_percent?: string | number | null;
+  sell_limit_price?: string | number | null;
   holding_days?: number | null;
   max_holding_days?: number | null;
   days_to_deadline?: number | null;
@@ -160,8 +161,8 @@ export function TradesPage() {
     }));
   }
 
-  function fillSellRecommendation(position: PositionRow, reason: string | null | undefined) {
-    const price = dashboard?.latest_price?.close ?? position.buy_price;
+  function fillSellRecommendation(position: PositionRow, signal: SellSignalRow | undefined) {
+    const price = String(signal?.sell_limit_price ?? position.buy_price);
     const fee = estimateFee(price, position.quantity, dashboard?.config.fee_rate);
     setManualForm((current) => ({
       ...current,
@@ -172,7 +173,7 @@ export function TradesPage() {
       price,
       fee,
       position_id: String(position.id),
-      sell_reason: reason ?? "manual_signal",
+      sell_reason: signal?.reason ?? "manual_signal",
     }));
   }
 
@@ -352,16 +353,16 @@ export function TradesPage() {
                   <strong>#{signal.position?.id} {translateReason(signal.reason)}</strong>
                   <div className="compact-facts">
                     <span>{signal.position?.buy_date} 매수</span>
-                    <span>{signal.holding_days ?? "-"}일 보유</span>
+                    <span>{holdingDaysText(signal.holding_days)}</span>
                     <span>최대 {signal.max_holding_days ?? "-"}일</span>
                     <span>{deadlineText(signal.days_to_deadline)}</span>
                     <span>수익률 {returnPercentText(signal.return_percent)}</span>
+                    <span>LOC 매도가 {formatMoney(signal.sell_limit_price, dashboard?.config.symbol)}</span>
                   </div>
-                  <p>현재가 {formatMoney(dashboard?.latest_price?.close)}</p>
                 </div>
                 <button
                   type="button"
-                  onClick={() => signal.position && fillSellRecommendation(signal.position, signal.reason)}
+                  onClick={() => signal.position && fillSellRecommendation(signal.position, signal)}
                 >
                   <Wand2 aria-hidden="true" size={16} /> 추천값 입력
                 </button>
@@ -623,11 +624,21 @@ function toSellSignalRow(row: Record<string, unknown>): SellSignalRow {
       typeof row.return_percent === "string" || typeof row.return_percent === "number"
         ? row.return_percent
         : null,
+    sell_limit_price:
+      typeof row.sell_limit_price === "string" || typeof row.sell_limit_price === "number"
+        ? row.sell_limit_price
+        : null,
     holding_days: typeof row.holding_days === "number" ? row.holding_days : null,
     max_holding_days: typeof row.max_holding_days === "number" ? row.max_holding_days : null,
     days_to_deadline: typeof row.days_to_deadline === "number" ? row.days_to_deadline : null,
     urgency: typeof row.urgency === "string" ? row.urgency : null,
   };
+}
+
+function holdingDaysText(days: number | null | undefined): string {
+  if (days === null || days === undefined) return "보유기간 -";
+  if (days === 0) return "당일 체결";
+  return `${days}일 보유`;
 }
 
 function deadlineText(days: number | null | undefined): string {
@@ -653,7 +664,11 @@ function sellCardClass(signal: SellSignalRow): string {
 
 function holdingStatusText(signal: SellSignalRow | undefined): string {
   if (!signal) return "-";
-  const prefix = signal.holding_days === null || signal.holding_days === undefined ? "-" : `${signal.holding_days}일`;
+  const prefix = signal.holding_days === null || signal.holding_days === undefined
+    ? "-"
+    : signal.holding_days === 0
+      ? "당일 체결"
+      : `${signal.holding_days}일`;
   const max = signal.max_holding_days === null || signal.max_holding_days === undefined ? "-" : `${signal.max_holding_days}일`;
   return `${prefix} / ${max} / ${deadlineText(signal.days_to_deadline)}`;
 }

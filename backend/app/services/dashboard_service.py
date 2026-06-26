@@ -120,12 +120,17 @@ class DashboardService:
             holding_days = (current_price.date - position.buy_date).days
             max_holding_days = int(mode_settings["max_holding_days"])
             days_to_deadline = max_holding_days - holding_days
+            sell_limit_price = (
+                position.buy_price
+                * (Decimal("1") + Decimal(str(mode_settings["sell_threshold_percent"])) / Decimal("100"))
+            ).quantize(Decimal("0.000001"))
             sell_signals.append(
                 {
                     "position_id": position.id,
                     "should_sell": signal.should_sell,
                     "reason": signal.reason,
                     "return_percent": signal.return_percent,
+                    "sell_limit_price": sell_limit_price,
                     "holding_days": holding_days,
                     "max_holding_days": max_holding_days,
                     "days_to_deadline": days_to_deadline,
