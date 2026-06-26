@@ -131,10 +131,14 @@ a:focus-visible {
 
 .page-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 18px;
+}
+
+.page-header > div:first-child {
+  min-width: 0;
 }
 
 .app-loading {
@@ -175,22 +179,38 @@ a:focus-visible {
 
 .user-chip {
   display: flex;
-  flex-wrap: wrap;
   gap: 8px;
   align-items: center;
   justify-content: flex-end;
-  min-height: 34px;
+  flex: 0 0 auto;
+  min-height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fbfbf8;
+  padding: 4px 6px 4px 10px;
+  justify-self: end;
+  width: max-content;
+  max-width: 100%;
+}
+
+.user-chip > div {
+  display: grid;
+  gap: 1px;
+  min-width: 52px;
 }
 
 .user-chip-label {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
+  line-height: 1.1;
 }
 
 .user-chip strong {
   color: #333730;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 .user-chip button {

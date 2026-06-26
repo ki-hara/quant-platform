@@ -20,10 +20,10 @@ interface TabItem {
 
 const tabs: TabItem[] = [
   { key: "dashboard", label: "대시보드", icon: Activity },
+  { key: "trades", label: "거래/포지션", icon: BriefcaseBusiness },
+  { key: "settings", label: "전략 설정", icon: Settings2 },
   { key: "backtest", label: "백테스트", icon: BarChart3 },
   { key: "capital", label: "자본 조정", icon: WalletCards },
-  { key: "settings", label: "전략 설정", icon: Settings2 },
-  { key: "trades", label: "거래/포지션", icon: BriefcaseBusiness },
 ];
 
 function App() {
@@ -88,8 +88,10 @@ function App() {
             <h1>{activeLabel}</h1>
           </div>
           <div className="user-chip">
-            <span className="user-chip-label">사용자</span>
-            <strong>{owner.name}</strong>
+            <div>
+              <span className="user-chip-label">사용자</span>
+              <strong>{owner.name}</strong>
+            </div>
             {activeTab === "dashboard" ? (
               <button
                 type="button"
