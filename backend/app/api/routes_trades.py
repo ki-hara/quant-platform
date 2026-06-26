@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -7,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import NotFoundError, ValidationAppError
 from app.db.session import get_session
-from app.domain.enums import TradeSide
+from app.domain.enums import PositionStatus, StrategyMode, TradeSide, TradeSource
 from app.dto.dashboard import PositionDto
 from app.dto.trades import (
     ManualTradeRequestDto,
@@ -40,6 +41,13 @@ class PositionUpdateDto(BaseModel):
     status: str | None = None
 
 
+class BuyOrderPositionCreateDto(BaseModel):
+    order_date: date
+    quantity: Decimal
+    limit_price: Decimal
+    mode: StrategyMode
+
+
 @router.get("/strategy-configs/{config_id}/positions", response_model=list[PositionDto])
 def list_positions(config_id: int, session: SessionDep) -> list[object]:
     _ensure_config_exists(config_id, session)
@@ -49,6 +57,30 @@ def list_positions(config_id: int, session: SessionDep) -> list[object]:
 @router.get("/positions/{config_id}", response_model=list[PositionDto])
 def list_positions_by_config(config_id: int, session: SessionDep) -> list[object]:
     return list_positions(config_id, session)
+
+
+@router.post(
+    "/strategy-configs/{config_id}/positions/buy-order",
+    response_model=PositionDto,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_buy_order_position(
+    config_id: int,
+    request: BuyOrderPositionCreateDto,
+    session: SessionDep,
+) -> object:
+    _ensure_config_exists(config_id, session)
+    if request.quantity <= 0 or request.limit_price <= 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Quantity and LOC price must be positive.")
+    position = PositionRepository(session).create_pending(
+        strategy_config_id=config_id,
+        buy_date=request.order_date,
+        limit_price=request.limit_price,
+        quantity=request.quantity,
+        mode=request.mode,
+    )
+    session.commit()
+    return position
 
 
 @router.put("/positions/{position_id}", response_model=PositionDto)
@@ -68,16 +100,49 @@ def update_position(position_id: int, request: PositionUpdateDto, session: Sessi
             session.delete(position)
         session.commit()
         return position
+    if request.status == "pending":
+        session.commit()
+        return position
     if request.quantity is not None:
         position.quantity = request.quantity
     if request.buy_price is not None:
         position.buy_price = request.buy_price
-    if matching_trade is not None:
+    if request.status == "open":
+        position.status = PositionStatus.OPEN
+    if position.status == PositionStatus.PENDING:
+        saved = repo.save(position)
+        session.commit()
+        return saved
+    fee = _estimate_fee(config, position.buy_price, position.quantity)
+    position.buy_fee = fee
+    created_trade = False
+    if matching_trade is None:
+        if config is None or config.live_portfolio is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Live portfolio not found.")
+        trade_repo = TradeRepository(session)
+        trade_repo.create(
+            strategy_config_id=position.strategy_config_id,
+            trade_date=position.buy_date,
+            side=TradeSide.BUY,
+            quantity=position.quantity,
+            limit_price=position.limit_price,
+            price=position.buy_price,
+            fee=fee,
+            realized_pnl=Decimal("0"),
+            sell_reason=None,
+            source=TradeSource.MANUAL,
+        )
+        config.live_portfolio.cash -= (position.buy_price * position.quantity) + fee
+        config.live_portfolio.cumulative_fees += fee
+        session.add(config.live_portfolio)
+        created_trade = True
+    else:
         matching_trade.quantity = position.quantity
         matching_trade.price = position.buy_price
+        matching_trade.fee = fee
         session.add(matching_trade)
     saved = repo.save(position)
-    if config is not None and config.live_portfolio is not None:
+    if not created_trade and config is not None and config.live_portfolio is not None:
         ManualTradeService(session)._rebuild_live_ledger(config, config.live_portfolio)
     session.commit()
     return saved
@@ -94,6 +159,11 @@ def _matching_buy_trade(position, session: Session):
         ):
             return trade
     return None
+
+
+def _estimate_fee(config, price: Decimal, quantity: Decimal) -> Decimal:
+    fee_rate = config.fee_rate if config is not None else Decimal("0")
+    return (price * quantity * fee_rate / Decimal("100")).quantize(Decimal("0.000001"))
 
 
 @router.get("/strategy-configs/{config_id}/trades", response_model=list[TradeResponseDto])

@@ -3,6 +3,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { getDashboard } from "../api/dashboard";
 import { listStrategyConfigs } from "../api/strategies";
 import {
+  createBuyOrderPosition,
   deleteTrade,
   listPositions,
   listTrades,
@@ -111,7 +112,7 @@ export function TradesPage() {
             {
               quantity: String(Math.trunc(Number(position.quantity))),
               buy_price: Number(position.buy_price).toFixed(2),
-              status: "open",
+              status: position.status.toLowerCase() === "pending" ? "pending" : "open",
             },
           ]),
         ),
@@ -169,18 +170,30 @@ export function TradesPage() {
       setSaving(true);
       setError("");
       setMessage("");
+      if (manualForm.side === "buy") {
+        await createBuyOrderPosition(selectedId, {
+          order_date: manualForm.trade_date,
+          quantity: manualForm.quantity,
+          limit_price: manualForm.limit_price,
+          mode: manualForm.mode,
+        });
+        setMessage("매수 주문이 보유 포지션에 대기 상태로 등록되었습니다.");
+        setManualForm({ ...initialManualForm, trade_date: todayIso() });
+        await loadRows(selectedId);
+        return;
+      }
       await recordManualTrade({
         config_id: selectedId,
         trade_date: manualForm.trade_date,
         side: manualForm.side,
         quantity: manualForm.quantity,
-        limit_price: manualForm.side === "buy" && manualForm.limit_price ? manualForm.limit_price : null,
+        limit_price: null,
         price: manualForm.price,
         fee: estimateFee(manualForm.price, manualForm.quantity, dashboard?.config.fee_rate),
-        sell_reason: manualForm.side === "sell" ? manualForm.sell_reason.trim() || null : null,
+        sell_reason: manualForm.sell_reason.trim() || null,
         source: "manual",
-        mode: manualForm.side === "buy" ? manualForm.mode : undefined,
-        position_id: manualForm.side === "sell" ? Number(manualForm.position_id) : null,
+        mode: undefined,
+        position_id: Number(manualForm.position_id),
       });
       setMessage("거래가 저장되었습니다.");
       setManualForm({ ...initialManualForm, trade_date: todayIso() });
@@ -212,12 +225,23 @@ export function TradesPage() {
     if (!selectedId) return;
     const edit = positionEdits[positionId];
     if (!edit) return;
+    const position = positions.find((row) => row.id === positionId);
+    const nextEdit =
+      position?.status.toLowerCase() === "pending" && edit.status === "pending"
+        ? { ...edit, status: "open" }
+        : edit;
     try {
       setSaving(true);
       setError("");
       setMessage("");
-      await updatePosition(positionId, edit);
-      setMessage(edit.status === "unfilled" ? "포지션을 미체결로 제거했습니다." : "포지션을 보정했습니다.");
+      await updatePosition(positionId, nextEdit);
+      setMessage(
+        nextEdit.status === "unfilled"
+          ? "포지션을 미체결로 제거했습니다."
+          : position?.status.toLowerCase() === "pending"
+            ? "포지션을 체결 등록했습니다."
+            : "포지션을 보정했습니다.",
+      );
       await loadRows(selectedId);
     } catch (caught) {
       setError(errorMessage(caught));
@@ -348,15 +372,15 @@ export function TradesPage() {
               const edit = positionEdits[position.id] ?? {
                 quantity: position.quantity,
                 buy_price: position.buy_price,
-                status: "open",
+                status: position.status.toLowerCase() === "pending" ? "pending" : "open",
               };
               return (
                 <div className="position-edit-row" key={position.id}>
                   <span>#{position.id} / {position.buy_date}</span>
-                  <label>
-                    LOC가
-                    <input value={formatOptionalMoney(position.limit_price)} readOnly />
-                  </label>
+                  <div className="readonly-field">
+                    <span>LOC가</span>
+                    <strong>{formatOptionalMoney(position.limit_price)}</strong>
+                  </div>
                   <label>
                     수량
                     <input
@@ -399,12 +423,13 @@ export function TradesPage() {
                         }))
                       }
                     >
+                      <option value="pending">대기</option>
                       <option value="open">체결</option>
                       <option value="unfilled">미체결</option>
                     </select>
                   </label>
                   <button type="button" onClick={() => handleSavePosition(position.id)} disabled={saving}>
-                    {Number(position.buy_price) === Number(position.limit_price ?? position.buy_price) ? "등록" : "수정"}
+                    {position.status.toLowerCase() === "pending" ? "등록" : "수정"}
                   </button>
                 </div>
               );
@@ -415,7 +440,26 @@ export function TradesPage() {
         <section className="panel">
           <div className="panel-header">
             <div>
-              <h2>{manualForm.side === "buy" ? "매수 주문" : "매도 주문"}</h2>
+              <div className="order-tabs order-tabs-heading" role="tablist" aria-label="주문 구분">
+                {(["buy", "sell"] as const).map((side) => (
+                  <button
+                    key={side}
+                    type="button"
+                    className={manualForm.side === side ? "is-active" : undefined}
+                    onClick={() =>
+                      setManualForm((current) => ({
+                        ...current,
+                        side,
+                        position_id: "",
+                        sell_reason: "",
+                        limit_price: side === "buy" ? current.limit_price : "",
+                      }))
+                    }
+                  >
+                    {side === "buy" ? "매수 주문" : "매도 주문"}
+                  </button>
+                ))}
+              </div>
               <span>매수는 주문 수량을 입력하고, 체결가는 보유 포지션에서 보정합니다.</span>
             </div>
           </div>
@@ -429,26 +473,6 @@ export function TradesPage() {
                 required
               />
             </label>
-            <div className="order-tabs" role="tablist" aria-label="주문 구분">
-              {(["buy", "sell"] as const).map((side) => (
-                <button
-                  key={side}
-                  type="button"
-                  className={manualForm.side === side ? "is-active" : undefined}
-                  onClick={() =>
-                    setManualForm((current) => ({
-                      ...current,
-                      side,
-                      position_id: "",
-                      sell_reason: "",
-                      limit_price: side === "buy" ? current.limit_price : "",
-                    }))
-                  }
-                >
-                  {side === "buy" ? "매수 주문" : "매도 주문"}
-                </button>
-              ))}
-            </div>
             {manualForm.side === "sell" ? (
               <div className="position-pick-list">
                 {openPositions.map((position) => (
@@ -489,6 +513,7 @@ export function TradesPage() {
                   onChange={(event) => setManualForm((current) => ({ ...current, limit_price: event.target.value }))}
                   placeholder="추천 LOC가"
                   inputMode="decimal"
+                  required
                 />
               </label>
             ) : null}
@@ -517,14 +542,6 @@ export function TradesPage() {
                 />
               </label>
             ) : null}
-            <label>
-              실제 수수료
-              <input
-                type="hidden"
-                value={estimateFee(manualForm.price, manualForm.quantity, dashboard?.config.fee_rate)}
-                readOnly
-              />
-            </label>
             {manualForm.side === "sell" ? (
               <label>
                 매도 사유
@@ -536,7 +553,7 @@ export function TradesPage() {
               </label>
             ) : null}
             <button type="submit" disabled={!selectedId || saving}>
-              <Save aria-hidden="true" size={16} /> {saving ? "저장 중" : "거래 저장"}
+              <Save aria-hidden="true" size={16} /> {saving ? "저장 중" : manualForm.side === "buy" ? "주문 저장" : "거래 저장"}
             </button>
             <p className="form-status">매수 체결 수량과 매수가는 보유 포지션에서 보정합니다.</p>
           </form>

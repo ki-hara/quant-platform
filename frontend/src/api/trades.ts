@@ -21,6 +21,13 @@ export function updatePosition(
   return apiPut<PositionRow>(`/api/positions/${positionId}`, request);
 }
 
+export function createBuyOrderPosition(
+  configId: number,
+  request: { order_date: string; quantity: string; limit_price: string; mode: string },
+): Promise<PositionRow> {
+  return apiPost<PositionRow>(`/api/strategy-configs/${configId}/positions/buy-order`, request);
+}
+
 export function listTrades(configId: number): Promise<TradeRow[]> {
   return apiGet<TradeRow[]>(`/api/strategy-configs/${configId}/trades`);
 }

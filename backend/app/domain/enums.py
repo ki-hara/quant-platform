@@ -18,6 +18,7 @@ class BacktestModePolicy(StrEnum):
 
 
 class PositionStatus(StrEnum):
+    PENDING = "pending"
     OPEN = "open"
     CLOSED = "closed"
 

@@ -43,7 +43,7 @@ class PositionRepository:
         stmt = (
             select(Position)
             .where(Position.strategy_config_id == strategy_config_id)
-            .where(Position.status == PositionStatus.OPEN)
+            .where(Position.status.in_([PositionStatus.PENDING, PositionStatus.OPEN]))
             .order_by(Position.buy_date, Position.id)
         )
         return list(self.session.scalars(stmt))
@@ -75,6 +75,29 @@ class PositionRepository:
             quantity=quantity,
             mode=mode,
             status=PositionStatus.OPEN,
+        )
+        self.session.add(position)
+        self.session.flush()
+        self.session.refresh(position)
+        return position
+
+    def create_pending(
+        self,
+        strategy_config_id: int,
+        buy_date: date,
+        limit_price: Decimal,
+        quantity: Decimal,
+        mode: StrategyMode,
+    ) -> Position:
+        position = Position(
+            strategy_config_id=strategy_config_id,
+            buy_date=buy_date,
+            limit_price=limit_price,
+            buy_price=limit_price,
+            buy_fee=Decimal("0"),
+            quantity=quantity,
+            mode=mode,
+            status=PositionStatus.PENDING,
         )
         self.session.add(position)
         self.session.flush()
