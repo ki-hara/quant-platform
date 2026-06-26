@@ -521,6 +521,61 @@ h2 {
   background: #f1faf5;
 }
 
+.recommendation-list-card {
+  grid-column: 1 / -1;
+}
+
+.sell-order-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.sell-order-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(54px, auto) minmax(104px, auto);
+  gap: 10px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fbfcfa;
+  padding: 9px 10px;
+}
+
+.sell-order-row > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.sell-order-row strong,
+.sell-order-row span,
+.sell-order-row small {
+  white-space: nowrap;
+}
+
+.sell-order-row small {
+  color: var(--muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sell-order-row.recommendation-warning {
+  border-color: rgba(164, 100, 36, 0.45);
+  background: #fff8ef;
+}
+
+.sell-order-row.recommendation-danger {
+  border-color: rgba(176, 74, 74, 0.5);
+  background: #fff4f3;
+}
+
+.sell-order-row.recommendation-success {
+  border-color: rgba(36, 104, 75, 0.45);
+  background: #f1faf5;
+}
+
 .metric-strip {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -997,5 +1052,16 @@ button:disabled,
 
   .position-edit-row {
     grid-template-columns: 1fr;
+  }
+
+  .sell-order-row {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .sell-order-row strong,
+  .sell-order-row span,
+  .sell-order-row small {
+    white-space: normal;
   }
 }

@@ -151,7 +151,7 @@ export function TradesPage() {
       ...current,
       trade_date: plan.plan_date,
       side: "buy",
-      quantity: String(plan.LOC.quantity),
+      quantity: wholeShare(plan.LOC.quantity),
       limit_price: plan.LOC.limit_price,
       price: plan.LOC.limit_price,
       fee: "0",
@@ -163,12 +163,13 @@ export function TradesPage() {
 
   function fillSellRecommendation(position: PositionRow, signal: SellSignalRow | undefined) {
     const price = String(signal?.sell_limit_price ?? position.buy_price);
-    const fee = estimateFee(price, position.quantity, dashboard?.config.fee_rate);
+    const quantity = wholeShare(position.quantity);
+    const fee = estimateFee(price, quantity, dashboard?.config.fee_rate);
     setManualForm((current) => ({
       ...current,
       trade_date: todayIso(),
       side: "sell",
-      quantity: position.quantity,
+      quantity,
       limit_price: "",
       price,
       fee,
@@ -346,34 +347,33 @@ export function TradesPage() {
           </div>
 
           {sellRecommendations.length > 0 ? (
-            sellRecommendations.map((signal) => (
-              <div className={`recommendation-card ${sellCardClass(signal)}`} key={signal.position?.id}>
-                <div>
-                  <span className="signal-label">매도 후보</span>
-                  <strong>#{signal.position?.id} {translateReason(signal.reason)}</strong>
-                  <div className="compact-facts">
-                    <span>{signal.position?.buy_date} 매수</span>
-                    <span>{holdingDaysText(signal.holding_days)}</span>
-                    <span>최대 {signal.max_holding_days ?? "-"}일</span>
-                    <span>{deadlineText(signal.days_to_deadline)}</span>
-                    <span>수익률 {returnPercentText(signal.return_percent)}</span>
-                    <span>LOC 매도가 {formatMoney(signal.sell_limit_price, dashboard?.config.symbol)}</span>
-                  </div>
+            <div className="recommendation-card recommendation-list-card">
+              <div>
+                <span className="signal-label">오늘의 LOC 매도</span>
+                <strong>{sellRecommendations.length}건 주문 필요</strong>
+                <div className="sell-order-list">
+                  {sellRecommendations.map((signal) => (
+                    <div className={`sell-order-row ${sellCardClass(signal)}`} key={signal.position?.id}>
+                      <div>
+                        <strong>#{signal.position?.id} {translateReason(signal.reason)}</strong>
+                        <small>
+                          {holdingDaysText(signal.holding_days)} / {deadlineText(signal.days_to_deadline)} / 수익률{" "}
+                          {returnPercentText(signal.return_percent)}
+                        </small>
+                      </div>
+                      <span>{wholeShare(signal.position?.quantity)}주</span>
+                      <strong>{formatMoney(signal.sell_limit_price, dashboard?.config.symbol)}</strong>
+                    </div>
+                  ))}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => signal.position && fillSellRecommendation(signal.position, signal)}
-                >
-                  <Wand2 aria-hidden="true" size={16} /> 추천값 입력
-                </button>
               </div>
-            ))
+            </div>
           ) : (
             <div className="recommendation-card">
               <div>
-                <span className="signal-label">매도 후보</span>
-                <strong>추천 없음</strong>
-                <p>현재 조건에서 자동으로 제안할 매도 포지션이 없습니다.</p>
+                <span className="signal-label">오늘의 LOC 매도</span>
+                <strong>주문 없음</strong>
+                <p>오늘 LOC 매도 주문이 필요한 포지션이 없습니다.</p>
               </div>
             </div>
           )}
@@ -415,7 +415,7 @@ export function TradesPage() {
                       onChange={(event) =>
                         setPositionEdits((current) => ({
                           ...current,
-                          [position.id]: { ...edit, quantity: event.target.value },
+                          [position.id]: { ...edit, quantity: normalizeShareInput(event.target.value) },
                         }))
                       }
                     />
@@ -507,15 +507,19 @@ export function TradesPage() {
                     key={position.id}
                     type="button"
                     className={manualForm.position_id === String(position.id) ? "is-active" : undefined}
-                    onClick={() =>
+                    onClick={() => {
+                      const signal = sellSignalByPosition.get(position.id);
+                      const price = String(signal?.sell_limit_price ?? position.buy_price);
                       setManualForm((current) => ({
                         ...current,
                         position_id: String(position.id),
-                        quantity: position.quantity,
-                      }))
-                    }
+                        quantity: wholeShare(position.quantity),
+                        price,
+                        sell_reason: signal?.reason ?? current.sell_reason,
+                      }));
+                    }}
                   >
-                    #{position.id} / {position.buy_date} / {formatMoney(position.quantity)}주 / 매수가{" "}
+                    #{position.id} / {position.buy_date} / {wholeShare(position.quantity)}주 / 매수가{" "}
                     {formatMoney(position.buy_price)}
                   </button>
                 ))}
@@ -551,7 +555,9 @@ export function TradesPage() {
                 step="1"
                 min="1"
                 value={manualForm.quantity}
-                onChange={(event) => setManualForm((current) => ({ ...current, quantity: event.target.value }))}
+                onChange={(event) =>
+                  setManualForm((current) => ({ ...current, quantity: normalizeShareInput(event.target.value) }))
+                }
                 placeholder="0"
                 inputMode="numeric"
                 required
@@ -679,6 +685,17 @@ function holdingStatusClass(signal: SellSignalRow | undefined): string {
   if (signal.urgency === "near_deadline") return "is-warning";
   if (signal.urgency === "profit_target") return "is-success";
   return "";
+}
+
+function wholeShare(value: string | number | null | undefined): string {
+  const number = Math.trunc(Number(value ?? 0));
+  return Number.isFinite(number) && number > 0 ? String(number) : "";
+}
+
+function normalizeShareInput(value: string): string {
+  if (!value) return "";
+  const number = Math.trunc(Number(value));
+  return Number.isFinite(number) && number >= 0 ? String(number) : "";
 }
 
 function estimateFee(price: string, quantity: string, feeRate: string | undefined): string {
