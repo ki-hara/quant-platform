@@ -45,7 +45,7 @@ export function DashboardPage() {
   const [mode, setMode] = useState<ModeRecommendation | null>(null);
   const [chart, setChart] = useState<TradingChart | null>(null);
   const [recentTrades, setRecentTrades] = useState<TradeRow[]>([]);
-  const [range, setRange] = useState<ChartRange>("6m");
+  const [range, setRange] = useState<ChartRange>("1m");
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
   const [message, setMessage] = useState("");

@@ -87,12 +87,12 @@ function App() {
             <p className="eyebrow">실전 매매 지원</p>
             <h1>{activeLabel}</h1>
           </div>
-          <div className="user-chip">
-            <div>
-              <span className="user-chip-label">사용자</span>
-              <strong>{owner.name}</strong>
-            </div>
-            {activeTab === "dashboard" ? (
+          {activeTab === "dashboard" ? (
+            <div className="user-chip">
+              <div>
+                <span className="user-chip-label">사용자</span>
+                <strong>{owner.name}</strong>
+              </div>
               <button
                 type="button"
                 onClick={() => {
@@ -103,8 +103,8 @@ function App() {
                 <LogOut aria-hidden="true" size={16} />
                 로그아웃
               </button>
-            ) : null}
-          </div>
+            </div>
+          ) : null}
         </header>
 
         {activeTab === "dashboard" && <DashboardPage />}
