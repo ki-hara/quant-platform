@@ -1,4 +1,4 @@
-import { Download, LogOut, RefreshCw } from "lucide-react";
+import { Download, RefreshCw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { getSqliteBackupUrl } from "../api/admin";
 import { getDashboard } from "../api/dashboard";
@@ -37,11 +37,7 @@ import {
   translateStatus,
 } from "../utils/format";
 
-interface DashboardPageProps {
-  onLogout: () => void;
-}
-
-export function DashboardPage({ onLogout }: DashboardPageProps) {
+export function DashboardPage() {
   const [configs, setConfigs] = useState<StrategyConfig[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
@@ -194,10 +190,6 @@ export function DashboardPage({ onLogout }: DashboardPageProps) {
           <Download aria-hidden="true" size={16} />
           DB 백업
         </a>
-        <button type="button" onClick={onLogout}>
-          <LogOut aria-hidden="true" size={16} />
-          로그아웃
-        </button>
       </section>
 
       {loading ? <div className="notice">불러오는 중입니다.</div> : null}

@@ -179,11 +179,17 @@ a:focus-visible {
   gap: 8px;
   align-items: center;
   justify-content: flex-end;
+  min-height: 34px;
 }
 
-.user-chip span {
+.user-chip-label {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
+}
+
+.user-chip strong {
+  color: #333730;
+  font-size: 14px;
   font-weight: 700;
 }
 

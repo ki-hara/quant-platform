@@ -1,4 +1,4 @@
-import { Activity, BarChart3, BriefcaseBusiness, Settings2, WalletCards } from "lucide-react";
+import { Activity, BarChart3, BriefcaseBusiness, LogOut, Settings2, WalletCards } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { getMe } from "./api/auth";
 import { setAuthToken } from "./api/client";
@@ -88,18 +88,24 @@ function App() {
             <h1>{activeLabel}</h1>
           </div>
           <div className="user-chip">
-            <span>{owner.name}</span>
+            <span className="user-chip-label">사용자</span>
+            <strong>{owner.name}</strong>
+            {activeTab === "dashboard" ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthToken(null);
+                  setOwner(null);
+                }}
+              >
+                <LogOut aria-hidden="true" size={16} />
+                로그아웃
+              </button>
+            ) : null}
           </div>
         </header>
 
-        {activeTab === "dashboard" && (
-          <DashboardPage
-            onLogout={() => {
-              setAuthToken(null);
-              setOwner(null);
-            }}
-          />
-        )}
+        {activeTab === "dashboard" && <DashboardPage />}
         {activeTab === "backtest" && <BacktestPage />}
         {activeTab === "capital" && <CapitalAdjustmentPage />}
         {activeTab === "settings" && <SettingsPage />}
