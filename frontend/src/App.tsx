@@ -1,9 +1,13 @@
 import { Activity, BarChart3, BriefcaseBusiness, Settings2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { getMe } from "./api/auth";
+import { setAuthToken } from "./api/client";
 import { BacktestPage } from "./pages/BacktestPage";
 import { DashboardPage } from "./pages/DashboardPage";
+import { LoginPage } from "./pages/LoginPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { TradesPage } from "./pages/TradesPage";
+import type { AuthOwner } from "./types/api";
 
 type TabKey = "dashboard" | "backtest" | "settings" | "trades";
 
@@ -22,10 +26,27 @@ const tabs: TabItem[] = [
 
 function App() {
   const [activeTab, setActiveTab] = useState<TabKey>("dashboard");
+  const [owner, setOwner] = useState<AuthOwner | null>(null);
+  const [checkingAuth, setCheckingAuth] = useState(true);
   const activeLabel = useMemo(
     () => tabs.find((tab) => tab.key === activeTab)?.label ?? "대시보드",
     [activeTab],
   );
+
+  useEffect(() => {
+    getMe()
+      .then(setOwner)
+      .catch(() => setAuthToken(null))
+      .finally(() => setCheckingAuth(false));
+  }, []);
+
+  if (checkingAuth) {
+    return <div className="notice app-loading">로그인 상태를 확인하는 중입니다.</div>;
+  }
+
+  if (!owner) {
+    return <LoginPage onLogin={setOwner} />;
+  }
 
   return (
     <div className="app-shell">
@@ -64,8 +85,17 @@ function App() {
             <p className="eyebrow">실전 매매 지원</p>
             <h1>{activeLabel}</h1>
           </div>
-          <div className="status-pill" aria-label="API 연결 상태">
-            API 연결
+          <div className="user-chip">
+            <span>{owner.name}</span>
+            <button
+              type="button"
+              onClick={() => {
+                setAuthToken(null);
+                setOwner(null);
+              }}
+            >
+              로그아웃
+            </button>
           </div>
         </header>
 

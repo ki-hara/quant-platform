@@ -4,6 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.api.deps import CurrentOwnerDep, ensure_config_owner
 from app.db.session import get_session
 from app.dto.trading_plan import (
     ChartResponseDto,
@@ -30,8 +31,10 @@ MarketProviderDep = Annotated[MarketDataProvider, Depends(get_market_data_provid
 def get_mode_recommendation(
     config_id: int,
     session: SessionDep,
+    owner: CurrentOwnerDep,
     as_of: date | None = None,
 ) -> object:
+    ensure_config_owner(config_id, owner, session)
     try:
         return ModeService(session).get_mode_recommendation(config_id, as_of or date.today())
     except ValueError as exc:
@@ -43,7 +46,9 @@ def update_confirmed_mode(
     config_id: int,
     request: ConfirmedModeUpdateDto,
     session: SessionDep,
+    owner: CurrentOwnerDep,
 ) -> object:
+    ensure_config_owner(config_id, owner, session)
     try:
         service = ModeService(session)
         if request.action == "set":
@@ -58,7 +63,8 @@ def update_confirmed_mode(
 
 
 @router.get("/{config_id}/mode-recommendations", response_model=list[ModeRecommendationDto])
-def list_mode_recommendations(config_id: int, session: SessionDep) -> object:
+def list_mode_recommendations(config_id: int, session: SessionDep, owner: CurrentOwnerDep) -> object:
+    ensure_config_owner(config_id, owner, session)
     try:
         return ModeService(session).list_mode_recommendations(config_id)
     except ValueError as exc:
@@ -69,8 +75,10 @@ def list_mode_recommendations(config_id: int, session: SessionDep) -> object:
 def get_daily_plan(
     config_id: int,
     session: SessionDep,
+    owner: CurrentOwnerDep,
     today: date | None = None,
 ) -> object:
+    ensure_config_owner(config_id, owner, session)
     try:
         return DailyPlanService(session).get_daily_plan(config_id, today or date.today())
     except ValueError as exc:
@@ -81,9 +89,11 @@ def get_daily_plan(
 def get_chart(
     config_id: int,
     session: SessionDep,
+    owner: CurrentOwnerDep,
     range: str = "6m",
     today: date | None = None,
 ) -> object:
+    ensure_config_owner(config_id, owner, session)
     try:
         return ChartService(session).get_chart(config_id, range, today or date.today())
     except ValueError as exc:
@@ -94,9 +104,11 @@ def get_chart(
 def refresh_market_data(
     config_id: int,
     session: SessionDep,
+    owner: CurrentOwnerDep,
     provider: MarketProviderDep,
     today: date | None = None,
 ) -> object:
+    ensure_config_owner(config_id, owner, session)
     try:
         return MarketRefreshService(session, provider).refresh(config_id, today or date.today())
     except ValueError as exc:

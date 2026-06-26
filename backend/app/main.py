@@ -6,6 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
 from app.api.routes_admin import router as admin_router
+from app.api.routes_auth import router as auth_router
 from app.api.routes_backtests import router as backtests_router
 from app.api.routes_dashboard import router as dashboard_router
 from app.api.routes_portfolios import router as portfolios_router
@@ -39,6 +40,7 @@ def create_app() -> FastAPI:
     app.include_router(trades_router)
     app.include_router(backtests_router)
     app.include_router(admin_router)
+    app.include_router(auth_router)
     mount_frontend(app)
 
     @app.on_event("startup")
@@ -116,6 +118,16 @@ def ensure_sqlite_schema() -> None:
                 """
             )
         )
+        owner_columns = {
+            row[1]
+            for row in connection.execute(text("PRAGMA table_info(owners)"))
+        }
+        if "pin_hash" not in owner_columns:
+            connection.execute(text("ALTER TABLE owners ADD COLUMN pin_hash VARCHAR(255)"))
+        if "is_active" not in owner_columns:
+            connection.execute(text("ALTER TABLE owners ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT 1"))
+        if "created_at" not in owner_columns:
+            connection.execute(text("ALTER TABLE owners ADD COLUMN created_at DATETIME"))
         connection.execute(
             text(
                 """

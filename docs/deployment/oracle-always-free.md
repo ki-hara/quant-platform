@@ -78,6 +78,8 @@ cd /opt/quant-platform/app
 sudo bash deploy/oci/setup-ubuntu.sh
 ```
 
+첫 배포 전 `deploy/oci/docker-compose.yml`의 `QUANT_AUTH_SECRET`와 `QUANT_DEFAULT_OWNER_PIN`은 원하는 값으로 바꾸는 것을 권장합니다.
+
 상태 확인:
 
 ```bash

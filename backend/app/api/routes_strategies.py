@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
+from app.api.deps import CurrentOwnerDep, ensure_config_owner
 from app.db.session import get_session
 from app.dto.strategies import (
     StrategyConfigCreateDto,
@@ -41,8 +41,8 @@ def get_strategy_schema(strategy_type: str) -> StrategySchemaDto:
 
 
 @router.get("/strategy-configs", response_model=list[StrategyConfigResponseDto])
-def list_strategy_configs(session: SessionDep) -> list[object]:
-    return StrategyConfigService(session).list_configs(settings.default_owner_id)
+def list_strategy_configs(session: SessionDep, owner: CurrentOwnerDep) -> list[object]:
+    return StrategyConfigService(session).list_configs(owner.id)
 
 
 @router.post(
@@ -53,6 +53,7 @@ def list_strategy_configs(session: SessionDep) -> list[object]:
 def create_strategy_config(
     request: StrategyConfigCreateDto,
     session: SessionDep,
+    owner: CurrentOwnerDep,
 ) -> object:
     service_request = StrategyConfigCreateRequest(
         name=request.name,
@@ -65,7 +66,7 @@ def create_strategy_config(
     )
     try:
         return StrategyConfigService(session).create_config(
-            settings.default_owner_id,
+            owner.id,
             service_request,
         )
     except ValueError as exc:
@@ -73,7 +74,8 @@ def create_strategy_config(
 
 
 @router.get("/strategy-configs/{config_id}", response_model=StrategyConfigResponseDto)
-def get_strategy_config(config_id: int, session: SessionDep) -> object:
+def get_strategy_config(config_id: int, session: SessionDep, owner: CurrentOwnerDep) -> object:
+    ensure_config_owner(config_id, owner, session)
     try:
         return StrategyConfigService(session).get_config(config_id)
     except ValueError as exc:
@@ -85,7 +87,9 @@ def update_strategy_config(
     config_id: int,
     request: StrategyConfigUpdateDto,
     session: SessionDep,
+    owner: CurrentOwnerDep,
 ) -> object:
+    ensure_config_owner(config_id, owner, session)
     service_request = StrategyConfigUpdateRequest(
         name=request.name,
         strategy_type=request.strategy_type,
@@ -107,7 +111,8 @@ def update_strategy_config(
 
 
 @router.delete("/strategy-configs/{config_id}", status_code=status.HTTP_204_NO_CONTENT)
-def archive_strategy_config(config_id: int, session: SessionDep) -> None:
+def archive_strategy_config(config_id: int, session: SessionDep, owner: CurrentOwnerDep) -> None:
+    ensure_config_owner(config_id, owner, session)
     try:
         StrategyConfigService(session).archive_config(config_id)
     except ValueError as exc:

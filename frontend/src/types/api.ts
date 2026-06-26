@@ -6,6 +6,16 @@ export type LocOrderStatus = "pending" | "filled" | "unfilled";
 export type ModeConfirmationSource = "manual" | "recommendation_applied";
 export type ChartRange = "1m" | "3m" | "6m" | "1y";
 
+export interface AuthOwner {
+  id: string;
+  name: string;
+}
+
+export interface LoginResponse {
+  token: string;
+  owner: AuthOwner;
+}
+
 export interface StrategyInfo {
   type: string;
   name: string;

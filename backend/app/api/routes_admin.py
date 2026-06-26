@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.engine import make_url
 from starlette.background import BackgroundTask
 
+from app.api.deps import CurrentOwnerDep
 from app.core.config import settings
 
 
@@ -15,7 +16,8 @@ router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
 @router.get("/sqlite-backup")
-def download_sqlite_backup() -> FileResponse:
+def download_sqlite_backup(owner: CurrentOwnerDep) -> FileResponse:
+    _ = owner
     url = make_url(settings.database_url)
     if not url.get_backend_name().startswith("sqlite") or not url.database:
         raise HTTPException(

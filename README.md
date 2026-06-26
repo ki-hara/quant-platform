@@ -125,6 +125,8 @@ gcloud run deploy quant-platform --source . --region asia-northeast3 --allow-una
 - `QUANT_DATABASE_URL`: 기본값 `sqlite:////data/quant_platform.db`
 - `QUANT_STATIC_DIR`: 기본값 `/app/static`
 - `QUANT_DEFAULT_OWNER_ID`: 기본값 `default`
+- `QUANT_DEFAULT_OWNER_PIN`: 기본값 `0000`
+- `QUANT_AUTH_SECRET`: 로그인 토큰 서명 키. 배포 환경에서는 반드시 변경하세요.
 - `QUANT_MARKET_DATA_PROVIDER`: 기본값 `finance_data_reader`
 
 주의: 이 구성은 최저비용 테스트용입니다. 여러 명이 지속적으로 사용하거나 데이터 손실 허용 범위가 낮아지면 PostgreSQL 전환을 권장합니다.
@@ -141,6 +143,15 @@ gcloud run deploy quant-platform --source . --region asia-northeast3 --allow-una
 - 서버 백업 스크립트: `deploy/oci/backup-sqlite.sh`
 
 자세한 절차는 [Oracle Cloud Always Free 배포 가이드](docs/deployment/oracle-always-free.md)를 참고하세요.
+
+## 사용자 로그인
+
+앱은 사용자별 전략/거래/포지션 데이터를 분리합니다.
+
+- 기본 사용자: `default`
+- 기본 PIN: `0000`
+- 배포 환경에서는 `QUANT_DEFAULT_OWNER_PIN`, `QUANT_AUTH_SECRET`를 변경하세요.
+- 새 사용자는 로그인 화면의 `새 사용자 만들기`에서 추가할 수 있습니다.
 
 ## 검증
 

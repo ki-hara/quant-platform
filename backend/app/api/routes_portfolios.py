@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.api.deps import CurrentOwnerDep, ensure_config_owner
 from app.db.session import get_session
 from app.dto.portfolios import PortfolioAdjustmentCreateDto, PortfolioAdjustmentResponseDto
 from app.services.portfolio_adjustment_service import (
@@ -17,7 +18,8 @@ SessionDep = Annotated[Session, Depends(get_session)]
 
 
 @router.get("/{config_id}/portfolio-adjustments", response_model=list[PortfolioAdjustmentResponseDto])
-def list_portfolio_adjustments(config_id: int, session: SessionDep) -> object:
+def list_portfolio_adjustments(config_id: int, session: SessionDep, owner: CurrentOwnerDep) -> object:
+    ensure_config_owner(config_id, owner, session)
     try:
         return PortfolioAdjustmentService(session).list_adjustments(config_id)
     except ValueError as exc:
@@ -33,7 +35,9 @@ def create_portfolio_adjustment(
     config_id: int,
     request: PortfolioAdjustmentCreateDto,
     session: SessionDep,
+    owner: CurrentOwnerDep,
 ) -> object:
+    ensure_config_owner(config_id, owner, session)
     try:
         return PortfolioAdjustmentService(session).create_adjustment(
             config_id,

@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
+from app.api.deps import CurrentOwnerDep, ensure_backtest_owner, ensure_config_owner
 from app.core.config import settings
 from app.core.errors import AppError, MarketDataError
 from app.db.session import get_session
@@ -40,8 +41,10 @@ MarketDataServiceDep = Annotated[MarketDataService, Depends(get_market_data_serv
 def create_backtest(
     request: BacktestCreateDto,
     session: SessionDep,
+    owner: CurrentOwnerDep,
     market_data_service: MarketDataServiceDep,
 ) -> object:
+    ensure_config_owner(request.config_id, owner, session)
     if request.end_date < request.start_date:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -70,13 +73,13 @@ def create_backtest(
 
 
 @router.get("/{run_id}", response_model=BacktestRunResponseDto)
-def get_backtest(run_id: int, session: SessionDep) -> object:
-    return _get_run_or_404(run_id, session)
+def get_backtest(run_id: int, session: SessionDep, owner: CurrentOwnerDep) -> object:
+    return ensure_backtest_owner(run_id, owner, session)
 
 
 @router.get("/{run_id}/daily.csv")
-def download_daily_csv(run_id: int, session: SessionDep) -> StreamingResponse:
-    run = _get_run_or_404(run_id, session)
+def download_daily_csv(run_id: int, session: SessionDep, owner: CurrentOwnerDep) -> StreamingResponse:
+    run = ensure_backtest_owner(run_id, owner, session)
     output = StringIO()
     writer = csv.writer(output)
     writer.writerow(
@@ -110,8 +113,8 @@ def download_daily_csv(run_id: int, session: SessionDep) -> StreamingResponse:
 
 
 @router.get("/{run_id}/trades.csv")
-def download_trades_csv(run_id: int, session: SessionDep) -> StreamingResponse:
-    run = _get_run_or_404(run_id, session)
+def download_trades_csv(run_id: int, session: SessionDep, owner: CurrentOwnerDep) -> StreamingResponse:
+    run = ensure_backtest_owner(run_id, owner, session)
     output = StringIO()
     writer = csv.writer(output)
     writer.writerow(["date", "side", "quantity", "price", "fee", "realized_pnl", "sell_reason", "source"])
@@ -132,8 +135,8 @@ def download_trades_csv(run_id: int, session: SessionDep) -> StreamingResponse:
 
 
 @router.get("/{run_id}/summary.csv")
-def download_summary_csv(run_id: int, session: SessionDep) -> StreamingResponse:
-    run = _get_run_or_404(run_id, session)
+def download_summary_csv(run_id: int, session: SessionDep, owner: CurrentOwnerDep) -> StreamingResponse:
+    run = ensure_backtest_owner(run_id, owner, session)
     output = StringIO()
     writer = csv.writer(output)
     writer.writerow(

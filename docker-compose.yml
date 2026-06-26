@@ -6,6 +6,8 @@ services:
     environment:
       QUANT_DATABASE_URL: sqlite:////data/quant_platform.db
       QUANT_DEFAULT_OWNER_ID: default
+      QUANT_DEFAULT_OWNER_PIN: "0000"
+      QUANT_AUTH_SECRET: local-dev-secret
       QUANT_MARKET_DATA_PROVIDER: finance_data_reader
     volumes:
       - quant-data:/data

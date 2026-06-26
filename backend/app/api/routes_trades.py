@@ -6,9 +6,16 @@ from pydantic import BaseModel
 from decimal import Decimal
 from sqlalchemy.orm import Session
 
+from app.api.deps import (
+    CurrentOwnerDep,
+    ensure_config_owner,
+    ensure_position_owner,
+    ensure_trade_owner,
+)
 from app.core.errors import NotFoundError, ValidationAppError
 from app.db.session import get_session
 from app.domain.enums import PositionStatus, StrategyMode, TradeSide, TradeSource
+from app.domain.models import LocOrder
 from app.dto.dashboard import PositionDto
 from app.dto.trades import (
     ManualTradeRequestDto,
@@ -49,14 +56,14 @@ class BuyOrderPositionCreateDto(BaseModel):
 
 
 @router.get("/strategy-configs/{config_id}/positions", response_model=list[PositionDto])
-def list_positions(config_id: int, session: SessionDep) -> list[object]:
-    _ensure_config_exists(config_id, session)
+def list_positions(config_id: int, session: SessionDep, owner: CurrentOwnerDep) -> list[object]:
+    ensure_config_owner(config_id, owner, session)
     return PositionRepository(session).list_open(config_id)
 
 
 @router.get("/positions/{config_id}", response_model=list[PositionDto])
-def list_positions_by_config(config_id: int, session: SessionDep) -> list[object]:
-    return list_positions(config_id, session)
+def list_positions_by_config(config_id: int, session: SessionDep, owner: CurrentOwnerDep) -> list[object]:
+    return list_positions(config_id, session, owner)
 
 
 @router.post(
@@ -68,8 +75,9 @@ def create_buy_order_position(
     config_id: int,
     request: BuyOrderPositionCreateDto,
     session: SessionDep,
+    owner: CurrentOwnerDep,
 ) -> object:
-    _ensure_config_exists(config_id, session)
+    ensure_config_owner(config_id, owner, session)
     if request.quantity <= 0 or request.limit_price <= 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Quantity and LOC price must be positive.")
     position = PositionRepository(session).create_pending(
@@ -84,11 +92,14 @@ def create_buy_order_position(
 
 
 @router.put("/positions/{position_id}", response_model=PositionDto)
-def update_position(position_id: int, request: PositionUpdateDto, session: SessionDep) -> object:
+def update_position(
+    position_id: int,
+    request: PositionUpdateDto,
+    session: SessionDep,
+    owner: CurrentOwnerDep,
+) -> object:
     repo = PositionRepository(session)
-    position = repo.get(position_id)
-    if position is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Position not found: {position_id}")
+    position = ensure_position_owner(position_id, owner, session)
     config = StrategyConfigRepository(session).get(position.strategy_config_id)
     matching_trade = _matching_buy_trade(position, session)
     if request.status == "unfilled":
@@ -167,18 +178,19 @@ def _estimate_fee(config, price: Decimal, quantity: Decimal) -> Decimal:
 
 
 @router.get("/strategy-configs/{config_id}/trades", response_model=list[TradeResponseDto])
-def list_trades(config_id: int, session: SessionDep) -> list[object]:
-    _ensure_config_exists(config_id, session)
+def list_trades(config_id: int, session: SessionDep, owner: CurrentOwnerDep) -> list[object]:
+    ensure_config_owner(config_id, owner, session)
     return TradeRepository(session).list_by_strategy_config(config_id)
 
 
 @router.get("/trades/{config_id}", response_model=list[TradeResponseDto])
-def list_trades_by_config(config_id: int, session: SessionDep) -> list[object]:
-    return list_trades(config_id, session)
+def list_trades_by_config(config_id: int, session: SessionDep, owner: CurrentOwnerDep) -> list[object]:
+    return list_trades(config_id, session, owner)
 
 
 @router.get("/strategy-configs/{config_id}/loc-orders", response_model=list[LocOrderResponseDto])
-def list_loc_orders(config_id: int, session: SessionDep) -> list[object]:
+def list_loc_orders(config_id: int, session: SessionDep, owner: CurrentOwnerDep) -> list[object]:
+    ensure_config_owner(config_id, owner, session)
     try:
         return LocOrderService(session).list_orders(config_id)
     except ValueError as exc:
@@ -190,7 +202,13 @@ def list_loc_orders(config_id: int, session: SessionDep) -> list[object]:
     response_model=LocOrderResponseDto,
     status_code=status.HTTP_201_CREATED,
 )
-def create_loc_order(config_id: int, request: LocOrderCreateDto, session: SessionDep) -> object:
+def create_loc_order(
+    config_id: int,
+    request: LocOrderCreateDto,
+    session: SessionDep,
+    owner: CurrentOwnerDep,
+) -> object:
+    ensure_config_owner(config_id, owner, session)
     try:
         return LocOrderService(session).create_from_daily_plan(config_id, request.memo)
     except ValueError as exc:
@@ -198,7 +216,16 @@ def create_loc_order(config_id: int, request: LocOrderCreateDto, session: Sessio
 
 
 @router.post("/loc-orders/{order_id}/fill", response_model=LocOrderResponseDto)
-def fill_loc_order(order_id: int, request: LocOrderFillDto, session: SessionDep) -> object:
+def fill_loc_order(
+    order_id: int,
+    request: LocOrderFillDto,
+    session: SessionDep,
+    owner: CurrentOwnerDep,
+) -> object:
+    order = session.get(LocOrder, order_id)
+    if order is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"LOC order not found: {order_id}")
+    ensure_config_owner(order.strategy_config_id, owner, session)
     try:
         return LocOrderService(session).fill_order(
             order_id,
@@ -214,7 +241,11 @@ def fill_loc_order(order_id: int, request: LocOrderFillDto, session: SessionDep)
 
 
 @router.post("/loc-orders/{order_id}/unfilled", response_model=LocOrderResponseDto)
-def mark_loc_order_unfilled(order_id: int, session: SessionDep) -> object:
+def mark_loc_order_unfilled(order_id: int, session: SessionDep, owner: CurrentOwnerDep) -> object:
+    order = session.get(LocOrder, order_id)
+    if order is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"LOC order not found: {order_id}")
+    ensure_config_owner(order.strategy_config_id, owner, session)
     try:
         return LocOrderService(session).mark_unfilled(order_id)
     except ValueError as exc:
@@ -229,7 +260,9 @@ def mark_loc_order_unfilled(order_id: int, session: SessionDep) -> object:
 def record_manual_trade(
     request: ManualTradeRequestDto,
     session: SessionDep,
+    owner: CurrentOwnerDep,
 ) -> object:
+    ensure_config_owner(request.config_id, owner, session)
     service_request = ManualTradeRequest(
         config_id=request.config_id,
         side=request.side,
@@ -254,7 +287,8 @@ def record_manual_trade(
 
 
 @router.delete("/trades/{trade_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_trade(trade_id: int, session: SessionDep) -> None:
+def delete_trade(trade_id: int, session: SessionDep, owner: CurrentOwnerDep) -> None:
+    ensure_trade_owner(trade_id, owner, session)
     try:
         ManualTradeService(session).delete_trade(trade_id)
     except NotFoundError as exc:
@@ -271,7 +305,9 @@ def execute_signal(
     config_id: int,
     request: SignalExecutionRequestDto,
     session: SessionDep,
+    owner: CurrentOwnerDep,
 ) -> object:
+    ensure_config_owner(config_id, owner, session)
     service_request = SignalExecutionRequest(
         side=request.side,
         trade_date=request.trade_date,
