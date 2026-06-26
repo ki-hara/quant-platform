@@ -317,6 +317,31 @@ h2 {
   gap: 6px;
 }
 
+.position-pick-list,
+.position-edit-list {
+  display: grid;
+  gap: 8px;
+}
+
+.position-pick-list button {
+  justify-content: flex-start;
+}
+
+.position-pick-list button.is-active {
+  border-color: var(--accent);
+  background: #eef7f1;
+  color: var(--accent-strong);
+}
+
+.position-edit-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) repeat(3, minmax(110px, 0.8fr)) auto;
+  gap: 8px;
+  align-items: end;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
 .metric-strip {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));

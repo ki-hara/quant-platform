@@ -1,6 +1,8 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
+from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from app.core.errors import NotFoundError, ValidationAppError
@@ -31,6 +33,12 @@ router = APIRouter(prefix="/api", tags=["trades"])
 SessionDep = Annotated[Session, Depends(get_session)]
 
 
+class PositionUpdateDto(BaseModel):
+    quantity: Decimal | None = None
+    buy_price: Decimal | None = None
+    status: str | None = None
+
+
 @router.get("/strategy-configs/{config_id}/positions", response_model=list[PositionDto])
 def list_positions(config_id: int, session: SessionDep) -> list[object]:
     _ensure_config_exists(config_id, session)
@@ -40,6 +48,25 @@ def list_positions(config_id: int, session: SessionDep) -> list[object]:
 @router.get("/positions/{config_id}", response_model=list[PositionDto])
 def list_positions_by_config(config_id: int, session: SessionDep) -> list[object]:
     return list_positions(config_id, session)
+
+
+@router.put("/positions/{position_id}", response_model=PositionDto)
+def update_position(position_id: int, request: PositionUpdateDto, session: SessionDep) -> object:
+    repo = PositionRepository(session)
+    position = repo.get(position_id)
+    if position is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Position not found: {position_id}")
+    if request.status == "unfilled":
+        session.delete(position)
+        session.commit()
+        return position
+    if request.quantity is not None:
+        position.quantity = request.quantity
+    if request.buy_price is not None:
+        position.buy_price = request.buy_price
+    saved = repo.save(position)
+    session.commit()
+    return saved
 
 
 @router.get("/strategy-configs/{config_id}/trades", response_model=list[TradeResponseDto])

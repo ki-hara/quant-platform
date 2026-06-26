@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiUrl } from "./client";
+import { apiGet, apiPost, apiPut, apiUrl } from "./client";
 import type {
   ManualTradeRequest,
   ManualTradeResponse,
@@ -12,6 +12,13 @@ import type {
 
 export function listPositions(configId: number): Promise<PositionRow[]> {
   return apiGet<PositionRow[]>(`/api/strategy-configs/${configId}/positions`);
+}
+
+export function updatePosition(
+  positionId: number,
+  request: Partial<Pick<PositionRow, "quantity" | "buy_price" | "status">>,
+): Promise<PositionRow> {
+  return apiPut<PositionRow>(`/api/positions/${positionId}`, request);
 }
 
 export function listTrades(configId: number): Promise<TradeRow[]> {

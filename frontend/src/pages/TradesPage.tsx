@@ -3,21 +3,17 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { getDashboard } from "../api/dashboard";
 import { listStrategyConfigs } from "../api/strategies";
 import {
-  createLocOrder,
   deleteTrade,
-  fillLocOrder,
-  listLocOrders,
   listPositions,
   listTrades,
-  markLocOrderUnfilled,
   recordManualTrade,
+  updatePosition,
 } from "../api/trades";
 import { getDailyPlan } from "../api/tradingPlan";
 import { Table, type TableColumn } from "../components/Table";
 import type {
   DailyPlan,
   DashboardResponse,
-  LocOrderRow,
   PositionRow,
   StrategyConfig,
   TradeRow,
@@ -28,8 +24,6 @@ import {
   translateMode,
   translateReason,
   translateSide,
-  translateSource,
-  translateStatus,
 } from "../utils/format";
 
 const initialManualForm = {
@@ -56,11 +50,10 @@ export function TradesPage() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [positions, setPositions] = useState<PositionRow[]>([]);
   const [trades, setTrades] = useState<TradeRow[]>([]);
-  const [locOrders, setLocOrders] = useState<LocOrderRow[]>([]);
   const [plan, setPlan] = useState<DailyPlan | null>(null);
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
-  const [selectedLocOrderId, setSelectedLocOrderId] = useState<number | null>(null);
   const [manualForm, setManualForm] = useState(initialManualForm);
+  const [positionEdits, setPositionEdits] = useState<Record<number, { quantity: string; buy_price: string; status: string }>>({});
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
@@ -104,18 +97,24 @@ export function TradesPage() {
     try {
       setLoading(true);
       setError("");
-      const [positionRows, tradeRows, dailyPlan, dashboardData, locOrderRows] = await Promise.all([
+      const [positionRows, tradeRows, dailyPlan, dashboardData] = await Promise.all([
         listPositions(configId),
         listTrades(configId),
         getDailyPlan(configId),
         getDashboard(configId),
-        listLocOrders(configId),
       ]);
       setPositions(positionRows);
+      setPositionEdits(
+        Object.fromEntries(
+          positionRows.map((position) => [
+            position.id,
+            { quantity: position.quantity, buy_price: position.buy_price, status: "open" },
+          ]),
+        ),
+      );
       setTrades(tradeRows);
       setPlan(dailyPlan);
       setDashboard(dashboardData);
-      setLocOrders(locOrderRows);
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
@@ -123,33 +122,17 @@ export function TradesPage() {
     }
   }
 
-  async function createRecommendedLocOrder() {
-    if (!selectedId || !plan?.buy_available) return;
-    try {
-      setSaving(true);
-      setError("");
-      setMessage("");
-      await createLocOrder(selectedId);
-      setMessage("LOC 주문 대기 상태로 저장했습니다.");
-      await loadRows(selectedId);
-    } catch (caught) {
-      setError(errorMessage(caught));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  function fillLocOrderExecution(order: LocOrderRow) {
-    setSelectedLocOrderId(order.id);
+  function fillBuyRecommendation() {
+    if (!plan || !plan.buy_available) return;
     setManualForm((current) => ({
       ...current,
-      trade_date: order.order_date,
+      trade_date: plan.plan_date,
       side: "buy",
-      quantity: order.recommended_quantity,
-      limit_price: order.limit_price,
-      price: "",
+      quantity: String(plan.LOC.quantity),
+      limit_price: plan.LOC.limit_price,
+      price: plan.LOC.limit_price,
       fee: "0",
-      mode: order.mode,
+      mode: plan.confirmed_mode,
       position_id: "",
       sell_reason: "",
     }));
@@ -182,30 +165,21 @@ export function TradesPage() {
       setSaving(true);
       setError("");
       setMessage("");
-      if (manualForm.side === "buy" && selectedLocOrderId) {
-        await fillLocOrder(selectedLocOrderId, {
-          quantity: manualForm.quantity,
-          price: manualForm.price,
-          fee: estimateFee(manualForm.price, manualForm.quantity, dashboard?.config.fee_rate),
-        });
-      } else {
-        await recordManualTrade({
-          config_id: selectedId,
-          trade_date: manualForm.trade_date,
-          side: manualForm.side,
-          quantity: manualForm.quantity,
-          limit_price: manualForm.side === "buy" && manualForm.limit_price ? manualForm.limit_price : null,
-          price: manualForm.price,
-          fee: estimateFee(manualForm.price, manualForm.quantity, dashboard?.config.fee_rate),
-          sell_reason: manualForm.side === "sell" ? manualForm.sell_reason.trim() || null : null,
-          source: manualForm.source,
-          mode: manualForm.side === "buy" ? manualForm.mode : undefined,
-          position_id: manualForm.side === "sell" ? Number(manualForm.position_id) : null,
-        });
-      }
+      await recordManualTrade({
+        config_id: selectedId,
+        trade_date: manualForm.trade_date,
+        side: manualForm.side,
+        quantity: manualForm.quantity,
+        limit_price: manualForm.side === "buy" && manualForm.limit_price ? manualForm.limit_price : null,
+        price: manualForm.price,
+        fee: estimateFee(manualForm.price, manualForm.quantity, dashboard?.config.fee_rate),
+        sell_reason: manualForm.side === "sell" ? manualForm.sell_reason.trim() || null : null,
+        source: "manual",
+        mode: manualForm.side === "buy" ? manualForm.mode : undefined,
+        position_id: manualForm.side === "sell" ? Number(manualForm.position_id) : null,
+      });
       setMessage("거래가 저장되었습니다.");
       setManualForm({ ...initialManualForm, trade_date: todayIso() });
-      setSelectedLocOrderId(null);
       await loadRows(selectedId);
     } catch (caught) {
       setError(errorMessage(caught));
@@ -230,14 +204,16 @@ export function TradesPage() {
     }
   }
 
-  async function handleUnfilledLocOrder(orderId: number) {
+  async function handleSavePosition(positionId: number) {
     if (!selectedId) return;
+    const edit = positionEdits[positionId];
+    if (!edit) return;
     try {
       setSaving(true);
       setError("");
       setMessage("");
-      await markLocOrderUnfilled(orderId);
-      setMessage("LOC 주문을 미체결 처리했습니다.");
+      await updatePosition(positionId, edit);
+      setMessage(edit.status === "unfilled" ? "포지션을 미체결로 제거했습니다." : "포지션을 보정했습니다.");
       await loadRows(selectedId);
     } catch (caught) {
       setError(errorMessage(caught));
@@ -320,8 +296,8 @@ export function TradesPage() {
                 </div>
               ) : null}
             </div>
-            <button type="button" onClick={createRecommendedLocOrder} disabled={!plan?.buy_available || saving}>
-              <Wand2 aria-hidden="true" size={16} /> LOC 주문 저장
+            <button type="button" onClick={fillBuyRecommendation} disabled={!plan?.buy_available || saving}>
+              <Wand2 aria-hidden="true" size={16} /> 매수 주문 입력
             </button>
           </div>
 
@@ -356,47 +332,80 @@ export function TradesPage() {
         </div>
       </section>
 
-      <section className="panel">
-        <div className="panel-header">
-          <div>
-            <h2>LOC 주문 상태</h2>
-            <span>실제 체결 후 수량과 매수가를 입력하면 보유 포지션으로 이동합니다.</span>
-          </div>
-        </div>
-        <div className="loc-order-list">
-          {locOrders.length === 0 ? <div className="empty-state">대기 중인 LOC 주문이 없습니다.</div> : null}
-          {locOrders.map((order) => (
-            <div className="loc-order-row" key={order.id}>
-              <span>{order.order_date}</span>
-              <strong>{formatMoney(order.limit_price)} × {formatMoney(order.recommended_quantity)}</strong>
-              <small>{translateLocOrderStatus(order.status)}</small>
-              {order.status === "pending" ? (
-                <div className="inline-actions">
-                  <button type="button" onClick={() => fillLocOrderExecution(order)}>체결 입력</button>
-                  <button type="button" onClick={() => handleUnfilledLocOrder(order.id)}>미체결</button>
-                </div>
-              ) : null}
-            </div>
-          ))}
-        </div>
-      </section>
-
       <div className="page-grid">
         <section className="panel">
           <div className="panel-header">
             <div>
               <h2>보유 포지션</h2>
-              <span>선택한 전략 기준</span>
+              <span>수량, 매수가, 체결 상태를 직접 보정합니다.</span>
             </div>
           </div>
-          <Table columns={positionColumns} rows={positions} getRowKey={(row) => row.id} />
+          <div className="position-edit-list">
+            {positions.length === 0 ? <div className="empty-state">보유 포지션이 없습니다.</div> : null}
+            {positions.map((position) => {
+              const edit = positionEdits[position.id] ?? {
+                quantity: position.quantity,
+                buy_price: position.buy_price,
+                status: "open",
+              };
+              return (
+                <div className="position-edit-row" key={position.id}>
+                  <span>#{position.id} / {position.buy_date}</span>
+                  <label>
+                    수량
+                    <input
+                      value={edit.quantity}
+                      inputMode="decimal"
+                      onChange={(event) =>
+                        setPositionEdits((current) => ({
+                          ...current,
+                          [position.id]: { ...edit, quantity: event.target.value },
+                        }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    매수가
+                    <input
+                      value={edit.buy_price}
+                      inputMode="decimal"
+                      onChange={(event) =>
+                        setPositionEdits((current) => ({
+                          ...current,
+                          [position.id]: { ...edit, buy_price: event.target.value },
+                        }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    상태
+                    <select
+                      value={edit.status}
+                      onChange={(event) =>
+                        setPositionEdits((current) => ({
+                          ...current,
+                          [position.id]: { ...edit, status: event.target.value },
+                        }))
+                      }
+                    >
+                      <option value="open">체결</option>
+                      <option value="unfilled">미체결</option>
+                    </select>
+                  </label>
+                  <button type="button" onClick={() => handleSavePosition(position.id)} disabled={saving}>
+                    저장
+                  </button>
+                </div>
+              );
+            })}
+          </div>
         </section>
 
         <section className="panel">
           <div className="panel-header">
             <div>
-              <h2>실제 체결 입력</h2>
-              <span>추천값은 기본값이며 실제 체결 내용으로 수정할 수 있습니다.</span>
+              <h2>{manualForm.side === "buy" ? "매수 주문" : "매도 주문"}</h2>
+              <span>매수는 주문 수량을 입력하고, 체결가는 보유 포지션에서 보정합니다.</span>
             </div>
           </div>
           <form className="form-stack" onSubmit={handleManualSubmit}>
@@ -427,35 +436,26 @@ export function TradesPage() {
                 <option value="sell">매도</option>
               </select>
             </label>
-            <label>
-              출처
-              <select
-                value={manualForm.source}
-                onChange={(event) =>
-                  setManualForm((current) => ({ ...current, source: event.target.value as "manual" | "correction" }))
-                }
-              >
-                <option value="manual">수동 입력</option>
-                <option value="correction">체결 보정</option>
-              </select>
-            </label>
             {manualForm.side === "sell" ? (
-              <label>
-                매도할 포지션
-                <select
-                  value={manualForm.position_id}
-                  onChange={(event) => setManualForm((current) => ({ ...current, position_id: event.target.value }))}
-                  required
-                >
-                  <option value="">포지션 선택</option>
-                  {openPositions.map((position) => (
-                    <option key={position.id} value={position.id}>
-                      #{position.id} / {position.buy_date} / LOC {formatOptionalMoney(position.limit_price)} / 매수가{" "}
-                      {formatMoney(position.buy_price)}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <div className="position-pick-list">
+                {openPositions.map((position) => (
+                  <button
+                    key={position.id}
+                    type="button"
+                    className={manualForm.position_id === String(position.id) ? "is-active" : undefined}
+                    onClick={() =>
+                      setManualForm((current) => ({
+                        ...current,
+                        position_id: String(position.id),
+                        quantity: position.quantity,
+                      }))
+                    }
+                  >
+                    #{position.id} / {position.buy_date} / {formatMoney(position.quantity)}주 / 매수가{" "}
+                    {formatMoney(position.buy_price)}
+                  </button>
+                ))}
+              </div>
             ) : (
               <label>
                 모드
@@ -480,7 +480,7 @@ export function TradesPage() {
               </label>
             ) : null}
             <label>
-              실제 체결 수량
+              {manualForm.side === "buy" ? "주문 수량" : "매도 수량"}
               <input
                 value={manualForm.quantity}
                 onChange={(event) => setManualForm((current) => ({ ...current, quantity: event.target.value }))}
@@ -489,16 +489,18 @@ export function TradesPage() {
                 required
               />
             </label>
-            <label>
-              실제 평균 체결가
-              <input
-                value={manualForm.price}
-                onChange={(event) => setManualForm((current) => ({ ...current, price: event.target.value }))}
-                placeholder="0"
-                inputMode="decimal"
-                required
-              />
-            </label>
+            {manualForm.side === "sell" ? (
+              <label>
+                매도가
+                <input
+                  value={manualForm.price}
+                  onChange={(event) => setManualForm((current) => ({ ...current, price: event.target.value }))}
+                  placeholder="0"
+                  inputMode="decimal"
+                  required
+                />
+              </label>
+            ) : null}
             <label>
               실제 수수료
               <input
@@ -520,7 +522,7 @@ export function TradesPage() {
             <button type="submit" disabled={!selectedId || saving}>
               <Save aria-hidden="true" size={16} /> {saving ? "저장 중" : "거래 저장"}
             </button>
-            <p className="form-status">추천값과 실제 체결값이 다르면 실제 체결값을 기준으로 저장하세요.</p>
+            <p className="form-status">매수 체결 수량과 매수가는 보유 포지션에서 보정합니다.</p>
           </form>
         </section>
       </div>
@@ -538,17 +540,6 @@ export function TradesPage() {
   );
 }
 
-const positionColumns: TableColumn<PositionRow>[] = [
-  { key: "id", header: "ID", render: (row) => row.id },
-  { key: "buy_date", header: "매수일", render: (row) => row.buy_date },
-  { key: "quantity", header: "수량", align: "right", render: (row) => formatMoney(row.quantity) },
-  { key: "limit_price", header: "LOC가", align: "right", render: (row) => formatOptionalMoney(row.limit_price) },
-  { key: "price", header: "매수가", align: "right", render: (row) => formatMoney(row.buy_price) },
-  { key: "fee", header: "매수 수수료", align: "right", render: (row) => formatMoney(row.buy_fee) },
-  { key: "mode", header: "모드", render: (row) => translateMode(row.mode) },
-  { key: "status", header: "상태", render: (row) => translateStatus(row.status) },
-];
-
 const tradeColumns: TableColumn<TradeRow>[] = [
   { key: "date", header: "일자", render: (row) => row.date },
   { key: "side", header: "구분", render: (row) => translateSide(row.side) },
@@ -558,7 +549,6 @@ const tradeColumns: TableColumn<TradeRow>[] = [
   { key: "fee", header: "수수료", align: "right", render: (row) => formatMoney(row.fee) },
   { key: "pnl", header: "실현손익", align: "right", render: (row) => formatMoney(row.realized_pnl) },
   { key: "reason", header: "사유", render: (row) => translateReason(row.sell_reason) },
-  { key: "source", header: "출처", render: (row) => translateSource(row.source) },
 ];
 
 function formatOptionalMoney(value: string | null | undefined): string {
@@ -576,15 +566,6 @@ function toSellSignalRow(row: Record<string, unknown>): SellSignalRow {
 function estimateFee(price: string, quantity: string, feeRate: string | undefined): string {
   const fee = Number(price) * Number(quantity) * Number(feeRate ?? "0") / 100;
   return Number.isFinite(fee) ? fee.toFixed(6) : "0";
-}
-
-function translateLocOrderStatus(status: string): string {
-  const labels: Record<string, string> = {
-    pending: "대기",
-    filled: "체결",
-    unfilled: "미체결",
-  };
-  return labels[status] ?? status;
 }
 
 function errorMessage(error: unknown): string {
