@@ -354,7 +354,7 @@ export function TradesPage() {
                   {sellOrderRows.map((signal) => (
                     <div className={`sell-order-row ${sellCardClass(signal)}`} key={signal.position?.id}>
                       <div>
-                        <strong>{signal.position.buy_date} 체결분</strong>
+                        <strong>{signal.position.buy_date}</strong>
                         <small>{sellOrderDeadlineText(signal)}</small>
                       </div>
                       <span>{wholeShare(signal.position.quantity)}주</span>
@@ -395,7 +395,7 @@ export function TradesPage() {
               const sellSignal = sellSignalByPosition.get(position.id);
               return (
                 <div className="position-edit-row" key={position.id}>
-                  <span>{position.buy_date} 체결분</span>
+                  <span>{position.buy_date}</span>
                   <div className="readonly-field">
                     <span>LOC가</span>
                     <strong>{formatOptionalMoney(position.limit_price)}</strong>
@@ -515,7 +515,7 @@ export function TradesPage() {
                       }));
                     }}
                   >
-                    {position.buy_date} 체결분 / {wholeShare(position.quantity)}주 / 매수가{" "}
+                    {position.buy_date} / {wholeShare(position.quantity)}주 / 매수가{" "}
                     {formatMoney(position.buy_price)}
                   </button>
                 ))}
@@ -646,6 +646,7 @@ function deadlineText(days: number | null | undefined): string {
 
 function sellCardClass(signal: SellSignalRow): string {
   if (isExpiredSellOrder(signal)) return "recommendation-danger";
+  if (isFilledCandidate(signal)) return "recommendation-success";
   if (signal.urgency === "near_deadline") return "recommendation-warning";
   return "";
 }
@@ -680,9 +681,18 @@ function comparePositionByDate(left: PositionRow, right: PositionRow): number {
 }
 
 function compareSellOrderRow(left: SellOrderRow, right: SellOrderRow): number {
+  const leftPriority = sellOrderPriority(left);
+  const rightPriority = sellOrderPriority(right);
+  if (leftPriority !== rightPriority) return leftPriority - rightPriority;
   const leftDeadline = normalizedDeadline(left.days_to_deadline);
   const rightDeadline = normalizedDeadline(right.days_to_deadline);
   return leftDeadline - rightDeadline || comparePositionByDate(left.position, right.position);
+}
+
+function sellOrderPriority(signal: SellSignalRow): number {
+  if (isExpiredSellOrder(signal)) return 0;
+  if (isFilledCandidate(signal)) return 1;
+  return 2;
 }
 
 function normalizedDeadline(days: number | null | undefined): number {
@@ -692,6 +702,10 @@ function normalizedDeadline(days: number | null | undefined): number {
 
 function isExpiredSellOrder(signal: SellSignalRow): boolean {
   return typeof signal.days_to_deadline === "number" && signal.days_to_deadline < 0;
+}
+
+function isFilledCandidate(signal: SellSignalRow): boolean {
+  return signal.should_sell === true && signal.reason === "profit_target";
 }
 
 function sellOrderDeadlineText(signal: SellSignalRow): string {
