@@ -1,7 +1,11 @@
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
+from app.api.routes_admin import router as admin_router
 from app.api.routes_backtests import router as backtests_router
 from app.api.routes_dashboard import router as dashboard_router
 from app.api.routes_portfolios import router as portfolios_router
@@ -34,6 +38,8 @@ def create_app() -> FastAPI:
     app.include_router(portfolios_router)
     app.include_router(trades_router)
     app.include_router(backtests_router)
+    app.include_router(admin_router)
+    mount_frontend(app)
 
     @app.on_event("startup")
     def startup() -> None:
@@ -43,6 +49,15 @@ def create_app() -> FastAPI:
             seed_default_owner(session, settings.default_owner_id)
 
     return app
+
+
+def mount_frontend(app: FastAPI) -> None:
+    if not settings.static_dir:
+        return
+    static_dir = Path(settings.static_dir)
+    index_file = static_dir / "index.html"
+    if static_dir.exists() and index_file.exists():
+        app.mount("/", StaticFiles(directory=static_dir, html=True), name="frontend")
 
 
 app = create_app()

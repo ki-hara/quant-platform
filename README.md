@@ -91,6 +91,44 @@ docker compose down
 docker compose down -v
 ```
 
+## 저비용 Cloud Run 배포
+
+소규모 테스트 배포는 루트 `Dockerfile` 하나로 프론트엔드와 백엔드를 묶어 Cloud Run에 올립니다.
+
+- React 빌드 결과물은 FastAPI가 정적 파일로 제공합니다.
+- SQLite DB 기본 경로는 `/data/quant_platform.db`입니다.
+- 대시보드의 `DB 백업` 버튼으로 현재 SQLite 스냅샷을 다운로드할 수 있습니다.
+- Cloud Run 컨테이너 파일시스템은 영구 저장소로 보장되지 않으므로, 테스트 기간에는 DB 백업을 자주 내려받아 보관해야 합니다.
+
+로컬에서 단일 컨테이너 빌드 확인:
+
+```powershell
+docker build -t quant-platform .
+docker run --rm -p 8080:8080 -v quant-data:/data quant-platform
+```
+
+접속:
+
+- App: `http://localhost:8080`
+- Health: `http://localhost:8080/api/health`
+
+Google Cloud Run 배포 예시:
+
+```powershell
+gcloud config set project YOUR_PROJECT_ID
+gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com
+gcloud run deploy quant-platform --source . --region asia-northeast3 --allow-unauthenticated
+```
+
+운영 환경변수:
+
+- `QUANT_DATABASE_URL`: 기본값 `sqlite:////data/quant_platform.db`
+- `QUANT_STATIC_DIR`: 기본값 `/app/static`
+- `QUANT_DEFAULT_OWNER_ID`: 기본값 `default`
+- `QUANT_MARKET_DATA_PROVIDER`: 기본값 `finance_data_reader`
+
+주의: 이 구성은 최저비용 테스트용입니다. 여러 명이 지속적으로 사용하거나 데이터 손실 허용 범위가 낮아지면 PostgreSQL 전환을 권장합니다.
+
 ## 검증
 
 백엔드 테스트:

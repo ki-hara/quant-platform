@@ -1,5 +1,6 @@
-import { RefreshCw, Save } from "lucide-react";
+import { Download, RefreshCw, Save } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { getSqliteBackupUrl } from "../api/admin";
 import { getDashboard } from "../api/dashboard";
 import { createPortfolioAdjustment, listPortfolioAdjustments } from "../api/portfolios";
 import { listStrategyConfigs } from "../api/strategies";
@@ -224,6 +225,10 @@ export function DashboardPage() {
           <RefreshCw aria-hidden="true" size={16} />
           시장 데이터 갱신
         </button>
+        <a className="button-link" href={getSqliteBackupUrl()}>
+          <Download aria-hidden="true" size={16} />
+          DB 백업
+        </a>
       </section>
 
       {loading ? <div className="notice">불러오는 중입니다.</div> : null}
