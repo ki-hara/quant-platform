@@ -2,6 +2,7 @@ export type DecimalString = string;
 export type ISODate = string;
 export type ISODateTime = string;
 export type StrategyMode = "safe" | "aggressive";
+export type LocOrderStatus = "pending" | "filled" | "unfilled";
 export type ModeConfirmationSource = "manual" | "recommendation_applied";
 export type ChartRange = "1m" | "3m" | "6m" | "1y";
 
@@ -276,6 +277,28 @@ export interface PortfolioAdjustmentCreateRequest {
   date: ISODate;
   cash_delta: DecimalString;
   capital_delta: DecimalString;
+  memo?: string | null;
+}
+
+export interface LocOrderRow {
+  id: number;
+  strategy_config_id: number;
+  order_date: ISODate;
+  symbol: string;
+  limit_price: DecimalString;
+  recommended_quantity: DecimalString;
+  mode: StrategyMode;
+  status: LocOrderStatus;
+  trade_id: number | null;
+  memo: string | null;
+  created_at: ISODateTime;
+  updated_at: ISODateTime;
+}
+
+export interface LocOrderFillRequest {
+  quantity: DecimalString;
+  price: DecimalString;
+  fee?: DecimalString;
   memo?: string | null;
 }
 

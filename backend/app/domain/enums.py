@@ -33,6 +33,12 @@ class TradeSource(StrEnum):
     CORRECTION = "correction"
 
 
+class LocOrderStatus(StrEnum):
+    PENDING = "pending"
+    FILLED = "filled"
+    UNFILLED = "unfilled"
+
+
 class BacktestStatus(StrEnum):
     PENDING = "pending"
     COMPLETED = "completed"

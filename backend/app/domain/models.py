@@ -13,6 +13,7 @@ from app.domain.enums import (
     StrategyMode,
     TradeSide,
     TradeSource,
+    LocOrderStatus,
 )
 
 
@@ -60,6 +61,7 @@ class StrategyConfig(Base):
     positions: Mapped[list["Position"]] = relationship(back_populates="strategy_config")
     trades: Mapped[list["Trade"]] = relationship(back_populates="strategy_config")
     portfolio_adjustments: Mapped[list["PortfolioAdjustment"]] = relationship(back_populates="strategy_config")
+    loc_orders: Mapped[list["LocOrder"]] = relationship(back_populates="strategy_config")
     mode_state: Mapped["StrategyModeState | None"] = relationship(
         back_populates="strategy_config",
         uselist=False,
@@ -231,6 +233,25 @@ class Trade(Base):
     )
 
     strategy_config: Mapped[StrategyConfig] = relationship(back_populates="trades")
+
+
+class LocOrder(Base):
+    __tablename__ = "loc_orders"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    strategy_config_id: Mapped[int] = mapped_column(ForeignKey("strategy_configs.id"), nullable=False, index=True)
+    order_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    symbol: Mapped[str] = mapped_column(String(32), nullable=False)
+    limit_price: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
+    recommended_quantity: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
+    mode: Mapped[StrategyMode] = mapped_column(enum_column(StrategyMode), nullable=False)
+    status: Mapped[LocOrderStatus] = mapped_column(enum_column(LocOrderStatus), nullable=False)
+    trade_id: Mapped[int | None] = mapped_column(ForeignKey("trades.id"))
+    memo: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    strategy_config: Mapped[StrategyConfig] = relationship(back_populates="loc_orders")
 
 
 class BacktestRun(Base):

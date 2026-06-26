@@ -2,6 +2,8 @@ import { apiGet, apiPost, apiUrl } from "./client";
 import type {
   ManualTradeRequest,
   ManualTradeResponse,
+  LocOrderFillRequest,
+  LocOrderRow,
   PositionRow,
   SignalExecutionRequest,
   SignalExecutionResponse,
@@ -14,6 +16,22 @@ export function listPositions(configId: number): Promise<PositionRow[]> {
 
 export function listTrades(configId: number): Promise<TradeRow[]> {
   return apiGet<TradeRow[]>(`/api/strategy-configs/${configId}/trades`);
+}
+
+export function listLocOrders(configId: number): Promise<LocOrderRow[]> {
+  return apiGet<LocOrderRow[]>(`/api/strategy-configs/${configId}/loc-orders`);
+}
+
+export function createLocOrder(configId: number): Promise<LocOrderRow> {
+  return apiPost<LocOrderRow>(`/api/strategy-configs/${configId}/loc-orders`, {});
+}
+
+export function fillLocOrder(orderId: number, request: LocOrderFillRequest): Promise<LocOrderRow> {
+  return apiPost<LocOrderRow>(`/api/loc-orders/${orderId}/fill`, request);
+}
+
+export function markLocOrderUnfilled(orderId: number): Promise<LocOrderRow> {
+  return apiPost<LocOrderRow>(`/api/loc-orders/${orderId}/unfilled`);
 }
 
 export function executeSignal(

@@ -1,15 +1,23 @@
 import { RefreshCw, Save, Trash2, Wand2 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { getDashboard } from "../api/dashboard";
-import { createPortfolioAdjustment, listPortfolioAdjustments } from "../api/portfolios";
 import { listStrategyConfigs } from "../api/strategies";
-import { deleteTrade, listPositions, listTrades, recordManualTrade } from "../api/trades";
+import {
+  createLocOrder,
+  deleteTrade,
+  fillLocOrder,
+  listLocOrders,
+  listPositions,
+  listTrades,
+  markLocOrderUnfilled,
+  recordManualTrade,
+} from "../api/trades";
 import { getDailyPlan } from "../api/tradingPlan";
 import { Table, type TableColumn } from "../components/Table";
 import type {
   DailyPlan,
   DashboardResponse,
-  PortfolioAdjustment,
+  LocOrderRow,
   PositionRow,
   StrategyConfig,
   TradeRow,
@@ -48,17 +56,10 @@ export function TradesPage() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [positions, setPositions] = useState<PositionRow[]>([]);
   const [trades, setTrades] = useState<TradeRow[]>([]);
+  const [locOrders, setLocOrders] = useState<LocOrderRow[]>([]);
   const [plan, setPlan] = useState<DailyPlan | null>(null);
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
-  const [adjustments, setAdjustments] = useState<PortfolioAdjustment[]>([]);
-  const [adjustBoth, setAdjustBoth] = useState(true);
-  const [adjustmentForm, setAdjustmentForm] = useState({
-    date: todayIso(),
-    amount: "",
-    cash_delta: "",
-    capital_delta: "",
-    memo: "",
-  });
+  const [selectedLocOrderId, setSelectedLocOrderId] = useState<number | null>(null);
   const [manualForm, setManualForm] = useState(initialManualForm);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -103,18 +104,18 @@ export function TradesPage() {
     try {
       setLoading(true);
       setError("");
-      const [positionRows, tradeRows, dailyPlan, dashboardData, adjustmentRows] = await Promise.all([
+      const [positionRows, tradeRows, dailyPlan, dashboardData, locOrderRows] = await Promise.all([
         listPositions(configId),
         listTrades(configId),
         getDailyPlan(configId),
         getDashboard(configId),
-        listPortfolioAdjustments(configId),
+        listLocOrders(configId),
       ]);
       setPositions(positionRows);
       setTrades(tradeRows);
       setPlan(dailyPlan);
       setDashboard(dashboardData);
-      setAdjustments(adjustmentRows);
+      setLocOrders(locOrderRows);
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
@@ -122,17 +123,33 @@ export function TradesPage() {
     }
   }
 
-  function fillBuyRecommendation() {
-    if (!plan || !plan.buy_available) return;
+  async function createRecommendedLocOrder() {
+    if (!selectedId || !plan?.buy_available) return;
+    try {
+      setSaving(true);
+      setError("");
+      setMessage("");
+      await createLocOrder(selectedId);
+      setMessage("LOC 주문 대기 상태로 저장했습니다.");
+      await loadRows(selectedId);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function fillLocOrderExecution(order: LocOrderRow) {
+    setSelectedLocOrderId(order.id);
     setManualForm((current) => ({
       ...current,
-      trade_date: plan.plan_date,
+      trade_date: order.order_date,
       side: "buy",
-      quantity: String(plan.LOC.quantity),
-      limit_price: plan.LOC.limit_price,
+      quantity: order.recommended_quantity,
+      limit_price: order.limit_price,
       price: "",
       fee: "0",
-      mode: plan.confirmed_mode,
+      mode: order.mode,
       position_id: "",
       sell_reason: "",
     }));
@@ -165,21 +182,30 @@ export function TradesPage() {
       setSaving(true);
       setError("");
       setMessage("");
-      await recordManualTrade({
-        config_id: selectedId,
-        trade_date: manualForm.trade_date,
-        side: manualForm.side,
-        quantity: manualForm.quantity,
-        limit_price: manualForm.side === "buy" && manualForm.limit_price ? manualForm.limit_price : null,
-        price: manualForm.price,
-        fee: estimateFee(manualForm.price, manualForm.quantity, dashboard?.config.fee_rate),
-        sell_reason: manualForm.side === "sell" ? manualForm.sell_reason.trim() || null : null,
-        source: manualForm.source,
-        mode: manualForm.side === "buy" ? manualForm.mode : undefined,
-        position_id: manualForm.side === "sell" ? Number(manualForm.position_id) : null,
-      });
+      if (manualForm.side === "buy" && selectedLocOrderId) {
+        await fillLocOrder(selectedLocOrderId, {
+          quantity: manualForm.quantity,
+          price: manualForm.price,
+          fee: estimateFee(manualForm.price, manualForm.quantity, dashboard?.config.fee_rate),
+        });
+      } else {
+        await recordManualTrade({
+          config_id: selectedId,
+          trade_date: manualForm.trade_date,
+          side: manualForm.side,
+          quantity: manualForm.quantity,
+          limit_price: manualForm.side === "buy" && manualForm.limit_price ? manualForm.limit_price : null,
+          price: manualForm.price,
+          fee: estimateFee(manualForm.price, manualForm.quantity, dashboard?.config.fee_rate),
+          sell_reason: manualForm.side === "sell" ? manualForm.sell_reason.trim() || null : null,
+          source: manualForm.source,
+          mode: manualForm.side === "buy" ? manualForm.mode : undefined,
+          position_id: manualForm.side === "sell" ? Number(manualForm.position_id) : null,
+        });
+      }
       setMessage("거래가 저장되었습니다.");
       setManualForm({ ...initialManualForm, trade_date: todayIso() });
+      setSelectedLocOrderId(null);
       await loadRows(selectedId);
     } catch (caught) {
       setError(errorMessage(caught));
@@ -204,23 +230,14 @@ export function TradesPage() {
     }
   }
 
-  async function handleAdjustmentSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function handleUnfilledLocOrder(orderId: number) {
     if (!selectedId) return;
-    const cashDelta = adjustBoth ? adjustmentForm.amount : adjustmentForm.cash_delta;
-    const capitalDelta = adjustBoth ? adjustmentForm.amount : adjustmentForm.capital_delta;
     try {
       setSaving(true);
       setError("");
       setMessage("");
-      await createPortfolioAdjustment(selectedId, {
-        date: adjustmentForm.date,
-        cash_delta: cashDelta || "0",
-        capital_delta: capitalDelta || "0",
-        memo: adjustmentForm.memo.trim() || null,
-      });
-      setMessage("자본 조정을 저장했습니다.");
-      setAdjustmentForm({ date: todayIso(), amount: "", cash_delta: "", capital_delta: "", memo: "" });
+      await markLocOrderUnfilled(orderId);
+      setMessage("LOC 주문을 미체결 처리했습니다.");
       await loadRows(selectedId);
     } catch (caught) {
       setError(errorMessage(caught));
@@ -303,8 +320,8 @@ export function TradesPage() {
                 </div>
               ) : null}
             </div>
-            <button type="button" onClick={fillBuyRecommendation} disabled={!plan?.buy_available}>
-              <Wand2 aria-hidden="true" size={16} /> 추천값 입력
+            <button type="button" onClick={createRecommendedLocOrder} disabled={!plan?.buy_available || saving}>
+              <Wand2 aria-hidden="true" size={16} /> LOC 주문 저장
             </button>
           </div>
 
@@ -336,6 +353,31 @@ export function TradesPage() {
               </div>
             </div>
           )}
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-header">
+          <div>
+            <h2>LOC 주문 상태</h2>
+            <span>실제 체결 후 수량과 매수가를 입력하면 보유 포지션으로 이동합니다.</span>
+          </div>
+        </div>
+        <div className="loc-order-list">
+          {locOrders.length === 0 ? <div className="empty-state">대기 중인 LOC 주문이 없습니다.</div> : null}
+          {locOrders.map((order) => (
+            <div className="loc-order-row" key={order.id}>
+              <span>{order.order_date}</span>
+              <strong>{formatMoney(order.limit_price)} × {formatMoney(order.recommended_quantity)}</strong>
+              <small>{translateLocOrderStatus(order.status)}</small>
+              {order.status === "pending" ? (
+                <div className="inline-actions">
+                  <button type="button" onClick={() => fillLocOrderExecution(order)}>체결 입력</button>
+                  <button type="button" onClick={() => handleUnfilledLocOrder(order.id)}>미체결</button>
+                </div>
+              ) : null}
+            </div>
+          ))}
         </div>
       </section>
 
@@ -486,75 +528,6 @@ export function TradesPage() {
       <section className="panel">
         <div className="panel-header">
           <div>
-            <h2>자본 조정</h2>
-            <span>현금 입출금과 전략 기준금 조정을 기록합니다.</span>
-          </div>
-        </div>
-        <form className="form-stack adjustment-form" onSubmit={handleAdjustmentSubmit}>
-          <label>
-            날짜
-            <input
-              type="date"
-              value={adjustmentForm.date}
-              onChange={(event) => setAdjustmentForm((current) => ({ ...current, date: event.target.value }))}
-            />
-          </label>
-          <label className="checkbox-row">
-            <input type="checkbox" checked={adjustBoth} onChange={(event) => setAdjustBoth(event.target.checked)} />
-            Cash와 Capital을 같은 금액만큼 조정
-          </label>
-          {adjustBoth ? (
-            <label>
-              조정 금액
-              <input
-                value={adjustmentForm.amount}
-                inputMode="decimal"
-                placeholder="입금은 양수, 출금은 음수"
-                onChange={(event) => setAdjustmentForm((current) => ({ ...current, amount: event.target.value }))}
-              />
-            </label>
-          ) : (
-            <>
-              <label>
-                Cash 조정액
-                <input
-                  value={adjustmentForm.cash_delta}
-                  inputMode="decimal"
-                  onChange={(event) => setAdjustmentForm((current) => ({ ...current, cash_delta: event.target.value }))}
-                />
-              </label>
-              <label>
-                Capital 조정액
-                <input
-                  value={adjustmentForm.capital_delta}
-                  inputMode="decimal"
-                  onChange={(event) => setAdjustmentForm((current) => ({ ...current, capital_delta: event.target.value }))}
-                />
-              </label>
-            </>
-          )}
-          <label>
-            메모
-            <input
-              value={adjustmentForm.memo}
-              onChange={(event) => setAdjustmentForm((current) => ({ ...current, memo: event.target.value }))}
-            />
-          </label>
-          <button type="submit" disabled={!selectedId || saving}>
-            <Save aria-hidden="true" size={16} /> 자본 조정 저장
-          </button>
-        </form>
-        {adjustments.length > 0 ? (
-          <div className="adjustment-summary">
-            최근 조정: {adjustments[0].date} / Cash {formatMoney(adjustments[0].cash_delta)} / Capital{" "}
-            {formatMoney(adjustments[0].capital_delta)}
-          </div>
-        ) : null}
-      </section>
-
-      <section className="panel">
-        <div className="panel-header">
-          <div>
             <h2>거래내역</h2>
             <span>체결 이력</span>
           </div>
@@ -603,6 +576,15 @@ function toSellSignalRow(row: Record<string, unknown>): SellSignalRow {
 function estimateFee(price: string, quantity: string, feeRate: string | undefined): string {
   const fee = Number(price) * Number(quantity) * Number(feeRate ?? "0") / 100;
   return Number.isFinite(fee) ? fee.toFixed(6) : "0";
+}
+
+function translateLocOrderStatus(status: string): string {
+  const labels: Record<string, string> = {
+    pending: "대기",
+    filled: "체결",
+    unfilled: "미체결",
+  };
+  return labels[status] ?? status;
 }
 
 function errorMessage(error: unknown): string {

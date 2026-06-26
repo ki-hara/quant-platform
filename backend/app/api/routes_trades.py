@@ -13,10 +13,12 @@ from app.dto.trades import (
     SignalExecutionResponseDto,
     TradeResponseDto,
 )
+from app.dto.loc_orders import LocOrderCreateDto, LocOrderFillDto, LocOrderResponseDto
 from app.infrastructure.repositories.portfolios import PositionRepository
 from app.infrastructure.repositories.strategies import StrategyConfigRepository
 from app.infrastructure.repositories.trades import TradeRepository
 from app.services.manual_trade_service import ManualTradeRequest, ManualTradeService
+from app.services.loc_order_service import LocOrderFillRequest, LocOrderService
 from app.services.signal_execution_service import (
     SignalExecutionRequest,
     SignalExecutionService,
@@ -49,6 +51,50 @@ def list_trades(config_id: int, session: SessionDep) -> list[object]:
 @router.get("/trades/{config_id}", response_model=list[TradeResponseDto])
 def list_trades_by_config(config_id: int, session: SessionDep) -> list[object]:
     return list_trades(config_id, session)
+
+
+@router.get("/strategy-configs/{config_id}/loc-orders", response_model=list[LocOrderResponseDto])
+def list_loc_orders(config_id: int, session: SessionDep) -> list[object]:
+    try:
+        return LocOrderService(session).list_orders(config_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.post(
+    "/strategy-configs/{config_id}/loc-orders",
+    response_model=LocOrderResponseDto,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_loc_order(config_id: int, request: LocOrderCreateDto, session: SessionDep) -> object:
+    try:
+        return LocOrderService(session).create_from_daily_plan(config_id, request.memo)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/loc-orders/{order_id}/fill", response_model=LocOrderResponseDto)
+def fill_loc_order(order_id: int, request: LocOrderFillDto, session: SessionDep) -> object:
+    try:
+        return LocOrderService(session).fill_order(
+            order_id,
+            LocOrderFillRequest(
+                quantity=request.quantity,
+                price=request.price,
+                fee=request.fee,
+                memo=request.memo,
+            ),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/loc-orders/{order_id}/unfilled", response_model=LocOrderResponseDto)
+def mark_loc_order_unfilled(order_id: int, session: SessionDep) -> object:
+    try:
+        return LocOrderService(session).mark_unfilled(order_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 @router.post(

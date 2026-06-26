@@ -101,3 +101,25 @@ def ensure_sqlite_schema() -> None:
                 """
             )
         )
+        connection.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS loc_orders (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    strategy_config_id INTEGER NOT NULL,
+                    order_date DATE NOT NULL,
+                    symbol VARCHAR(32) NOT NULL,
+                    limit_price NUMERIC(18, 6) NOT NULL,
+                    recommended_quantity NUMERIC(18, 6) NOT NULL,
+                    mode VARCHAR(10) NOT NULL,
+                    status VARCHAR(10) NOT NULL,
+                    trade_id INTEGER,
+                    memo VARCHAR(500),
+                    created_at DATETIME NOT NULL,
+                    updated_at DATETIME NOT NULL,
+                    FOREIGN KEY(strategy_config_id) REFERENCES strategy_configs (id),
+                    FOREIGN KEY(trade_id) REFERENCES trades (id)
+                )
+                """
+            )
+        )

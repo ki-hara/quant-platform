@@ -17,6 +17,12 @@ def latest_confirmed_market_date(symbol: str, now: datetime | None = None) -> da
     return _previous_weekday(basis)
 
 
+def current_market_date(symbol: str, now: datetime | None = None) -> date:
+    current = now or datetime.now(ZoneInfo("Asia/Seoul"))
+    zone = ZoneInfo("Asia/Seoul") if _is_korean_symbol(symbol) else ZoneInfo("America/New_York")
+    return current.astimezone(zone).date()
+
+
 def _is_korean_symbol(symbol: str) -> bool:
     upper = symbol.upper()
     return upper.endswith(".KS") or upper.endswith(".KQ")
