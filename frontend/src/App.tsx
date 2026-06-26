@@ -1,15 +1,16 @@
-import { Activity, BarChart3, BriefcaseBusiness, Settings2 } from "lucide-react";
+import { Activity, BarChart3, BriefcaseBusiness, Settings2, WalletCards } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { getMe } from "./api/auth";
 import { setAuthToken } from "./api/client";
 import { BacktestPage } from "./pages/BacktestPage";
+import { CapitalAdjustmentPage } from "./pages/CapitalAdjustmentPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { LoginPage } from "./pages/LoginPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { TradesPage } from "./pages/TradesPage";
 import type { AuthOwner } from "./types/api";
 
-type TabKey = "dashboard" | "backtest" | "settings" | "trades";
+type TabKey = "dashboard" | "backtest" | "settings" | "trades" | "capital";
 
 interface TabItem {
   key: TabKey;
@@ -20,6 +21,7 @@ interface TabItem {
 const tabs: TabItem[] = [
   { key: "dashboard", label: "대시보드", icon: Activity },
   { key: "backtest", label: "백테스트", icon: BarChart3 },
+  { key: "capital", label: "자본 조정", icon: WalletCards },
   { key: "settings", label: "전략 설정", icon: Settings2 },
   { key: "trades", label: "거래/포지션", icon: BriefcaseBusiness },
 ];
@@ -87,20 +89,19 @@ function App() {
           </div>
           <div className="user-chip">
             <span>{owner.name}</span>
-            <button
-              type="button"
-              onClick={() => {
-                setAuthToken(null);
-                setOwner(null);
-              }}
-            >
-              로그아웃
-            </button>
           </div>
         </header>
 
-        {activeTab === "dashboard" && <DashboardPage />}
+        {activeTab === "dashboard" && (
+          <DashboardPage
+            onLogout={() => {
+              setAuthToken(null);
+              setOwner(null);
+            }}
+          />
+        )}
         {activeTab === "backtest" && <BacktestPage />}
+        {activeTab === "capital" && <CapitalAdjustmentPage />}
         {activeTab === "settings" && <SettingsPage />}
         {activeTab === "trades" && <TradesPage />}
       </main>

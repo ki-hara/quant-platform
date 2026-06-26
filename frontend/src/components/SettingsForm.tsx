@@ -162,7 +162,7 @@ export function SettingsForm({
           <label>
             초기 투자금
             <input value={common.initial_capital} onChange={(event) => setCommon((current) => ({ ...current, initial_capital: event.target.value }))} readOnly={Boolean(editingConfig)} required />
-            {editingConfig ? <small className="form-status">생성 후 변경은 거래/포지션 탭의 자본 조정에서 기록합니다.</small> : null}
+            {editingConfig ? <small className="form-status">생성 후 변경은 자본 조정 탭에서 기록합니다.</small> : null}
           </label>
           <label>
             거래 수수료율 (%)

@@ -1,8 +1,7 @@
-import { Download, RefreshCw, Save } from "lucide-react";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { Download, LogOut, RefreshCw } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { getSqliteBackupUrl } from "../api/admin";
 import { getDashboard } from "../api/dashboard";
-import { createPortfolioAdjustment, listPortfolioAdjustments } from "../api/portfolios";
 import { listStrategyConfigs } from "../api/strategies";
 import { listTrades } from "../api/trades";
 import {
@@ -23,7 +22,6 @@ import type {
   DailyPlan,
   DashboardResponse,
   ModeRecommendation,
-  PortfolioAdjustment,
   PositionRow,
   StrategyConfig,
   StrategyMode,
@@ -32,7 +30,6 @@ import type {
 } from "../types/api";
 import {
   formatMoney,
-  todayIso,
   translateMode,
   translateReason,
   translateSide,
@@ -40,7 +37,11 @@ import {
   translateStatus,
 } from "../utils/format";
 
-export function DashboardPage() {
+interface DashboardPageProps {
+  onLogout: () => void;
+}
+
+export function DashboardPage({ onLogout }: DashboardPageProps) {
   const [configs, setConfigs] = useState<StrategyConfig[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
@@ -48,15 +49,6 @@ export function DashboardPage() {
   const [mode, setMode] = useState<ModeRecommendation | null>(null);
   const [chart, setChart] = useState<TradingChart | null>(null);
   const [recentTrades, setRecentTrades] = useState<TradeRow[]>([]);
-  const [adjustments, setAdjustments] = useState<PortfolioAdjustment[]>([]);
-  const [adjustBoth, setAdjustBoth] = useState(true);
-  const [adjustmentForm, setAdjustmentForm] = useState({
-    date: todayIso(),
-    amount: "",
-    cash_delta: "",
-    capital_delta: "",
-    memo: "",
-  });
   const [range, setRange] = useState<ChartRange>("6m");
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
@@ -94,20 +86,18 @@ export function DashboardPage() {
     try {
       setLoading(true);
       setError("");
-      const [dashboardData, planData, modeData, chartData, trades, adjustmentRows] = await Promise.all([
+      const [dashboardData, planData, modeData, chartData, trades] = await Promise.all([
         getDashboard(configId),
         getDailyPlan(configId),
         getModeRecommendation(configId),
         getChart(configId, chartRange),
         listTrades(configId),
-        listPortfolioAdjustments(configId),
       ]);
       setDashboard(dashboardData);
       setPlan(planData);
       setMode(modeData);
       setChart(chartData);
       setRecentTrades(trades.slice(0, 8));
-      setAdjustments(adjustmentRows);
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
@@ -167,31 +157,6 @@ export function DashboardPage() {
     }
   }
 
-  async function handleAdjustmentSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!selectedId) return;
-    const cashDelta = adjustBoth ? adjustmentForm.amount : adjustmentForm.cash_delta;
-    const capitalDelta = adjustBoth ? adjustmentForm.amount : adjustmentForm.capital_delta;
-    try {
-      setWorking(true);
-      setError("");
-      setMessage("");
-      await createPortfolioAdjustment(selectedId, {
-        date: adjustmentForm.date,
-        cash_delta: cashDelta || "0",
-        capital_delta: capitalDelta || "0",
-        memo: adjustmentForm.memo.trim() || null,
-      });
-      setMessage("자본 조정을 저장했습니다.");
-      setAdjustmentForm({ date: todayIso(), amount: "", cash_delta: "", capital_delta: "", memo: "" });
-      await loadOperationalData(selectedId, range);
-    } catch (caught) {
-      setError(errorMessage(caught));
-    } finally {
-      setWorking(false);
-    }
-  }
-
   const metrics = useMemo(() => {
     const portfolio = dashboard?.portfolio;
     const symbol = dashboard?.config.symbol;
@@ -229,6 +194,10 @@ export function DashboardPage() {
           <Download aria-hidden="true" size={16} />
           DB 백업
         </a>
+        <button type="button" onClick={onLogout}>
+          <LogOut aria-hidden="true" size={16} />
+          로그아웃
+        </button>
       </section>
 
       {loading ? <div className="notice">불러오는 중입니다.</div> : null}
@@ -237,75 +206,6 @@ export function DashboardPage() {
       {!loading && configs.length === 0 ? <div className="empty-state">전략 설정 데이터 없음</div> : null}
 
       <MetricStrip metrics={metrics} />
-
-      <section className="panel">
-        <div className="panel-header">
-          <div>
-            <h2>자본 조정</h2>
-            <span>현금 입출금과 전략 기준금 조정을 기록합니다.</span>
-          </div>
-        </div>
-        <form className="form-stack adjustment-form" onSubmit={handleAdjustmentSubmit}>
-          <label>
-            날짜
-            <input
-              type="date"
-              value={adjustmentForm.date}
-              onChange={(event) => setAdjustmentForm((current) => ({ ...current, date: event.target.value }))}
-            />
-          </label>
-          <label className="checkbox-row">
-            <input type="checkbox" checked={adjustBoth} onChange={(event) => setAdjustBoth(event.target.checked)} />
-            Cash와 Capital을 같은 금액만큼 조정
-          </label>
-          {adjustBoth ? (
-            <label>
-              조정 금액
-              <input
-                value={adjustmentForm.amount}
-                inputMode="decimal"
-                placeholder="입금은 양수, 출금은 음수"
-                onChange={(event) => setAdjustmentForm((current) => ({ ...current, amount: event.target.value }))}
-              />
-            </label>
-          ) : (
-            <>
-              <label>
-                Cash 조정액
-                <input
-                  value={adjustmentForm.cash_delta}
-                  inputMode="decimal"
-                  onChange={(event) => setAdjustmentForm((current) => ({ ...current, cash_delta: event.target.value }))}
-                />
-              </label>
-              <label>
-                Capital 조정액
-                <input
-                  value={adjustmentForm.capital_delta}
-                  inputMode="decimal"
-                  onChange={(event) => setAdjustmentForm((current) => ({ ...current, capital_delta: event.target.value }))}
-                />
-              </label>
-            </>
-          )}
-          <label>
-            메모
-            <input
-              value={adjustmentForm.memo}
-              onChange={(event) => setAdjustmentForm((current) => ({ ...current, memo: event.target.value }))}
-            />
-          </label>
-          <button type="submit" disabled={!selectedId || working}>
-            <Save aria-hidden="true" size={16} /> 자본 조정 저장
-          </button>
-        </form>
-        {adjustments.length > 0 ? (
-          <div className="adjustment-summary">
-            최근 조정: {adjustments[0].date} / Cash {formatMoney(adjustments[0].cash_delta)} / Capital{" "}
-            {formatMoney(adjustments[0].capital_delta)}
-          </div>
-        ) : null}
-      </section>
 
       <div className="dashboard-top-grid">
         <DailyPlanPanel plan={plan} />
