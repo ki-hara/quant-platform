@@ -17,7 +17,7 @@ export function currencyForSymbol(symbol: string | null | undefined): "USD" | "K
   if (!symbol) return null;
   const normalized = String(symbol).trim().toUpperCase();
   const compact = normalized.replace(/^(KRX|KOSPI|KOSDAQ):/, "").replace(/^A/, "");
-  if (compact.endsWith(".KS") || compact.endsWith(".KQ") || /^\d{6}$/.test(compact)) return "KRW";
+  if (compact.endsWith(".KS") || compact.endsWith(".KQ") || /^[0-9A-Z]{6}$/.test(compact)) return "KRW";
   return "USD";
 }
 
