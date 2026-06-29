@@ -2,6 +2,28 @@ export function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+export function marketDateIso(symbol: string | null | undefined, now = new Date()): string {
+  return dateInTimeZone(now, isKoreanSymbol(symbol) ? "Asia/Seoul" : "America/New_York");
+}
+
+export function isKoreanSymbol(symbol: string | null | undefined): boolean {
+  if (!symbol) return false;
+  const normalized = String(symbol).trim().toUpperCase();
+  const compact = normalized.replace(/^(KRX|KOSPI|KOSDAQ):/, "").replace(/^A/, "");
+  return compact.endsWith(".KS") || compact.endsWith(".KQ") || /^[0-9A-Z]{6}$/.test(compact);
+}
+
+function dateInTimeZone(value: Date, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(value);
+  const part = (type: string) => parts.find((item) => item.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
 export function formatMoney(value: string | number | null | undefined, symbol?: string | null): string {
   if (value === null || value === undefined || value === "") return "-";
   const number = Number(value);
@@ -15,9 +37,7 @@ export function formatMoney(value: string | number | null | undefined, symbol?: 
 
 export function currencyForSymbol(symbol: string | null | undefined): "USD" | "KRW" | null {
   if (!symbol) return null;
-  const normalized = String(symbol).trim().toUpperCase();
-  const compact = normalized.replace(/^(KRX|KOSPI|KOSDAQ):/, "").replace(/^A/, "");
-  if (compact.endsWith(".KS") || compact.endsWith(".KQ") || /^[0-9A-Z]{6}$/.test(compact)) return "KRW";
+  if (isKoreanSymbol(symbol)) return "KRW";
   return "USD";
 }
 

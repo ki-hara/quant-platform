@@ -1,3 +1,4 @@
+import re
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
@@ -24,8 +25,9 @@ def current_market_date(symbol: str, now: datetime | None = None) -> date:
 
 
 def _is_korean_symbol(symbol: str) -> bool:
-    upper = symbol.upper()
-    return upper.endswith(".KS") or upper.endswith(".KQ")
+    normalized = symbol.strip().upper()
+    compact = normalized.removeprefix("KRX:").removeprefix("KOSPI:").removeprefix("KOSDAQ:").removeprefix("A")
+    return compact.endswith(".KS") or compact.endswith(".KQ") or bool(re.fullmatch(r"[0-9A-Z]{6}", compact))
 
 
 def _previous_weekday(value: date) -> date:

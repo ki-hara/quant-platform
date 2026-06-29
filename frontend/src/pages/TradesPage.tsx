@@ -21,25 +21,27 @@ import type {
 } from "../types/api";
 import {
   formatMoney,
-  todayIso,
+  marketDateIso,
   translateCode,
   translateMode,
   translateReason,
   translateSide,
 } from "../utils/format";
 
-const initialManualForm = {
-  trade_date: todayIso(),
-  side: "buy" as "buy" | "sell",
-  quantity: "",
-  limit_price: "",
-  price: "",
-  fee: "0",
-  source: "manual" as "manual" | "correction",
-  mode: "safe",
-  position_id: "",
-  sell_reason: "",
-};
+function initialManualForm(symbol?: string | null) {
+  return {
+    trade_date: marketDateIso(symbol),
+    side: "buy" as "buy" | "sell",
+    quantity: "",
+    limit_price: "",
+    price: "",
+    fee: "0",
+    source: "manual" as "manual" | "correction",
+    mode: "safe",
+    position_id: "",
+    sell_reason: "",
+  };
+}
 
 interface SellSignalRow {
   position_id?: number;
@@ -62,7 +64,7 @@ export function TradesPage() {
   const [trades, setTrades] = useState<TradeRow[]>([]);
   const [plan, setPlan] = useState<DailyPlan | null>(null);
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
-  const [manualForm, setManualForm] = useState(initialManualForm);
+  const [manualForm, setManualForm] = useState(() => initialManualForm());
   const [positionEdits, setPositionEdits] = useState<Record<number, { quantity: string; buy_price: string; status: string }>>({});
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -173,7 +175,7 @@ export function TradesPage() {
     const fee = estimateFee(price, quantity, dashboard?.config.fee_rate);
     setManualForm((current) => ({
       ...current,
-      trade_date: todayIso(),
+      trade_date: marketDateIso(selectedSymbol),
       side: "sell",
       quantity,
       limit_price: "",
@@ -203,7 +205,7 @@ export function TradesPage() {
           mode: manualForm.mode,
         });
         setMessage("매수 주문이 보유 포지션에 대기 상태로 등록되었습니다.");
-        setManualForm({ ...initialManualForm, trade_date: todayIso() });
+        setManualForm(initialManualForm(selectedSymbol));
         await loadRows(selectedId);
         return;
       }
@@ -221,7 +223,7 @@ export function TradesPage() {
         position_id: Number(manualForm.position_id),
       });
       setMessage("거래가 저장되었습니다.");
-      setManualForm({ ...initialManualForm, trade_date: todayIso() });
+      setManualForm(initialManualForm(selectedSymbol));
       await loadRows(selectedId);
     } catch (caught) {
       setError(errorMessage(caught));

@@ -1,7 +1,7 @@
 import { Play, RotateCcw } from "lucide-react";
 import { FormEvent, useMemo, useState } from "react";
 import type { DashboardResponse, PositionRow, SignalExecutionRequest } from "../types/api";
-import { formatPercent, todayIso, translateMode, translateReason } from "../utils/format";
+import { formatPercent, marketDateIso, translateMode, translateReason } from "../utils/format";
 
 interface SignalPanelProps {
   dashboard: DashboardResponse | null;
@@ -20,21 +20,23 @@ interface ActionableSellSignal extends SellSignalRow {
   position: PositionRow | undefined;
 }
 
-const defaultForm = {
-  side: "buy" as "buy" | "sell",
-  trade_date: todayIso(),
-  quantity: "1",
-  price: "",
-  fee: "0",
-  mode: "safe",
-  position_id: "",
-  sell_reason: "",
-  sell_reason_code: "",
-  sell_reason_touched: false,
-};
+function defaultForm(symbol?: string | null) {
+  return {
+    side: "buy" as "buy" | "sell",
+    trade_date: marketDateIso(symbol),
+    quantity: "1",
+    price: "",
+    fee: "0",
+    mode: "safe",
+    position_id: "",
+    sell_reason: "",
+    sell_reason_code: "",
+    sell_reason_touched: false,
+  };
+}
 
 export function SignalPanel({ dashboard, onExecute, executing = false }: SignalPanelProps) {
-  const [form, setForm] = useState(defaultForm);
+  const [form, setForm] = useState(() => defaultForm());
   const [expanded, setExpanded] = useState(false);
 
   const positions = dashboard?.open_positions ?? [];
@@ -99,7 +101,7 @@ export function SignalPanel({ dashboard, onExecute, executing = false }: SignalP
           className="icon-button"
           type="button"
           title="입력 초기화"
-          onClick={() => setForm({ ...defaultForm, trade_date: todayIso(), price: latestClose })}
+          onClick={() => setForm({ ...defaultForm(dashboard?.config.symbol), price: latestClose })}
         >
           <RotateCcw aria-hidden="true" size={16} />
         </button>

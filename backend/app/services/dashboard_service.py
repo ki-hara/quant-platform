@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from sqlalchemy.orm import Session
@@ -166,4 +166,20 @@ def _sell_urgency(reason: str | None, days_to_deadline: int) -> str:
 
 
 def _trading_days_held(prices: list[MarketPrice], buy_date: date, basis_date: date) -> int:
-    return sum(1 for price in prices if buy_date < price.date <= basis_date)
+    if basis_date <= buy_date:
+        return 0
+    available_dates = sorted({price.date for price in prices if buy_date < price.date <= basis_date})
+    if not available_dates:
+        return _weekday_count(buy_date, basis_date)
+    latest_available_date = available_dates[-1]
+    return len(available_dates) + _weekday_count(latest_available_date, basis_date)
+
+
+def _weekday_count(start_exclusive: date, end_inclusive: date) -> int:
+    count = 0
+    current = start_exclusive + timedelta(days=1)
+    while current <= end_inclusive:
+        if current.weekday() < 5:
+            count += 1
+        current += timedelta(days=1)
+    return count
