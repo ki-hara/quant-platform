@@ -27,13 +27,18 @@ class _OpenPosition:
     quantity: int
     mode: StrategyMode
     buy_fee: Decimal
+    buy_trading_day_index: int
 
-    def as_strategy_position(self) -> StrategyPosition:
+    def as_strategy_position(self, current_trading_day_index: int | None = None) -> StrategyPosition:
+        holding_days = None
+        if current_trading_day_index is not None:
+            holding_days = max(current_trading_day_index - self.buy_trading_day_index, 0)
         return StrategyPosition(
             buy_date=self.buy_date,
             buy_price=self.buy_price,
             quantity=self.quantity,
             mode=self.mode,
+            holding_days=holding_days,
         )
 
 
@@ -126,6 +131,7 @@ class BacktestEngine:
                                 quantity=size.quantity,
                                 mode=mode,
                                 buy_fee=fee,
+                                buy_trading_day_index=index,
                             )
                             open_positions.append(position)
                             trades.append(
@@ -212,7 +218,10 @@ class BacktestEngine:
             current_close=price.close,
             capital=capital,
             cash=cash,
-            open_positions=[position.as_strategy_position() for position in open_positions],
+            open_positions=[
+                position.as_strategy_position(trading_day_index)
+                for position in open_positions
+            ],
             settings=settings,
             trading_day_index=trading_day_index,
             effective_mode=effective_mode,
@@ -278,7 +287,8 @@ class BacktestEngine:
         realized_today = Decimal("0")
 
         for position in positions:
-            signal = strategy.should_sell(context, position.as_strategy_position())
+            strategy_position = position.as_strategy_position(context.trading_day_index)
+            signal = strategy.should_sell(context, strategy_position)
             if not signal.should_sell:
                 remaining_positions.append(position)
                 continue
@@ -289,7 +299,9 @@ class BacktestEngine:
             net_proceeds = transaction_amount - fee
             cost_basis = position.buy_price * Decimal(position.quantity) + position.buy_fee
             realized_pnl = net_proceeds - cost_basis
-            holding_days = (context.current_date - position.buy_date).days
+            holding_days = strategy_position.holding_days
+            if holding_days is None:
+                holding_days = max((context.current_date - position.buy_date).days, 0)
 
             cash += net_proceeds
             cumulative_fees += fee

@@ -12,6 +12,7 @@ class StrategyPosition:
     buy_price: Decimal
     quantity: int
     mode: StrategyMode
+    holding_days: int | None = None
 
 
 @dataclass(frozen=True)

@@ -470,7 +470,7 @@ export function TradesPage() {
                     </select>
                   </label>
                   <div className={`holding-status ${holdingStatusClass(sellSignal)}`}>
-                    <span>보유기간</span>
+                    <span>보유 거래일</span>
                     <strong>{holdingStatusText(sellSignal)}</strong>
                   </div>
                   <button type="button" onClick={() => handleSavePosition(position.id)} disabled={saving}>
@@ -664,9 +664,9 @@ function toSellSignalRow(row: Record<string, unknown>): SellSignalRow {
 
 function deadlineText(days: number | null | undefined): string {
   if (days === null || days === undefined) return "기한 -";
-  if (days < 0) return `${Math.abs(days)}일 초과`;
+  if (days < 0) return `${Math.abs(days)}거래일 초과`;
   if (days === 0) return "오늘 만료";
-  return `${days}일 남음`;
+  return `${days}거래일 남음`;
 }
 
 function sellCardClass(signal: SellSignalRow): string {
@@ -682,8 +682,8 @@ function holdingStatusText(signal: SellSignalRow | undefined): string {
     ? "-"
     : signal.holding_days === 0
       ? "당일 체결"
-      : `${signal.holding_days}일`;
-  const max = signal.max_holding_days === null || signal.max_holding_days === undefined ? "-" : `${signal.max_holding_days}일`;
+      : `${signal.holding_days}거래일`;
+  const max = signal.max_holding_days === null || signal.max_holding_days === undefined ? "-" : `${signal.max_holding_days}거래일`;
   return `${prefix} / ${max} / ${deadlineText(signal.days_to_deadline)}`;
 }
 
@@ -751,7 +751,7 @@ function isFilledCandidate(signal: SellSignalRow): boolean {
 }
 
 function sellOrderDeadlineText(signal: SellSignalRow): string {
-  if (isExpiredSellOrder(signal)) return "보유기간 초과: 시장가 전량 매도 필요";
+  if (isExpiredSellOrder(signal)) return "보유 거래일 초과: 시장가 전량 매도 필요";
   return deadlineText(signal.days_to_deadline);
 }
 

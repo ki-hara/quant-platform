@@ -86,6 +86,7 @@ class DashboardService:
 
         current_price = prices[-1]
         previous_price = prices[-2]
+        holding_basis_date = current_market_date(config.symbol)
         context = StrategyContext(
             current_date=current_price.date,
             previous_close=previous_price.close,
@@ -98,6 +99,7 @@ class DashboardService:
                     buy_price=position.buy_price,
                     quantity=int(position.quantity),
                     mode=position.mode,
+                    holding_days=_trading_days_held(prices, position.buy_date, holding_basis_date),
                 )
                 for position in open_positions
             ],
@@ -107,19 +109,19 @@ class DashboardService:
         strategy = registry.create(config.strategy_type)
         buy_signal = strategy.should_buy(context)
         sell_signals = []
-        holding_basis_date = current_market_date(config.symbol)
         for position in open_positions:
             if position.status != PositionStatus.OPEN:
                 continue
+            holding_days = _trading_days_held(prices, position.buy_date, holding_basis_date)
             strategy_position = StrategyPosition(
                 buy_date=position.buy_date,
                 buy_price=position.buy_price,
                 quantity=int(position.quantity),
                 mode=position.mode,
+                holding_days=holding_days,
             )
             signal = strategy.should_sell(context, strategy_position)
             mode_settings = config.settings_json[position.mode.value]
-            holding_days = max((holding_basis_date - position.buy_date).days, 0)
             max_holding_days = int(mode_settings["max_holding_days"])
             days_to_deadline = max_holding_days - holding_days
             sell_limit_price = (
@@ -161,3 +163,7 @@ def _sell_urgency(reason: str | None, days_to_deadline: int) -> str:
     if days_to_deadline <= 2:
         return "near_deadline"
     return "normal"
+
+
+def _trading_days_held(prices: list[MarketPrice], buy_date: date, basis_date: date) -> int:
+    return sum(1 for price in prices if buy_date < price.date <= basis_date)

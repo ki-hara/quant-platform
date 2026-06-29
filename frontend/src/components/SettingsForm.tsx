@@ -317,11 +317,11 @@ function labelFor(key: string): string {
     "capital_update.interval": "투자금 갱신 거래일 간격",
     "capital_update.period": "투자금 갱신 달력 주기",
     "safe.split_count": "안전모드 분할수",
-    "safe.max_holding_days": "안전모드 최대 보유기간",
+    "safe.max_holding_days": "안전모드 최대 보유 거래일",
     "safe.buy_threshold_percent": "안전모드 매수조건 (%)",
     "safe.sell_threshold_percent": "안전모드 매도조건 (%)",
     "aggressive.split_count": "공세모드 분할수",
-    "aggressive.max_holding_days": "공세모드 최대 보유기간",
+    "aggressive.max_holding_days": "공세모드 최대 보유 거래일",
     "aggressive.buy_threshold_percent": "공세모드 매수조건 (%)",
     "aggressive.sell_threshold_percent": "공세모드 매도조건 (%)",
   };

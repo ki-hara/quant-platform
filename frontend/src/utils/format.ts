@@ -56,7 +56,7 @@ export function translateReason(reason: string | null | undefined): string {
     quantity_zero: "계산 수량 0",
     insufficient_cash: "현금 부족",
     profit_target: "목표 수익 도달",
-    max_holding_period: "최대 보유 기간 도달",
+    max_holding_period: "최대 보유 거래일 도달",
     sell_condition_waiting: "매도 조건 대기",
     portfolio_unavailable: "포트폴리오 데이터 없음",
     market_data_unavailable: "시장 데이터 부족",

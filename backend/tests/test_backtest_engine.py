@@ -258,6 +258,31 @@ def test_loc_buy_does_not_fill_when_only_low_touches_limit() -> None:
     assert result.trades == []
 
 
+def test_max_holding_period_uses_trading_days_not_calendar_days() -> None:
+    settings = DynamicWaveStrategy.default_settings()
+    settings["safe"] = {
+        **settings["safe"],
+        "max_holding_days": 2,
+        "sell_threshold_percent": 99,
+    }
+    prices = [
+        _price(date(2026, 1, 1), "100"),
+        _price(date(2026, 1, 2), "100"),
+        _price(date(2026, 1, 5), "100"),
+    ]
+
+    result = BacktestEngine().run(
+        strategy=DynamicWaveStrategy(),
+        prices=prices,
+        initial_capital=Decimal("1000"),
+        fee_rate=Decimal("0"),
+        slippage_rate=Decimal("0"),
+        settings=settings,
+    )
+
+    assert [trade.side for trade in result.trades] == ["BUY", "BUY"]
+
+
 def _price(day: date, close: str = "100") -> OhlcvDto:
     return OhlcvDto(
         symbol="TEST",
