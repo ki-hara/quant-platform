@@ -1,174 +1,48 @@
 # 퀀트 전략 연구 및 매매 지원 플랫폼
 
-FastAPI 백엔드와 React/Vite 프론트엔드로 구성된 전략 연구, 백테스트, 수동 매매 지원 플랫폼입니다. 자동매매 주문 전송은 구현하지 않습니다. 사용자는 매일 시장 데이터를 갱신하고, 오늘의 LOC 종가 지정가 매수 가격과 수량, 매도 후보, 보유 포지션, 거래내역을 확인한 뒤 실제 증권사 주문은 직접 처리합니다.
-
-## 주요 구성
-
-- Backend: FastAPI, SQLAlchemy, SQLite
-- Frontend: React, TypeScript, Vite
-- Chart: Lightweight Charts
-- Market Data: FinanceDataReader 기반 Yahoo Finance/시장 데이터 조회
-- Architecture: Repository Pattern, Service Layer, DTO, Domain Layer, Strategy Engine, Backtest Engine 분리
-
-## 로컬 실행
-
-백엔드:
-
-```powershell
-cd backend
-uv sync --extra dev
-uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
-```
-
-프론트엔드:
-
-```powershell
-cd frontend
-npm install
-npm run dev -- --host 127.0.0.1 --port 5173
-```
-
-접속 주소:
-
-- Backend health: `http://127.0.0.1:8000/api/health`
-- Frontend: `http://127.0.0.1:5173`
-
 ## 운영 흐름
 
-1. 대시보드에서 전략 설정을 선택합니다.
-2. `시장 데이터 갱신`을 눌러 투자 종목과 QQQ RSI 기준 데이터를 명시적으로 갱신합니다.
-3. `운용 모드`에서 QQQ 주간 RSI 추천 모드와 확정 모드를 비교합니다.
+1. 대시보드에서 운용할 전략 설정을 선택합니다.
+2. `시장 데이터 갱신`으로 투자 종목과 RSI 기준 종목 데이터를 최신화합니다.
+3. 운용 모드에서 주간 RSI 추천 모드와 현재 확정 모드를 확인합니다.
 4. 추천을 그대로 쓸 경우 `추천 적용`을 누르고, 판단이 다르면 안전/공세 모드를 직접 확정합니다.
-5. `오늘의 LOC 매수`에서 전일 종가 기준 LOC 지정가, 매수 수량, 필요 현금, 차단 사유를 확인합니다.
-6. 실제 증권사에는 사용자가 직접 LOC 또는 종가 기준 주문을 넣습니다.
-7. 실제 체결 결과가 시스템 계산과 다르면 거래/포지션 화면에서 수동 또는 보정 거래로 기록합니다.
+5. `오늘의 LOC 매수 주문표`에서 오늘 증권사에 입력할 LOC 매수가와 주문 수량을 확인합니다.
+6. 실제 증권사에는 사용자가 직접 LOC 주문을 입력합니다.
+7. 매수 주문이 체결되면 거래/포지션 화면의 보유 포지션에서 실제 수량과 체결가를 등록 또는 수정합니다.
+8. 미체결된 주문은 보유 포지션에서 상태를 `미체결`로 변경해 제거합니다.
+9. `오늘의 LOC 매도 주문표`에서 보유 포지션별 매도 주문 대상을 확인합니다.
+10. 보유기간이 만기되었거나 초과된 포지션은 `종가매도` 대상으로 보고, 증권사에서 종가 기준 매도 처리합니다.
+11. 실제 매도 체결 후 거래/포지션 화면에서 매도 거래를 기록합니다.
+12. 입출금이나 전략 기준 투자금 변경이 있으면 `자본 조정`에서 Cash와 Capital을 조정합니다.
 
-## LOC 매수 기준
+## 매수 기준
 
-- LOC 지정가 = 전일 종가 × `(1 + 확정 모드 매수조건 / 100)`
-- 1회 배정금 = Capital ÷ 확정 모드 분할수
-- 수량 = `floor(1회 배정금 ÷ LOC 지정가)`
-- 수수료는 필요 현금과 백테스트 결과에 반영됩니다.
-- 백테스트에서는 당일 종가가 LOC 지정가 이하일 때만 체결되며, 체결가는 당일 종가입니다. 당일 저가가 지정가 아래로 내려가도 종가가 지정가보다 높으면 체결되지 않습니다.
+LOC 매수 기준가는 전일 종가와 확정 모드의 매수조건으로 계산합니다.
 
-## RSI 모드
-
-현재 Dynamic Wave 전략의 모드 추천은 QQQ 주간 RSI(14)를 사용합니다.
-
-- RSI는 휴장일을 제외한 주간 마지막 종가 기준으로 계산합니다.
-- 이번 주와 저번 주 RSI를 비교해 다음 주 적용 모드를 추천합니다.
-- 추천 모드는 자동으로 확정되지 않습니다. 사용자가 직접 적용하거나 안전/공세를 수동 선택해야 합니다.
-
-## 백테스트
-
-백테스트 요청은 다음 모드 정책을 지원합니다.
-
-- `fixed_safe`: 전체 기간 안전 모드
-- `fixed_aggressive`: 전체 기간 공세 모드
-- `weekly_rsi`: 주간 QQQ RSI 추천을 다음 주부터 적용
-
-일별 스냅샷 CSV에는 자산, 현금, 누적 수수료와 함께 적용 모드와 규칙 코드가 포함됩니다.
-
-## Docker Compose
-
-```powershell
-docker compose up --build
+```text
+LOC 지정가 = 전일 종가 × (1 + 확정 모드 매수조건 / 100)
+1회 배정금 = Capital ÷ 확정 모드 분할수
 ```
 
-- Backend: `http://localhost:8000`
-- Frontend: `http://localhost:5173`
-- SQLite 볼륨: `quant-data`
+현재 백테스트는 두 가지 매수 수량 계산 방식을 지원합니다.
 
-중지:
-
-```powershell
-docker compose down
+```text
+정량매수 = floor(1회 배정금 ÷ LOC 지정가)
+정액매수 = floor(1회 배정금 ÷ 실제 체결가)
 ```
 
-볼륨까지 삭제:
+정량매수는 LOC 주문가를 기준으로 주문 수량을 미리 고정합니다. 예를 들어 1회 배정금이 100이고 LOC 지정가가 30이면 실제 체결가가 25여도 3주만 매수한 것으로 처리합니다.
 
-```powershell
-docker compose down -v
-```
+정액매수는 실제 체결가 기준으로 1회 배정금을 최대한 채웁니다. 예를 들어 1회 배정금이 100이고 실제 체결가가 25이면 4주, 20이면 5주를 매수한 것으로 처리합니다.
 
-## 저비용 Cloud Run 배포
-
-소규모 테스트 배포는 루트 `Dockerfile` 하나로 프론트엔드와 백엔드를 묶어 Cloud Run에 올립니다.
-
-- React 빌드 결과물은 FastAPI가 정적 파일로 제공합니다.
-- SQLite DB 기본 경로는 `/data/quant_platform.db`입니다.
-- 대시보드의 `DB 백업` 버튼으로 현재 SQLite 스냅샷을 다운로드할 수 있습니다.
-- Cloud Run 컨테이너 파일시스템은 영구 저장소로 보장되지 않으므로, 테스트 기간에는 DB 백업을 자주 내려받아 보관해야 합니다.
-
-로컬에서 단일 컨테이너 빌드 확인:
-
-```powershell
-docker build -t quant-platform .
-docker run --rm -p 8080:8080 -v quant-data:/data quant-platform
-```
-
-접속:
-
-- App: `http://localhost:8080`
-- Health: `http://localhost:8080/api/health`
-
-Google Cloud Run 배포 예시:
-
-```powershell
-gcloud config set project YOUR_PROJECT_ID
-gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com
-gcloud run deploy quant-platform --source . --region asia-northeast3 --allow-unauthenticated
-```
-
-운영 환경변수:
-
-- `QUANT_DATABASE_URL`: 기본값 `sqlite:////data/quant_platform.db`
-- `QUANT_STATIC_DIR`: 기본값 `/app/static`
-- `QUANT_DEFAULT_OWNER_ID`: 기본값 `default`
-- `QUANT_DEFAULT_OWNER_PIN`: 기본값 `0000`
-- `QUANT_AUTH_SECRET`: 로그인 토큰 서명 키. 배포 환경에서는 반드시 변경하세요.
-- `QUANT_MARKET_DATA_PROVIDER`: 기본값 `finance_data_reader`
-
-주의: 이 구성은 최저비용 테스트용입니다. 여러 명이 지속적으로 사용하거나 데이터 손실 허용 범위가 낮아지면 PostgreSQL 전환을 권장합니다.
-
-## 무료 Oracle Cloud Always Free 배포
-
-완전 무료에 가깝게 테스트하려면 Oracle Cloud Always Free VM에 Docker 단일 컨테이너로 배포합니다.
-
-- 앱: Docker 단일 컨테이너
-- DB: VM 디스크의 SQLite
-- 데이터 경로: `/opt/quant-platform/data`
-- 서버 실행 파일: `deploy/oci/docker-compose.yml`
-- 서버 초기 설정: `deploy/oci/setup-ubuntu.sh`
-- 서버 백업 스크립트: `deploy/oci/backup-sqlite.sh`
-
-자세한 절차는 [Oracle Cloud Always Free 배포 가이드](docs/deployment/oracle-always-free.md)를 참고하세요.
-
-## 사용자 로그인
-
-앱은 사용자별 전략/거래/포지션 데이터를 분리합니다.
-
-- 기본 사용자: `default`
-- 기본 PIN: `0000`
-- 배포 환경에서는 `QUANT_DEFAULT_OWNER_PIN`, `QUANT_AUTH_SECRET`를 변경하세요.
-- 새 사용자는 로그인 화면의 `새 사용자 만들기`에서 추가할 수 있습니다.
-
-## 검증
-
-백엔드 테스트:
-
-```powershell
-cd backend
-uv run pytest -q
-```
-
-프론트엔드 빌드:
-
-```powershell
-cd frontend
-npm run build
-```
+실전 매수 주문표는 LOC 주문 특성상 기본 LOC 주문과 추가 LOC 주문을 나누어 제안할 수 있습니다. 앱에 주문을 저장할 때는 주문 수량과 LOC 주문가를 기록하고, 실제 체결 후 보유 포지션에서 체결 수량과 체결가를 확정합니다.
 
 ## 주의
 
-이 플랫폼은 매매 의사결정을 돕는 도구입니다. 증권사 주문, 자동 체결, 계좌 연동 기능은 제공하지 않습니다. 시장 데이터 제공자의 지연, 누락, 수정 데이터 가능성을 고려해 실제 주문 전에는 증권사 화면의 가격과 체결 상태를 확인해야 합니다.
+이 플랫폼은 매매 의사결정을 돕는 도구이며, 증권사 주문 전송이나 자동매매 기능을 제공하지 않습니다.
+
+시장 데이터는 지연, 누락, 수정 가능성이 있으므로 실제 주문 전에는 반드시 증권사 화면의 가격과 체결 상태를 확인해야 합니다.
+
+Cloud Run처럼 컨테이너 파일시스템이 유지되지 않는 환경에서는 SQLite 데이터가 초기화될 수 있습니다. 운영 테스트는 Oracle VM처럼 디스크가 유지되는 환경에서 실행하거나, DB 백업을 주기적으로 내려받아 보관해야 합니다.
+
+배포 환경에서는 기본 PIN과 인증 토큰 서명 키를 반드시 변경해야 합니다.
