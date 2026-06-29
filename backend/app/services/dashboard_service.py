@@ -5,13 +5,15 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.domain.enums import PositionStatus
-from app.domain.models import LivePortfolio, MarketPrice, Position, StrategyConfig
+from app.domain.enums import PositionStatus, TradeSide
+from app.domain.models import LivePortfolio, MarketPrice, PortfolioAdjustment, Position, StrategyConfig
 from app.infrastructure.repositories.market_data import MarketPriceRepository
 from app.infrastructure.repositories.portfolios import PortfolioRepository, PositionRepository
 from app.infrastructure.repositories.strategies import StrategyConfigRepository
+from app.infrastructure.repositories.trades import TradeRepository
 from app.services.market_session_service import current_market_date
 from app.strategy_engine.context import StrategyContext, StrategyPosition
+from app.strategy_engine.loc import MONEY_QUANT
 from app.strategy_engine.registry import registry
 
 
@@ -32,14 +34,17 @@ class DashboardDto:
     latest_price: MarketPrice | None
     total_asset: Decimal | None
     signals: DashboardSignalDto
+    capital_update: dict | None = None
 
 
 class DashboardService:
     def __init__(self, session: Session, market_data_provider: str | None = None) -> None:
+        self.session = session
         self.configs = StrategyConfigRepository(session)
         self.portfolios = PortfolioRepository(session)
         self.positions = PositionRepository(session)
         self.market_prices = MarketPriceRepository(session)
+        self.trades = TradeRepository(session)
         self.market_data_provider = market_data_provider or settings.market_data_provider
 
     def get_dashboard(self, config_id: int) -> DashboardDto:
@@ -53,6 +58,10 @@ class DashboardService:
             date.today(),
         )
         latest_price = latest_prices[-1] if latest_prices else None
+        capital_update = None
+        if portfolio is not None:
+            capital_update = self._auto_apply_capital_update(config, portfolio, latest_prices)
+            portfolio = self.portfolios.get_by_config(config_id) or portfolio
 
         total_asset = None
         if portfolio is not None and latest_price is not None:
@@ -70,6 +79,7 @@ class DashboardService:
             latest_price=latest_price,
             total_asset=total_asset,
             signals=signals,
+            capital_update=capital_update,
         )
 
     def _signals(
@@ -154,6 +164,169 @@ class DashboardService:
             raise ValueError(f"Strategy config not found: {config_id}")
         return config
 
+    def _auto_apply_capital_update(
+        self,
+        config: StrategyConfig,
+        portfolio: LivePortfolio,
+        prices: list[MarketPrice],
+    ) -> dict | None:
+        interval = _capital_update_interval(config.settings_json)
+        if interval <= 0 or not prices:
+            return None
+
+        trading_dates = sorted({price.date for price in prices})
+        latest_date = trading_dates[-1]
+        last_update = self._last_strategy_capital_update(config.id)
+        all_trades = self.trades.list_by_strategy_config(config.id)
+        first_trade = all_trades[0] if all_trades else None
+        if last_update is None and first_trade is None:
+            return _capital_update_status(
+                status="waiting",
+                interval=interval,
+                elapsed=0,
+                last_update_date=None,
+                next_update_date=None,
+                period_start_date=None,
+                period_end_date=None,
+                realized_pnl=Decimal("0"),
+                capital_delta=Decimal("0"),
+                projected_capital=portfolio.capital,
+                message="거래 기록 없음",
+            )
+
+        basis_date = last_update.date if last_update is not None else first_trade.date
+        period_start_date = basis_date
+        future_dates = [day for day in trading_dates if day > basis_date]
+        elapsed = len([day for day in future_dates if day <= latest_date])
+        if len(future_dates) < interval:
+            next_update_date = future_dates[-1] if future_dates else None
+            return _capital_update_status(
+                status="waiting",
+                interval=interval,
+                elapsed=elapsed,
+                last_update_date=last_update.date if last_update else None,
+                next_update_date=next_update_date,
+                period_start_date=period_start_date,
+                period_end_date=None,
+                realized_pnl=self._period_realized_pnl(config.id, period_start_date, latest_date, include_start=last_update is None),
+                capital_delta=Decimal("0"),
+                projected_capital=portfolio.capital,
+                message="시장 데이터 부족",
+            )
+
+        period_end_date = future_dates[interval - 1]
+        realized_pnl = self._period_realized_pnl(
+            config.id,
+            period_start_date,
+            period_end_date,
+            include_start=last_update is None,
+        )
+        capital_delta = _capital_delta(config.settings_json, realized_pnl)
+        if latest_date < period_end_date:
+            return _capital_update_status(
+                status="waiting",
+                interval=interval,
+                elapsed=elapsed,
+                last_update_date=last_update.date if last_update else None,
+                next_update_date=period_end_date,
+                period_start_date=period_start_date,
+                period_end_date=period_end_date,
+                realized_pnl=realized_pnl,
+                capital_delta=capital_delta,
+                projected_capital=(portfolio.capital + capital_delta).quantize(MONEY_QUANT),
+            )
+
+        existing = self._strategy_capital_update_for_period(config.id, period_start_date, period_end_date)
+        if existing is not None:
+            return _capital_update_status(
+                status="applied",
+                interval=interval,
+                elapsed=interval,
+                last_update_date=existing.date,
+                next_update_date=None,
+                period_start_date=period_start_date,
+                period_end_date=period_end_date,
+                realized_pnl=realized_pnl,
+                capital_delta=existing.capital_delta,
+                projected_capital=portfolio.capital,
+                applied=True,
+                message="이미 갱신됨",
+            )
+
+        portfolio.capital = (portfolio.capital + capital_delta).quantize(MONEY_QUANT)
+        adjustment = PortfolioAdjustment(
+            strategy_config_id=config.id,
+            date=period_end_date,
+            cash_delta=Decimal("0").quantize(MONEY_QUANT),
+            capital_delta=capital_delta.quantize(MONEY_QUANT),
+            memo=(
+                f"전략 주기 자동 갱신 / 실현손익 {realized_pnl.quantize(MONEY_QUANT)} / "
+                f"기간 {period_start_date.isoformat()}~{period_end_date.isoformat()}"
+            ),
+            source="strategy_capital_update",
+            period_start_date=period_start_date,
+            period_end_date=period_end_date,
+        )
+        self.session.add(adjustment)
+        self.session.add(portfolio)
+        self.session.commit()
+        return _capital_update_status(
+            status="applied",
+            interval=interval,
+            elapsed=interval,
+            last_update_date=period_end_date,
+            next_update_date=None,
+            period_start_date=period_start_date,
+            period_end_date=period_end_date,
+            realized_pnl=realized_pnl,
+            capital_delta=capital_delta,
+            projected_capital=portfolio.capital,
+            applied=True,
+            message="자동 갱신됨",
+        )
+
+    def _last_strategy_capital_update(self, config_id: int) -> PortfolioAdjustment | None:
+        adjustments = [
+            adjustment
+            for adjustment in self.session.query(PortfolioAdjustment)
+            .filter(PortfolioAdjustment.strategy_config_id == config_id)
+            .filter(PortfolioAdjustment.source == "strategy_capital_update")
+            .order_by(PortfolioAdjustment.date.desc(), PortfolioAdjustment.id.desc())
+            .limit(1)
+        ]
+        return adjustments[0] if adjustments else None
+
+    def _strategy_capital_update_for_period(
+        self,
+        config_id: int,
+        period_start_date: date,
+        period_end_date: date,
+    ) -> PortfolioAdjustment | None:
+        return (
+            self.session.query(PortfolioAdjustment)
+            .filter(PortfolioAdjustment.strategy_config_id == config_id)
+            .filter(PortfolioAdjustment.source == "strategy_capital_update")
+            .filter(PortfolioAdjustment.period_start_date == period_start_date)
+            .filter(PortfolioAdjustment.period_end_date == period_end_date)
+            .one_or_none()
+        )
+
+    def _period_realized_pnl(
+        self,
+        config_id: int,
+        start_date: date,
+        end_date: date,
+        include_start: bool,
+    ) -> Decimal:
+        total = Decimal("0")
+        for trade in self.trades.list_in_range(config_id, start_date, end_date):
+            if trade.side != TradeSide.SELL:
+                continue
+            if not include_start and trade.date <= start_date:
+                continue
+            total += trade.realized_pnl
+        return total.quantize(MONEY_QUANT)
+
 
 def _sell_urgency(reason: str | None, days_to_deadline: int) -> str:
     if reason == "max_holding_period":
@@ -163,6 +336,55 @@ def _sell_urgency(reason: str | None, days_to_deadline: int) -> str:
     if days_to_deadline <= 2:
         return "near_deadline"
     return "normal"
+
+
+def _capital_update_interval(settings: dict) -> int:
+    capital_update = settings.get("capital_update") if isinstance(settings, dict) else None
+    if isinstance(capital_update, dict):
+        value = capital_update.get("interval")
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return 0
+    return 0
+
+
+def _capital_delta(settings: dict, realized_pnl: Decimal) -> Decimal:
+    if realized_pnl >= 0:
+        rate = Decimal(str(settings.get("profit_compounding_rate", "0"))) / Decimal("100")
+        return (realized_pnl * rate).quantize(MONEY_QUANT)
+    rate = Decimal(str(settings.get("loss_compounding_rate", "0"))) / Decimal("100")
+    return (realized_pnl * rate).quantize(MONEY_QUANT)
+
+
+def _capital_update_status(
+    status: str,
+    interval: int,
+    elapsed: int,
+    last_update_date: date | None,
+    next_update_date: date | None,
+    period_start_date: date | None,
+    period_end_date: date | None,
+    realized_pnl: Decimal,
+    capital_delta: Decimal,
+    projected_capital: Decimal | None,
+    applied: bool = False,
+    message: str | None = None,
+) -> dict:
+    return {
+        "status": status,
+        "interval": interval,
+        "elapsed_trading_days": elapsed,
+        "last_update_date": last_update_date,
+        "next_update_date": next_update_date,
+        "period_start_date": period_start_date,
+        "period_end_date": period_end_date,
+        "realized_pnl": realized_pnl.quantize(MONEY_QUANT),
+        "capital_delta": capital_delta.quantize(MONEY_QUANT),
+        "projected_capital": projected_capital.quantize(MONEY_QUANT) if projected_capital is not None else None,
+        "applied": applied,
+        "message": message,
+    }
 
 
 def _trading_days_held(prices: list[MarketPrice], buy_date: date, basis_date: date) -> int:

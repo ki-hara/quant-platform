@@ -176,6 +176,9 @@ class PortfolioAdjustment(Base):
     cash_delta: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
     capital_delta: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
     memo: Mapped[str | None] = mapped_column(String(500))
+    source: Mapped[str] = mapped_column(String(64), default="manual", nullable=False)
+    period_start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    period_end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
     strategy_config: Mapped[StrategyConfig] = relationship(back_populates="portfolio_adjustments")

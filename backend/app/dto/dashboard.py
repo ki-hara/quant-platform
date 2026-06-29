@@ -51,6 +51,21 @@ class DashboardSignalResponseDto(BaseModel):
     reason: str | None = None
 
 
+class CapitalUpdateStatusDto(BaseModel):
+    status: str
+    interval: int
+    elapsed_trading_days: int
+    last_update_date: date | None
+    next_update_date: date | None
+    period_start_date: date | None
+    period_end_date: date | None
+    realized_pnl: Decimal
+    capital_delta: Decimal
+    projected_capital: Decimal | None
+    applied: bool = False
+    message: str | None = None
+
+
 class DashboardResponseDto(BaseModel):
     config: StrategyConfigResponseDto
     portfolio: PortfolioDto | None
@@ -58,3 +73,4 @@ class DashboardResponseDto(BaseModel):
     latest_price: MarketPriceDto | None
     total_asset: Decimal | None
     signals: DashboardSignalResponseDto
+    capital_update: CapitalUpdateStatusDto | None = None

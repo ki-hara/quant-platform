@@ -130,6 +130,18 @@ def ensure_sqlite_schema() -> None:
                 """
             )
         )
+        portfolio_adjustment_columns = {
+            row[1]
+            for row in connection.execute(text("PRAGMA table_info(portfolio_adjustments)"))
+        }
+        if "source" not in portfolio_adjustment_columns:
+            connection.execute(
+                text("ALTER TABLE portfolio_adjustments ADD COLUMN source VARCHAR(64) NOT NULL DEFAULT 'manual'")
+            )
+        if "period_start_date" not in portfolio_adjustment_columns:
+            connection.execute(text("ALTER TABLE portfolio_adjustments ADD COLUMN period_start_date DATE"))
+        if "period_end_date" not in portfolio_adjustment_columns:
+            connection.execute(text("ALTER TABLE portfolio_adjustments ADD COLUMN period_end_date DATE"))
         owner_columns = {
             row[1]
             for row in connection.execute(text("PRAGMA table_info(owners)"))

@@ -99,6 +99,22 @@ export interface DashboardResponse {
   latest_price: MarketPriceRow | null;
   total_asset: DecimalString | null;
   signals: DashboardSignal;
+  capital_update: CapitalUpdateStatus | null;
+}
+
+export interface CapitalUpdateStatus {
+  status: string;
+  interval: number;
+  elapsed_trading_days: number;
+  last_update_date: ISODate | null;
+  next_update_date: ISODate | null;
+  period_start_date: ISODate | null;
+  period_end_date: ISODate | null;
+  realized_pnl: DecimalString;
+  capital_delta: DecimalString;
+  projected_capital: DecimalString | null;
+  applied: boolean;
+  message: string | null;
 }
 
 export interface TradeRow {
@@ -285,6 +301,9 @@ export interface PortfolioAdjustment {
   cash_delta: DecimalString;
   capital_delta: DecimalString;
   memo: string | null;
+  source: string;
+  period_start_date: ISODate | null;
+  period_end_date: ISODate | null;
   created_at: ISODateTime;
 }
 

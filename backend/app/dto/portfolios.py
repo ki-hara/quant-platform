@@ -20,4 +20,7 @@ class PortfolioAdjustmentResponseDto(BaseModel):
     cash_delta: Decimal
     capital_delta: Decimal
     memo: str | None
+    source: str
+    period_start_date: date | None
+    period_end_date: date | None
     created_at: datetime

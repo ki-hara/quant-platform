@@ -20,6 +20,7 @@ import { Table, type TableColumn } from "../components/Table";
 import type {
   ChartRange,
   DailyPlan,
+  CapitalUpdateStatus,
   DashboardResponse,
   ModeRecommendation,
   PositionRow,
@@ -212,6 +213,7 @@ export function DashboardPage() {
           onSetMode={handleSetMode}
           onApplyRecommendation={handleApplyRecommendation}
         />
+        <CapitalUpdatePanel status={dashboard?.capital_update ?? null} symbol={dashboard?.config.symbol} />
       </div>
 
       <MarketChart chart={chart} range={range} onRangeChange={setRange} />
@@ -240,6 +242,66 @@ export function DashboardPage() {
       </div>
     </div>
   );
+}
+
+function CapitalUpdatePanel({
+  status,
+  symbol,
+}: {
+  status: CapitalUpdateStatus | null;
+  symbol?: string | null;
+}) {
+  const tone = status?.applied ? "is-ok" : status?.status === "waiting" ? "is-muted" : "is-blocked";
+  const title = status?.applied ? "자동 갱신됨" : status?.status === "waiting" ? "대기" : "확인 필요";
+  return (
+    <section className="panel capital-update-panel">
+      <div className="panel-header">
+        <div>
+          <h2>Capital 갱신</h2>
+          <span>{status?.message ?? "거래 기록 기준 자동 갱신"}</span>
+        </div>
+        <span className={`status-pill compact ${tone}`}>{title}</span>
+      </div>
+
+      <dl className="detail-grid">
+        <div>
+          <dt>경과 거래일</dt>
+          <dd>{status ? `${status.elapsed_trading_days} / ${status.interval}` : "-"}</dd>
+        </div>
+        <div>
+          <dt>다음 갱신일</dt>
+          <dd>{status?.next_update_date ?? (status?.applied ? "계산 대기" : "-")}</dd>
+        </div>
+        <div>
+          <dt>반영 기간</dt>
+          <dd>
+            {status?.period_start_date && status?.period_end_date
+              ? `${status.period_start_date} ~ ${status.period_end_date}`
+              : "-"}
+          </dd>
+        </div>
+        <div>
+          <dt>누적 실현손익</dt>
+          <dd className={signedValueClass(status?.realized_pnl)}>{formatMoney(status?.realized_pnl, symbol)}</dd>
+        </div>
+        <div>
+          <dt>Capital 변화</dt>
+          <dd className={signedValueClass(status?.capital_delta)}>{formatMoney(status?.capital_delta, symbol)}</dd>
+        </div>
+        <div>
+          <dt>예상 Capital</dt>
+          <dd>{formatMoney(status?.projected_capital, symbol)}</dd>
+        </div>
+      </dl>
+    </section>
+  );
+}
+
+function signedValueClass(value: string | number | null | undefined): string | undefined {
+  const number = Number(value ?? 0);
+  if (number > 0) return "value-positive";
+  if (number < 0) return "value-negative";
+  return undefined;
 }
 
 const positionColumns: TableColumn<PositionRow>[] = [

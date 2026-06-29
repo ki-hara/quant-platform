@@ -286,7 +286,7 @@ h2 {
 
 .dashboard-top-grid {
   display: grid;
-  grid-template-columns: minmax(320px, 1fr) minmax(320px, 0.9fr);
+  grid-template-columns: repeat(3, minmax(280px, 1fr));
   gap: 14px;
 }
 

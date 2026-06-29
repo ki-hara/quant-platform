@@ -12,7 +12,9 @@ from app.db.base import Base
 from app.db.seed import seed_default_owner
 from app.db.session import get_session
 from app.dto.market_data import OhlcvDto
+from app.domain.enums import TradeSide, TradeSource
 from app.infrastructure.repositories.market_data import MarketPriceRepository
+from app.infrastructure.repositories.trades import TradeRepository
 from app.main import create_app
 from app.strategy_engine.dynamic_wave import DynamicWaveStrategy
 
@@ -43,6 +45,9 @@ def api_client() -> Generator[TestClient, None, None]:
     app.state.test_engine = engine
     app.dependency_overrides[get_session] = override_session
     client = TestClient(app)
+    login_response = client.post("/api/auth/login", json={"owner_id": "default", "pin": "0000"})
+    assert login_response.status_code == 200
+    client.headers.update({"Authorization": f"Bearer {login_response.json()['token']}"})
     yield client
     client.close()
     app.dependency_overrides.clear()
@@ -230,6 +235,84 @@ def test_get_dashboard_reads_cached_prices_with_configured_provider_key(api_clie
     assert body["latest_price"]["close"] == "102.000000"
     assert body["total_asset"] == "1000.000000"
     assert body["signals"]["available"] is True
+
+
+def test_get_dashboard_auto_applies_capital_update_once(api_client: TestClient) -> None:
+    settings = DynamicWaveStrategy.default_settings()
+    settings["capital_update"] = {"type": "trading_days", "interval": 10, "period": "monthly"}
+    settings["profit_compounding_rate"] = 60
+    create_response = api_client.post(
+        "/api/strategy-configs",
+        json={
+            "name": "Auto Capital",
+            "strategy_type": "dynamic_wave",
+            "symbol": "TEST",
+            "initial_capital": "1000",
+            "fee_rate": "0.001",
+            "slippage_rate": "0",
+            "settings_json": settings,
+        },
+    )
+    config_id = create_response.json()["id"]
+    trading_days = [
+        date(2026, 1, 1),
+        date(2026, 1, 2),
+        date(2026, 1, 5),
+        date(2026, 1, 6),
+        date(2026, 1, 7),
+        date(2026, 1, 8),
+        date(2026, 1, 9),
+        date(2026, 1, 12),
+        date(2026, 1, 13),
+        date(2026, 1, 14),
+        date(2026, 1, 15),
+        date(2026, 1, 16),
+    ]
+
+    with Session(api_client.app.state.test_engine) as session:
+        MarketPriceRepository(session).upsert_prices(
+            "finance_data_reader",
+            [
+                OhlcvDto(
+                    symbol="TEST",
+                    date=day,
+                    open=Decimal("100"),
+                    high=Decimal("100"),
+                    low=Decimal("100"),
+                    close=Decimal("100"),
+                    volume=1000,
+                )
+                for day in trading_days
+            ],
+        )
+        TradeRepository(session).create(
+            strategy_config_id=config_id,
+            trade_date=date(2026, 1, 2),
+            side=TradeSide.SELL,
+            quantity=Decimal("1"),
+            price=Decimal("100"),
+            fee=Decimal("0"),
+            realized_pnl=Decimal("100"),
+            sell_reason="profit_target",
+            source=TradeSource.MANUAL,
+        )
+        session.commit()
+
+    first = api_client.get(f"/api/dashboard/{config_id}")
+    second = api_client.get(f"/api/dashboard/{config_id}")
+    adjustments = api_client.get(f"/api/strategy-configs/{config_id}/portfolio-adjustments")
+
+    assert first.status_code == 200
+    assert first.json()["portfolio"]["capital"] == "1060.000000"
+    assert first.json()["capital_update"]["applied"] is True
+    assert first.json()["capital_update"]["capital_delta"] == "60.000000"
+    assert second.json()["portfolio"]["capital"] == "1060.000000"
+    auto_adjustments = [
+        row for row in adjustments.json() if row["source"] == "strategy_capital_update"
+    ]
+    assert len(auto_adjustments) == 1
+    assert auto_adjustments[0]["period_start_date"] == "2026-01-02"
+    assert auto_adjustments[0]["period_end_date"] == "2026-01-16"
 
 
 def test_positions_missing_config_returns_404(api_client: TestClient) -> None:
