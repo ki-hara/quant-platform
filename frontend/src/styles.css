@@ -857,6 +857,57 @@ button:disabled,
   gap: 10px;
 }
 
+.order-board-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(280px, 1fr));
+  gap: 10px;
+  align-items: start;
+}
+
+.order-board-card {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fbfcfa;
+  padding: 12px;
+}
+
+.order-board-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #eef0eb;
+}
+
+.order-board-header strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 14px;
+}
+
+.order-board-body {
+  min-width: 0;
+}
+
+.order-board-body p,
+.order-board-body small {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.order-board-actions {
+  display: flex;
+  justify-content: flex-end;
+  border-top: 1px solid #eef0eb;
+  padding-top: 10px;
+}
+
 .recommendation-card {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -894,7 +945,6 @@ button:disabled,
 .loc-order-list {
   display: grid;
   gap: 5px;
-  margin-top: 9px;
 }
 
 .loc-order-row {
@@ -902,8 +952,11 @@ button:disabled,
   grid-template-columns: minmax(72px, auto) minmax(112px, 1fr) minmax(128px, auto);
   gap: 8px 12px;
   align-items: center;
-  border-top: 1px solid #eef0eb;
-  padding-top: 5px;
+  min-height: 34px;
+  border: 1px solid #eef0eb;
+  border-radius: 6px;
+  background: #ffffff;
+  padding: 6px 8px;
   min-width: 0;
 }
 
@@ -1016,6 +1069,7 @@ button:disabled,
 
   .page-grid,
   .dashboard-top-grid,
+  .order-board-grid,
   .toolbar {
     grid-template-columns: 1fr;
   }
@@ -1040,6 +1094,14 @@ button:disabled,
   }
 
   .recommendation-card > button {
+    width: 100%;
+  }
+
+  .order-board-actions {
+    justify-content: stretch;
+  }
+
+  .order-board-actions button {
     width: 100%;
   }
 

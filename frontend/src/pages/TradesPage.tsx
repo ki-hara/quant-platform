@@ -318,20 +318,25 @@ export function TradesPage() {
       <section className="panel">
         <div className="panel-header">
           <div>
-            <h2>전략 추천 거래</h2>
-            <span>추천값을 실제 체결 입력 폼에 기본값으로 채웁니다.</span>
+            <h2>오늘 주문표</h2>
+            <span>증권사에 입력할 LOC 주문을 확인합니다.</span>
           </div>
         </div>
-        <div className="recommendation-grid">
-          <div className="recommendation-card">
-            <div>
-              <span className="signal-label">오늘의 LOC 매수 주문표</span>
+        <div className="order-board-grid">
+          <div className="order-board-card">
+            <div className="order-board-header">
+              <div>
+                <span className="signal-label">오늘의 LOC 매수 주문표</span>
+                <strong>{plan?.LOC.orders?.length ? `${Math.min(plan.LOC.orders.length, 5)}건` : "주문 없음"}</strong>
+              </div>
+            </div>
+            <div className="order-board-body">
               {plan?.LOC.orders?.length ? (
                 <div className="loc-order-list">
                   {plan.LOC.orders.slice(0, 5).map((order) => (
                     <div className="loc-order-row" key={order.step}>
                       <span>{order.step}차 LOC</span>
-                      <strong>LOC {formatMoney(order.limit_price)}</strong>
+                      <strong>LOC {formatMoney(order.limit_price, plan.symbol)}</strong>
                       <small>주문 {order.quantity}주 / 누적 {order.cumulative_quantity}주</small>
                     </div>
                   ))}
@@ -340,16 +345,22 @@ export function TradesPage() {
                 <small>{translateReason(plan?.LOC.blocking_reason) || "오늘 입력할 LOC 매수 주문이 없습니다."}</small>
               )}
             </div>
-            <button type="button" onClick={fillBuyRecommendation} disabled={!plan?.buy_available || saving}>
-              <Wand2 aria-hidden="true" size={16} /> 매수 주문 입력
-            </button>
+            <div className="order-board-actions">
+              <button type="button" onClick={fillBuyRecommendation} disabled={!plan?.buy_available || saving}>
+                <Wand2 aria-hidden="true" size={16} /> 매수 주문 입력
+              </button>
+            </div>
           </div>
 
           {sellOrderRows.length > 0 ? (
-            <div className="recommendation-card recommendation-list-card">
-              <div>
-                <span className="signal-label">오늘의 LOC 매도 주문표</span>
-                <strong>{sellOrderRows.length}건</strong>
+            <div className="order-board-card">
+              <div className="order-board-header">
+                <div>
+                  <span className="signal-label">오늘의 LOC 매도 주문표</span>
+                  <strong>{sellOrderRows.length}건</strong>
+                </div>
+              </div>
+              <div className="order-board-body">
                 <div className="sell-order-list">
                   {sellOrderRows.map((signal) => (
                     <div className={`sell-order-row ${sellCardClass(signal)}`} key={signal.position?.id}>
@@ -365,10 +376,14 @@ export function TradesPage() {
               </div>
             </div>
           ) : (
-            <div className="recommendation-card">
-              <div>
-                <span className="signal-label">오늘의 LOC 매도 주문표</span>
-                <strong>주문 없음</strong>
+            <div className="order-board-card">
+              <div className="order-board-header">
+                <div>
+                  <span className="signal-label">오늘의 LOC 매도 주문표</span>
+                  <strong>주문 없음</strong>
+                </div>
+              </div>
+              <div className="order-board-body">
                 <p>체결된 보유 포지션이 없습니다.</p>
               </div>
             </div>
