@@ -15,8 +15,9 @@ export function formatMoney(value: string | number | null | undefined, symbol?: 
 
 export function currencyForSymbol(symbol: string | null | undefined): "USD" | "KRW" | null {
   if (!symbol) return null;
-  const normalized = symbol.toUpperCase();
-  if (normalized.endsWith(".KS") || normalized.endsWith(".KQ") || /^\d{6}$/.test(normalized)) return "KRW";
+  const normalized = String(symbol).trim().toUpperCase();
+  const compact = normalized.replace(/^(KRX|KOSPI|KOSDAQ):/, "").replace(/^A/, "");
+  if (compact.endsWith(".KS") || compact.endsWith(".KQ") || /^\d{6}$/.test(compact)) return "KRW";
   return "USD";
 }
 
