@@ -27,6 +27,7 @@ import {
   translateReason,
   translateSide,
 } from "../utils/format";
+import { rememberStrategyConfigId, resolveRememberedStrategyConfigId } from "../utils/strategySelection";
 
 function initialManualForm(symbol?: string | null) {
   return {
@@ -110,7 +111,7 @@ export function TradesPage() {
     listStrategyConfigs()
       .then((rows) => {
         setConfigs(rows);
-        setSelectedId(rows[0]?.id ?? null);
+        setSelectedId(resolveRememberedStrategyConfigId(rows));
       })
       .catch((caught) => setError(errorMessage(caught)));
   }, []);
@@ -302,7 +303,14 @@ export function TradesPage() {
       <section className="toolbar">
         <label>
           전략 설정
-          <select value={selectedId ?? ""} onChange={(event) => setSelectedId(Number(event.target.value) || null)}>
+          <select
+            value={selectedId ?? ""}
+            onChange={(event) => {
+              const nextId = Number(event.target.value) || null;
+              rememberStrategyConfigId(nextId);
+              setSelectedId(nextId);
+            }}
+          >
             {configs.map((config) => (
               <option key={config.id} value={config.id}>
                 {config.name} / {config.symbol}
@@ -473,7 +481,7 @@ export function TradesPage() {
                   </label>
                   <div className={`holding-status ${holdingStatusClass(sellSignal)}`}>
                     <span>보유 거래일</span>
-                    <strong>{holdingStatusText(sellSignal)}</strong>
+                    <div className="holding-status-badges">{holdingStatusBadges(sellSignal)}</div>
                   </div>
                   <button type="button" onClick={() => handleSavePosition(position.id)} disabled={saving}>
                     {position.status.toLowerCase() === "pending" ? "등록" : "수정"}
@@ -664,11 +672,10 @@ function toSellSignalRow(row: Record<string, unknown>): SellSignalRow {
   };
 }
 
-function deadlineText(days: number | null | undefined): string {
-  if (days === null || days === undefined) return "기한 -";
-  if (days < 0) return `${Math.abs(days)}거래일 초과`;
-  if (days === 0) return "오늘 만료";
-  return `${days}거래일 남음`;
+function deadlineActionText(days: number | null | undefined): string {
+  if (days === null || days === undefined) return "D-";
+  if (days <= 0) return "종가매도";
+  return `D-${days}`;
 }
 
 function sellCardClass(signal: SellSignalRow): string {
@@ -678,20 +685,29 @@ function sellCardClass(signal: SellSignalRow): string {
   return "";
 }
 
-function holdingStatusText(signal: SellSignalRow | undefined): string {
-  if (!signal) return "-";
-  const prefix = signal.holding_days === null || signal.holding_days === undefined
-    ? "-"
-    : signal.holding_days === 0
-      ? "당일 체결"
-      : `${signal.holding_days}거래일`;
-  const max = signal.max_holding_days === null || signal.max_holding_days === undefined ? "-" : `${signal.max_holding_days}거래일`;
-  return `${prefix} / ${max} / ${deadlineText(signal.days_to_deadline)}`;
+function holdingStatusBadges(signal: SellSignalRow | undefined) {
+  if (!signal) return <strong>-</strong>;
+  const progress =
+    signal.holding_days === null || signal.holding_days === undefined
+      ? "-"
+      : signal.holding_days === 0
+        ? "당일"
+        : signal.max_holding_days === null || signal.max_holding_days === undefined
+          ? `${signal.holding_days}일`
+          : `${signal.holding_days}/${signal.max_holding_days}`;
+  return (
+    <>
+      <strong>{progress}</strong>
+      <strong className={isCloseSellDue(signal) ? "is-danger" : undefined}>
+        {deadlineActionText(signal.days_to_deadline)}
+      </strong>
+    </>
+  );
 }
 
 function holdingStatusClass(signal: SellSignalRow | undefined): string {
   if (!signal) return "";
-  if (signal.urgency === "expired") return "is-danger";
+  if (isCloseSellDue(signal)) return "is-danger";
   if (signal.urgency === "near_deadline") return "is-warning";
   if (signal.urgency === "profit_target") return "is-success";
   return "";
@@ -745,7 +761,11 @@ function normalizedDeadline(days: number | null | undefined): number {
 }
 
 function isExpiredSellOrder(signal: SellSignalRow): boolean {
-  return typeof signal.days_to_deadline === "number" && signal.days_to_deadline < 0;
+  return isCloseSellDue(signal);
+}
+
+function isCloseSellDue(signal: SellSignalRow | undefined): boolean {
+  return typeof signal?.days_to_deadline === "number" && signal.days_to_deadline <= 0;
 }
 
 function isFilledCandidate(signal: SellSignalRow): boolean {
@@ -753,12 +773,12 @@ function isFilledCandidate(signal: SellSignalRow): boolean {
 }
 
 function sellOrderDeadlineText(signal: SellSignalRow): string {
-  if (isExpiredSellOrder(signal)) return "보유 거래일 초과: 시장가 전량 매도 필요";
-  return deadlineText(signal.days_to_deadline);
+  if (isCloseSellDue(signal)) return "보유기간 도달: 종가매도";
+  return deadlineActionText(signal.days_to_deadline);
 }
 
 function sellOrderPriceText(signal: SellSignalRow, symbol: string | null | undefined): string {
-  if (isExpiredSellOrder(signal)) return "시장가";
+  if (isCloseSellDue(signal)) return "종가";
   return `LOC ${formatMoney(signal.sell_limit_price, symbol)}`;
 }
 

@@ -5,6 +5,7 @@ import { listStrategyConfigs } from "../api/strategies";
 import { Table, type TableColumn } from "../components/Table";
 import type { PortfolioAdjustment, StrategyConfig } from "../types/api";
 import { formatMoney, todayIso } from "../utils/format";
+import { rememberStrategyConfigId, resolveRememberedStrategyConfigId } from "../utils/strategySelection";
 
 export function CapitalAdjustmentPage() {
   const [configs, setConfigs] = useState<StrategyConfig[]>([]);
@@ -27,7 +28,7 @@ export function CapitalAdjustmentPage() {
     listStrategyConfigs()
       .then((rows) => {
         setConfigs(rows);
-        setSelectedId(rows[0]?.id ?? null);
+        setSelectedId(resolveRememberedStrategyConfigId(rows));
       })
       .catch((caught) => setError(errorMessage(caught)))
       .finally(() => setLoading(false));
@@ -81,7 +82,14 @@ export function CapitalAdjustmentPage() {
       <section className="toolbar">
         <label>
           전략 설정
-          <select value={selectedId ?? ""} onChange={(event) => setSelectedId(Number(event.target.value) || null)}>
+          <select
+            value={selectedId ?? ""}
+            onChange={(event) => {
+              const nextId = Number(event.target.value) || null;
+              rememberStrategyConfigId(nextId);
+              setSelectedId(nextId);
+            }}
+          >
             {configs.map((config) => (
               <option key={config.id} value={config.id}>
                 {config.name} / {config.symbol}

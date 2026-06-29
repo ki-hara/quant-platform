@@ -16,6 +16,9 @@ class SimulatedTrade:
     sell_reason: str | None = None
     position_id: int | None = None
     holding_days: int | None = None
+    open_position_count: int | None = None
+    cash_after: Decimal | None = None
+    capital_after: Decimal | None = None
 
 
 @dataclass(frozen=True)

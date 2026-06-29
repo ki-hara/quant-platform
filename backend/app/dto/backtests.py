@@ -4,7 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
-from app.domain.enums import BacktestModePolicy
+from app.domain.enums import BacktestModePolicy, BacktestPositionSizingPolicy
 
 
 class BacktestCreateDto(BaseModel):
@@ -12,6 +12,7 @@ class BacktestCreateDto(BaseModel):
     start_date: date
     end_date: date
     mode_policy: BacktestModePolicy = BacktestModePolicy.FIXED_SAFE
+    position_sizing_policy: BacktestPositionSizingPolicy = BacktestPositionSizingPolicy.FIXED_QUANTITY
 
 
 class BacktestRunResponseDto(BaseModel):

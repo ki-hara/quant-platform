@@ -57,6 +57,7 @@ def create_backtest(
                 start_date=request.start_date,
                 end_date=request.end_date,
                 mode_policy=request.mode_policy,
+                position_sizing_policy=request.position_sizing_policy,
             )
         )
     except MarketDataError as exc:
@@ -117,7 +118,22 @@ def download_trades_csv(run_id: int, session: SessionDep, owner: CurrentOwnerDep
     run = ensure_backtest_owner(run_id, owner, session)
     output = StringIO()
     writer = csv.writer(output)
-    writer.writerow(["date", "side", "quantity", "price", "fee", "realized_pnl", "sell_reason", "source"])
+    writer.writerow(
+        [
+            "date",
+            "side",
+            "quantity",
+            "price",
+            "fee",
+            "realized_pnl",
+            "sell_reason",
+            "source",
+            "holding_days",
+            "open_position_count",
+            "cash_after",
+            "capital_after",
+        ]
+    )
     for trade in sorted(run.trades, key=lambda item: (item.date, item.id)):
         writer.writerow(
             [
@@ -129,6 +145,10 @@ def download_trades_csv(run_id: int, session: SessionDep, owner: CurrentOwnerDep
                 trade.realized_pnl,
                 trade.sell_reason or "",
                 trade.source,
+                trade.holding_days if trade.holding_days is not None else "",
+                trade.open_position_count if trade.open_position_count is not None else "",
+                trade.cash_after if trade.cash_after is not None else "",
+                trade.capital_after if trade.capital_after is not None else "",
             ]
         )
     return _csv_response(output, f"backtest-{run_id}-trades.csv")

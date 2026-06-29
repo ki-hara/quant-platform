@@ -179,6 +179,7 @@ export interface BacktestCreateRequest {
   start_date: ISODate;
   end_date: ISODate;
   mode_policy?: "weekly_rsi" | "fixed_safe" | "fixed_aggressive";
+  position_sizing_policy?: "fixed_quantity" | "full_allocation";
 }
 
 export interface BacktestDailySnapshot {
@@ -205,6 +206,10 @@ export interface BacktestTrade {
   fee: DecimalString;
   realized_pnl: DecimalString;
   sell_reason: string | null;
+  holding_days: number | null;
+  open_position_count: number | null;
+  cash_after: DecimalString | null;
+  capital_after: DecimalString | null;
   source: string;
   created_at: ISODateTime;
   updated_at: ISODateTime;

@@ -17,6 +17,11 @@ class BacktestModePolicy(StrEnum):
     FIXED_AGGRESSIVE = "fixed_aggressive"
 
 
+class BacktestPositionSizingPolicy(StrEnum):
+    FIXED_QUANTITY = "fixed_quantity"
+    FULL_ALLOCATION = "full_allocation"
+
+
 class PositionStatus(StrEnum):
     PENDING = "pending"
     OPEN = "open"

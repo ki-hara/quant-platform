@@ -36,6 +36,7 @@ import {
   translateSource,
   translateStatus,
 } from "../utils/format";
+import { rememberStrategyConfigId, resolveRememberedStrategyConfigId } from "../utils/strategySelection";
 
 export function DashboardPage() {
   const [configs, setConfigs] = useState<StrategyConfig[]>([]);
@@ -59,7 +60,7 @@ export function DashboardPage() {
         const rows = await listStrategyConfigs();
         if (!active) return;
         setConfigs(rows);
-        setSelectedId((current) => current ?? rows[0]?.id ?? null);
+        setSelectedId((current) => current ?? resolveRememberedStrategyConfigId(rows));
       } catch (caught) {
         if (active) setError(errorMessage(caught));
       } finally {
@@ -173,7 +174,11 @@ export function DashboardPage() {
           전략 설정
           <select
             value={selectedId ?? ""}
-            onChange={(event) => setSelectedId(Number(event.target.value) || null)}
+            onChange={(event) => {
+              const nextId = Number(event.target.value) || null;
+              rememberStrategyConfigId(nextId);
+              setSelectedId(nextId);
+            }}
           >
             {configs.map((config) => (
               <option key={config.id} value={config.id}>

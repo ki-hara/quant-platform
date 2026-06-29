@@ -89,6 +89,10 @@ class BacktestRepository:
                 fee=trade.fee,
                 realized_pnl=trade.realized_pnl,
                 sell_reason=trade.sell_reason,
+                holding_days=trade.holding_days,
+                open_position_count=trade.open_position_count,
+                cash_after=trade.cash_after,
+                capital_after=trade.capital_after,
                 source=TradeSource.SIGNAL_EXECUTION,
             )
             for trade in trades

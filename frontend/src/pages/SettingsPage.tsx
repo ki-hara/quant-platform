@@ -12,6 +12,7 @@ import { SettingsForm } from "../components/SettingsForm";
 import { Table, type TableColumn } from "../components/Table";
 import type { StrategyConfig, StrategyConfigCreateRequest, StrategyInfo, StrategySchema } from "../types/api";
 import { formatMoney, translateStrategyType } from "../utils/format";
+import { rememberStrategyConfigId, resolveRememberedStrategyConfigId } from "../utils/strategySelection";
 
 export function SettingsPage() {
   const [strategies, setStrategies] = useState<StrategyInfo[]>([]);
@@ -34,7 +35,10 @@ export function SettingsPage() {
         const [strategyRows, configRows] = await Promise.all([listStrategies(), listStrategyConfigs()]);
         setStrategies(strategyRows);
         setConfigs(configRows);
-        setSelectedStrategyType(strategyRows[0]?.type ?? "");
+        const rememberedId = resolveRememberedStrategyConfigId(configRows);
+        const rememberedConfig = configRows.find((row) => row.id === rememberedId);
+        setEditingId(rememberedId);
+        setSelectedStrategyType(rememberedConfig?.strategy_type ?? strategyRows[0]?.type ?? "");
       } catch (caught) {
         setError(errorMessage(caught));
       } finally {
@@ -51,6 +55,7 @@ export function SettingsPage() {
 
   function selectEditingConfig(value: string) {
     const configId = Number(value) || null;
+    rememberStrategyConfigId(configId);
     setEditingId(configId);
     const config = configs.find((row) => row.id === configId);
     setSelectedStrategyType(config?.strategy_type ?? strategies[0]?.type ?? "");
@@ -66,10 +71,14 @@ export function SettingsPage() {
       if (editingId) {
         const updated = await updateStrategyConfig(editingId, request);
         setConfigs((current) => current.map((row) => (row.id === updated.id ? updated : row)));
+        rememberStrategyConfigId(updated.id);
         setMessage("전략 설정이 수정되었습니다.");
       } else {
         const created = await createStrategyConfig(request);
         setConfigs((current) => [created, ...current]);
+        setEditingId(created.id);
+        setSelectedStrategyType(created.strategy_type);
+        rememberStrategyConfigId(created.id);
         setMessage("새 전략 설정이 저장되었습니다.");
       }
     } catch (caught) {
@@ -87,7 +96,10 @@ export function SettingsPage() {
       setMessage("");
       await deleteStrategyConfig(config.id);
       setConfigs((current) => current.filter((row) => row.id !== config.id));
-      if (editingId === config.id) setEditingId(null);
+      if (editingId === config.id) {
+        setEditingId(null);
+        rememberStrategyConfigId(null);
+      }
       setMessage("전략을 삭제했습니다. 기존 거래내역은 보존됩니다.");
     } catch (caught) {
       setError(errorMessage(caught));

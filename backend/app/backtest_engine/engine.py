@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, ROUND_DOWN
 
 from app.backtest_engine import metrics
 from app.backtest_engine.simulator import (
@@ -10,7 +10,7 @@ from app.backtest_engine.simulator import (
     SimulatedTrade,
 )
 from app.dto.market_data import OhlcvDto
-from app.domain.enums import BacktestModePolicy, StrategyMode
+from app.domain.enums import BacktestModePolicy, BacktestPositionSizingPolicy, StrategyMode
 from app.strategy_engine.base import Strategy
 from app.strategy_engine.context import StrategyContext, StrategyPosition
 from app.strategy_engine.weekly_rsi import DailyClose, WeeklyRsiTransition, aggregate_daily_closes_to_weekly_closes, resolve_weekly_rsi_transition
@@ -53,6 +53,7 @@ class BacktestEngine:
         settings: dict,
         lookahead_date: date | None = None,
         mode_policy: BacktestModePolicy = BacktestModePolicy.FIXED_SAFE,
+        position_sizing_policy: BacktestPositionSizingPolicy = BacktestPositionSizingPolicy.FIXED_QUANTITY,
         rsi_prices: list[OhlcvDto] | None = None,
     ) -> BacktestResult:
         sorted_prices = sorted(prices, key=lambda price: price.date)
@@ -94,6 +95,7 @@ class BacktestEngine:
                     context=context,
                     positions=open_positions,
                     cash=cash,
+                    capital=capital,
                     current_close=price.close,
                     fee_rate=fee_rate,
                     slippage_rate=slippage_rate,
@@ -116,9 +118,10 @@ class BacktestEngine:
                 if buy_signal.should_buy:
                     mode = strategy.get_mode(context)
                     size = strategy.calculate_position_size(context)
-                    if size.quantity > 0:
-                        buy_price = self._apply_buy_slippage(price.close, slippage_rate)
-                        transaction_amount = buy_price * Decimal(size.quantity)
+                    buy_price = self._apply_buy_slippage(price.close, slippage_rate)
+                    quantity = self._buy_quantity(size.amount, buy_price, size.quantity, position_sizing_policy)
+                    if quantity > 0:
+                        transaction_amount = buy_price * Decimal(quantity)
                         fee = self._fee(transaction_amount, fee_rate)
                         total_cost = transaction_amount + fee
                         if total_cost <= cash:
@@ -128,7 +131,7 @@ class BacktestEngine:
                                 position_id=next_position_id,
                                 buy_date=price.date,
                                 buy_price=buy_price,
-                                quantity=size.quantity,
+                                quantity=quantity,
                                 mode=mode,
                                 buy_fee=fee,
                                 buy_trading_day_index=index,
@@ -138,11 +141,14 @@ class BacktestEngine:
                                 SimulatedTrade(
                                     date=price.date,
                                     side="BUY",
-                                    quantity=size.quantity,
+                                    quantity=quantity,
                                     price=buy_price.quantize(MONEY_QUANT),
                                     fee=fee.quantize(MONEY_QUANT),
                                     realized_pnl=Decimal("0"),
                                     position_id=next_position_id,
+                                    open_position_count=len(open_positions),
+                                    cash_after=cash.quantize(MONEY_QUANT),
+                                    capital_after=capital.quantize(MONEY_QUANT),
                                 )
                             )
                             next_position_id += 1
@@ -277,6 +283,7 @@ class BacktestEngine:
         context: StrategyContext,
         positions: list[_OpenPosition],
         cash: Decimal,
+        capital: Decimal,
         current_close: Decimal,
         fee_rate: Decimal,
         slippage_rate: Decimal,
@@ -306,6 +313,7 @@ class BacktestEngine:
             cash += net_proceeds
             cumulative_fees += fee
             realized_today += realized_pnl
+            open_position_count_after = len(positions) - len(trades) - 1
             trades.append(
                 SimulatedTrade(
                     date=context.current_date,
@@ -317,6 +325,9 @@ class BacktestEngine:
                     sell_reason=signal.reason,
                     position_id=position.position_id,
                     holding_days=holding_days,
+                    open_position_count=open_position_count_after,
+                    cash_after=cash.quantize(MONEY_QUANT),
+                    capital_after=capital.quantize(MONEY_QUANT),
                 )
             )
 
@@ -378,6 +389,17 @@ class BacktestEngine:
 
     def _apply_sell_slippage(self, price: Decimal, slippage_rate: Decimal) -> Decimal:
         return price * (Decimal("1") - slippage_rate / Decimal("100"))
+
+    def _buy_quantity(
+        self,
+        allocation: Decimal,
+        buy_price: Decimal,
+        fixed_quantity: int,
+        position_sizing_policy: BacktestPositionSizingPolicy,
+    ) -> int:
+        if position_sizing_policy is BacktestPositionSizingPolicy.FULL_ALLOCATION:
+            return int((allocation / buy_price).to_integral_value(rounding=ROUND_DOWN))
+        return fixed_quantity
 
     def _fee(self, transaction_amount: Decimal, fee_rate: Decimal) -> Decimal:
         return transaction_amount * fee_rate / Decimal("100")

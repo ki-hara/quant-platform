@@ -4,7 +4,7 @@ from datetime import date, timedelta
 from sqlalchemy.orm import Session
 
 from app.backtest_engine.engine import BacktestEngine
-from app.domain.enums import BacktestModePolicy, BacktestStatus
+from app.domain.enums import BacktestModePolicy, BacktestPositionSizingPolicy, BacktestStatus
 from app.domain.models import BacktestRun, StrategyConfig
 from app.infrastructure.repositories.backtests import BacktestRepository
 from app.infrastructure.repositories.strategies import StrategyConfigRepository
@@ -18,6 +18,7 @@ class BacktestRunRequest:
     start_date: date
     end_date: date
     mode_policy: BacktestModePolicy = BacktestModePolicy.FIXED_SAFE
+    position_sizing_policy: BacktestPositionSizingPolicy = BacktestPositionSizingPolicy.FIXED_QUANTITY
 
 
 class BacktestService:
@@ -62,11 +63,16 @@ class BacktestService:
                 settings=config.settings_json,
                 lookahead_date=lookahead_price.date if lookahead_price else None,
                 mode_policy=request.mode_policy,
+                position_sizing_policy=request.position_sizing_policy,
                 rsi_prices=self._get_rsi_prices(config, request),
             )
             run = self.backtests.create_run(
                 owner_id=config.owner_id,
-                strategy_config_snapshot_json=self._snapshot(config, request.mode_policy),
+                strategy_config_snapshot_json=self._snapshot(
+                    config,
+                    request.mode_policy,
+                    request.position_sizing_policy,
+                ),
                 start_date=request.start_date,
                 end_date=request.end_date,
                 status=BacktestStatus.COMPLETED,
@@ -101,7 +107,12 @@ class BacktestService:
             request.end_date,
         )
 
-    def _snapshot(self, config: StrategyConfig, mode_policy: BacktestModePolicy) -> dict:
+    def _snapshot(
+        self,
+        config: StrategyConfig,
+        mode_policy: BacktestModePolicy,
+        position_sizing_policy: BacktestPositionSizingPolicy,
+    ) -> dict:
         return {
             "id": config.id,
             "owner_id": config.owner_id,
@@ -109,6 +120,7 @@ class BacktestService:
             "strategy_type": config.strategy_type,
             "symbol": config.symbol,
             "mode_policy": mode_policy.value,
+            "position_sizing_policy": position_sizing_policy.value,
             "initial_capital": str(config.initial_capital),
             "fee_rate": str(config.fee_rate),
             "slippage_rate": str(config.slippage_rate),

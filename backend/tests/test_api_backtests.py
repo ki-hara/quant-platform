@@ -13,7 +13,7 @@ from app.db.seed import seed_default_owner
 from app.db.session import get_session
 from app.main import create_app
 from app.dto.market_data import OhlcvDto
-from app.domain.enums import BacktestModePolicy
+from app.domain.enums import BacktestModePolicy, BacktestPositionSizingPolicy
 from app.strategy_engine.dynamic_wave import DynamicWaveStrategy
 from tests.fixtures import simple_prices
 
@@ -66,6 +66,9 @@ def api_client() -> Generator[TestClient, None, None]:
     app.dependency_overrides[get_market_data_service] = lambda: fake_market_data_service
     app.state.fake_market_data_service = fake_market_data_service
     client = TestClient(app)
+    login_response = client.post("/api/auth/login", json={"owner_id": "default", "pin": "0000"})
+    assert login_response.status_code == 200
+    client.headers.update({"Authorization": f"Bearer {login_response.json()['token']}"})
     yield client
     client.close()
     app.dependency_overrides.clear()
@@ -150,7 +153,11 @@ def test_backtest_csv_endpoints_stream_attachments(api_client: TestClient) -> No
     assert trades.headers["content-disposition"] == (
         f'attachment; filename="backtest-{run["id"]}-trades.csv"'
     )
-    assert "date,side,quantity,price,fee,realized_pnl,sell_reason,source" in trades.text
+    assert (
+        "date,side,quantity,price,fee,realized_pnl,sell_reason,source,holding_days,"
+        "open_position_count,cash_after,capital_after"
+    ) in trades.text
+    assert "profit_target,signal_execution,1,0,1015.993520,1000.000000" in trades.text
 
     assert summary.status_code == 200
     assert summary.headers["content-type"].startswith("text/csv")
@@ -180,3 +187,23 @@ def test_post_backtest_accepts_fixed_aggressive_policy_and_exports_mode(
     assert body["strategy_config_snapshot_json"]["mode_policy"] == "fixed_aggressive"
     daily = api_client.get(f"/api/backtests/{body['id']}/daily.csv")
     assert "aggressive,fixed_aggressive" in daily.text
+
+
+def test_post_backtest_persists_position_sizing_policy_in_snapshot(
+    api_client: TestClient,
+) -> None:
+    config_id = create_config(api_client)
+
+    response = api_client.post(
+        "/api/backtests",
+        json={
+            "config_id": config_id,
+            "start_date": "2026-01-01",
+            "end_date": "2026-01-06",
+            "position_sizing_policy": BacktestPositionSizingPolicy.FULL_ALLOCATION.value,
+        },
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["strategy_config_snapshot_json"]["position_sizing_policy"] == "full_allocation"

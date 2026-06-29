@@ -2,7 +2,7 @@ from datetime import date
 from decimal import Decimal
 
 from app.backtest_engine.engine import BacktestEngine
-from app.domain.enums import BacktestModePolicy, StrategyMode
+from app.domain.enums import BacktestModePolicy, BacktestPositionSizingPolicy, StrategyMode
 from app.dto.market_data import OhlcvDto
 from app.strategy_engine.dynamic_wave import DynamicWaveStrategy
 from tests.fixtures import simple_prices
@@ -68,6 +68,23 @@ def test_backtest_engine_generates_snapshots_and_trades() -> None:
         None,
         "profit_target",
         "profit_target",
+    ]
+    assert [trade.open_position_count for trade in result.trades] == [1, 0, 1, 2, 1, 0]
+    assert [trade.cash_after for trade in result.trades] == [
+        Decimal("896.897000"),
+        Decimal("1004.789000"),
+        Decimal("897.682000"),
+        Decimal("791.576000"),
+        Decimal("903.464000"),
+        Decimal("1015.352000"),
+    ]
+    assert [trade.capital_after for trade in result.trades] == [
+        Decimal("1000.000000"),
+        Decimal("1000.000000"),
+        Decimal("1000.000000"),
+        Decimal("1000.000000"),
+        Decimal("1000.000000"),
+        Decimal("1000.000000"),
     ]
 
     final_snapshot = result.daily_snapshots[-1]
@@ -256,6 +273,41 @@ def test_loc_buy_does_not_fill_when_only_low_touches_limit() -> None:
     )
 
     assert result.trades == []
+
+
+def test_position_sizing_policy_controls_buy_quantity_basis() -> None:
+    settings = DynamicWaveStrategy.default_settings()
+    settings["safe"] = {
+        **settings["safe"],
+        "buy_threshold_percent": 0,
+        "sell_threshold_percent": 99,
+    }
+    prices = [
+        _price(date(2026, 1, 1), "30"),
+        _price(date(2026, 1, 2), "25"),
+    ]
+
+    fixed_quantity = BacktestEngine().run(
+        strategy=DynamicWaveStrategy(),
+        prices=prices,
+        initial_capital=Decimal("700"),
+        fee_rate=Decimal("0"),
+        slippage_rate=Decimal("0"),
+        settings=settings,
+        position_sizing_policy=BacktestPositionSizingPolicy.FIXED_QUANTITY,
+    )
+    full_allocation = BacktestEngine().run(
+        strategy=DynamicWaveStrategy(),
+        prices=prices,
+        initial_capital=Decimal("700"),
+        fee_rate=Decimal("0"),
+        slippage_rate=Decimal("0"),
+        settings=settings,
+        position_sizing_policy=BacktestPositionSizingPolicy.FULL_ALLOCATION,
+    )
+
+    assert fixed_quantity.trades[0].quantity == 3
+    assert full_allocation.trades[0].quantity == 4
 
 
 def test_max_holding_period_uses_trading_days_not_calendar_days() -> None:
