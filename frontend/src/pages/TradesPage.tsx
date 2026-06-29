@@ -22,6 +22,7 @@ import type {
 import {
   formatMoney,
   todayIso,
+  translateCode,
   translateMode,
   translateReason,
   translateSide,
@@ -68,6 +69,7 @@ export function TradesPage() {
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const selectedSymbol = dashboard?.config.symbol ?? plan?.symbol ?? configs.find((config) => config.id === selectedId)?.symbol;
 
   const sortedPositions = useMemo(
     () => [...positions].sort(comparePositionByDate),
@@ -274,7 +276,7 @@ export function TradesPage() {
   }
 
   const tradeColumnsWithActions: TableColumn<TradeRow>[] = [
-    ...tradeColumns,
+    ...buildTradeColumns(selectedSymbol),
     {
       key: "delete",
       header: "삭제",
@@ -398,6 +400,7 @@ export function TradesPage() {
               <h2>보유 포지션</h2>
               <span>수량, 매수가, 체결 상태를 직접 보정합니다.</span>
             </div>
+            <span className="status-pill compact is-muted">{positions.length}건</span>
           </div>
           <div className="position-edit-list">
             {positions.length === 0 ? <div className="empty-state">보유 포지션이 없습니다.</div> : null}
@@ -410,10 +413,14 @@ export function TradesPage() {
               const sellSignal = sellSignalByPosition.get(position.id);
               return (
                 <div className="position-edit-row" key={position.id}>
-                  <span>{position.buy_date}</span>
+                  <div className="position-summary">
+                    <span>체결일</span>
+                    <strong>{position.buy_date}</strong>
+                    <em className={`state-badge ${positionStatusClass(edit.status)}`}>{positionStatusText(edit.status)}</em>
+                  </div>
                   <div className="readonly-field">
                     <span>LOC가</span>
-                    <strong>{formatOptionalMoney(position.limit_price)}</strong>
+                    <strong>{formatOptionalMoney(position.limit_price, selectedSymbol)}</strong>
                   </div>
                   <label>
                     수량
@@ -501,7 +508,7 @@ export function TradesPage() {
               <span>매수는 주문 수량을 입력하고, 체결가는 보유 포지션에서 보정합니다.</span>
             </div>
           </div>
-          <form className="form-stack" onSubmit={handleManualSubmit}>
+          <form className="form-stack order-entry-form" onSubmit={handleManualSubmit}>
             <label>
               거래일
               <input
@@ -530,8 +537,9 @@ export function TradesPage() {
                       }));
                     }}
                   >
-                    {position.buy_date} / {wholeShare(position.quantity)}주 / 매수가{" "}
-                    {formatMoney(position.buy_price)}
+                    <span>{position.buy_date}</span>
+                    <strong>{wholeShare(position.quantity)}주</strong>
+                    <small>매수가 {formatMoney(position.buy_price, selectedSymbol)}</small>
                   </button>
                 ))}
               </div>
@@ -608,7 +616,7 @@ export function TradesPage() {
         <div className="panel-header">
           <div>
             <h2>거래내역</h2>
-            <span>체결 이력</span>
+            <span>체결 이력 {trades.length}건</span>
           </div>
         </div>
         <Table columns={tradeColumnsWithActions} rows={trades} getRowKey={(row) => row.id} />
@@ -617,19 +625,21 @@ export function TradesPage() {
   );
 }
 
-const tradeColumns: TableColumn<TradeRow>[] = [
-  { key: "date", header: "일자", render: (row) => row.date },
-  { key: "side", header: "구분", render: (row) => translateSide(row.side) },
-  { key: "quantity", header: "수량", align: "right", render: (row) => formatMoney(row.quantity) },
-  { key: "limit_price", header: "LOC가", align: "right", render: (row) => formatOptionalMoney(row.limit_price) },
-  { key: "price", header: "체결가", align: "right", render: (row) => formatMoney(row.price) },
-  { key: "fee", header: "수수료", align: "right", render: (row) => formatMoney(row.fee) },
-  { key: "pnl", header: "실현손익", align: "right", render: (row) => formatMoney(row.realized_pnl) },
-  { key: "reason", header: "사유", render: (row) => translateReason(row.sell_reason) },
-];
+function buildTradeColumns(symbol: string | null | undefined): TableColumn<TradeRow>[] {
+  return [
+    { key: "date", header: "일자", render: (row) => row.date },
+    { key: "side", header: "구분", render: (row) => translateSide(row.side) },
+    { key: "quantity", header: "수량", align: "right", render: (row) => wholeShare(row.quantity) || "0" },
+    { key: "limit_price", header: "LOC가", align: "right", render: (row) => formatOptionalMoney(row.limit_price, symbol) },
+    { key: "price", header: "체결가", align: "right", render: (row) => formatMoney(row.price, symbol) },
+    { key: "fee", header: "수수료", align: "right", render: (row) => formatMoney(row.fee, symbol) },
+    { key: "pnl", header: "실현손익", align: "right", render: (row) => formatMoney(row.realized_pnl, symbol) },
+    { key: "reason", header: "사유", render: (row) => translateReason(row.sell_reason) },
+  ];
+}
 
-function formatOptionalMoney(value: string | null | undefined): string {
-  return value ? formatMoney(value) : "-";
+function formatOptionalMoney(value: string | null | undefined, symbol?: string | null): string {
+  return value ? formatMoney(value, symbol) : "-";
 }
 
 function toSellSignalRow(row: Record<string, unknown>): SellSignalRow {
@@ -682,6 +692,23 @@ function holdingStatusClass(signal: SellSignalRow | undefined): string {
   if (signal.urgency === "expired") return "is-danger";
   if (signal.urgency === "near_deadline") return "is-warning";
   if (signal.urgency === "profit_target") return "is-success";
+  return "";
+}
+
+function positionStatusText(status: string): string {
+  return translateCode(status.toLowerCase(), {
+    pending: "대기",
+    open: "체결",
+    unfilled: "미체결",
+    closed: "청산",
+  });
+}
+
+function positionStatusClass(status: string): string {
+  const normalized = status.toLowerCase();
+  if (normalized === "open") return "is-success";
+  if (normalized === "pending") return "is-warning";
+  if (normalized === "unfilled") return "is-danger";
   return "";
 }
 
