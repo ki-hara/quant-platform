@@ -167,6 +167,16 @@ class ManualTradeService:
         return None
 
     def _rebuild_live_ledger(self, config: StrategyConfig, portfolio: LivePortfolio) -> None:
+        pending_positions = [
+            {
+                "buy_date": position.buy_date,
+                "limit_price": position.limit_price or position.buy_price,
+                "quantity": position.quantity,
+                "mode": position.mode,
+            }
+            for position in self.positions.list_by_strategy_config(config.id)
+            if position.status == PositionStatus.PENDING
+        ]
         self.positions.delete_by_strategy_config(config.id)
         portfolio.capital = config.initial_capital
         portfolio.cash = config.initial_capital
@@ -195,6 +205,14 @@ class ManualTradeService:
                 portfolio.realized_pnl += realized_pnl
                 portfolio.cumulative_fees += trade.fee
                 self.session.add(trade)
+        for pending in pending_positions:
+            self.positions.create_pending(
+                strategy_config_id=config.id,
+                buy_date=pending["buy_date"],
+                limit_price=pending["limit_price"],
+                quantity=pending["quantity"],
+                mode=pending["mode"],
+            )
         self.portfolios.save(portfolio)
 
     def _replay_portfolio_adjustments(self, config_id: int, portfolio: LivePortfolio) -> None:

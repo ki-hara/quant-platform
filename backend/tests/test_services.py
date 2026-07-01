@@ -368,6 +368,52 @@ def test_delete_manual_sell_trade_rebuilds_portfolio_and_positions() -> None:
         assert [trade.side for trade in trades] == [TradeSide.BUY]
 
 
+def test_delete_trade_rebuild_preserves_pending_buy_orders() -> None:
+    with create_session() as session:
+        config = create_config(session)
+        service = ManualTradeService(session)
+        service.record_manual_trade(
+            ManualTradeRequest(
+                config_id=config.id,
+                side=TradeSide.BUY,
+                trade_date=date(2026, 6, 20),
+                quantity=Decimal("1"),
+                price=Decimal("100"),
+                fee=Decimal("0"),
+            ),
+        )
+        position = PositionRepository(session).list_open(config.id)[0]
+        sell = service.record_manual_trade(
+            ManualTradeRequest(
+                config_id=config.id,
+                side=TradeSide.SELL,
+                trade_date=date(2026, 6, 25),
+                quantity=Decimal("1"),
+                price=Decimal("110"),
+                fee=Decimal("0"),
+                position_id=position.id,
+                source=TradeSource.MANUAL,
+            ),
+        ).trade
+        PositionRepository(session).create_pending(
+            strategy_config_id=config.id,
+            buy_date=date(2026, 7, 1),
+            limit_price=Decimal("90"),
+            quantity=Decimal("2"),
+            mode=StrategyMode.SAFE,
+        )
+        session.commit()
+
+        service.delete_trade(sell.id)
+
+        positions = PositionRepository(session).list_open(config.id)
+        pending_positions = [row for row in positions if row.status == PositionStatus.PENDING]
+        assert len(pending_positions) == 1
+        assert pending_positions[0].buy_date == date(2026, 7, 1)
+        assert pending_positions[0].limit_price == Decimal("90.000000")
+        assert pending_positions[0].quantity == Decimal("2.000000")
+
+
 def test_delete_trade_rebuild_preserves_portfolio_adjustments() -> None:
     with create_session() as session:
         config = create_config(session)
