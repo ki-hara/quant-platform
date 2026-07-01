@@ -11,6 +11,8 @@ from app.infrastructure.repositories.market_data import MarketPriceRepository
 from app.infrastructure.repositories.portfolios import PortfolioRepository, PositionRepository
 from app.infrastructure.repositories.strategies import StrategyConfigRepository
 from app.infrastructure.repositories.trades import TradeRepository
+from app.services.exchange_calendar_service import add_exchange_trading_days, count_exchange_trading_days
+from app.services.fear_greed_service import FearGreedService
 from app.services.market_session_service import current_market_date
 from app.strategy_engine.context import StrategyContext, StrategyPosition
 from app.strategy_engine.loc import MONEY_QUANT
@@ -35,6 +37,7 @@ class DashboardDto:
     total_asset: Decimal | None
     signals: DashboardSignalDto
     capital_update: dict | None = None
+    market_sentiment: object | None = None
 
 
 class DashboardService:
@@ -80,6 +83,7 @@ class DashboardService:
             total_asset=total_asset,
             signals=signals,
             capital_update=capital_update,
+            market_sentiment=FearGreedService().get_current(),
         )
 
     def _signals(
@@ -171,11 +175,12 @@ class DashboardService:
         prices: list[MarketPrice],
     ) -> dict | None:
         interval = _capital_update_interval(config.settings_json)
-        if interval <= 0 or not prices:
+        if interval <= 0:
             return None
 
         trading_dates = sorted({price.date for price in prices})
-        latest_date = trading_dates[-1]
+        market_today = current_market_date(config.symbol)
+        latest_date = trading_dates[-1] if trading_dates else market_today
         last_update = self._last_strategy_capital_update(config.id)
         all_trades = self.trades.list_by_strategy_config(config.id)
         first_trade = all_trades[0] if all_trades else None
@@ -196,25 +201,26 @@ class DashboardService:
 
         basis_date = last_update.date if last_update is not None else first_trade.date
         period_start_date = basis_date
-        future_dates = [day for day in trading_dates if day > basis_date]
-        elapsed = len([day for day in future_dates if day <= latest_date])
-        if len(future_dates) < interval:
-            next_update_date = future_dates[-1] if future_dates else None
+        period_end_date = add_exchange_trading_days(config.symbol, basis_date, interval)
+        elapsed = min(
+            count_exchange_trading_days(config.symbol, basis_date, market_today),
+            interval,
+        )
+        if market_today < period_end_date:
             return _capital_update_status(
                 status="waiting",
                 interval=interval,
                 elapsed=elapsed,
                 last_update_date=last_update.date if last_update else None,
-                next_update_date=next_update_date,
+                next_update_date=period_end_date,
                 period_start_date=period_start_date,
-                period_end_date=None,
+                period_end_date=period_end_date,
                 realized_pnl=self._period_realized_pnl(config.id, period_start_date, latest_date, include_start=last_update is None),
                 capital_delta=Decimal("0"),
                 projected_capital=portfolio.capital,
-                message="시장 데이터 부족",
+                message="갱신 대기",
             )
 
-        period_end_date = future_dates[interval - 1]
         realized_pnl = self._period_realized_pnl(
             config.id,
             period_start_date,
@@ -222,7 +228,7 @@ class DashboardService:
             include_start=last_update is None,
         )
         capital_delta = _capital_delta(config.settings_json, realized_pnl)
-        if latest_date < period_end_date:
+        if realized_pnl == 0:
             return _capital_update_status(
                 status="waiting",
                 interval=interval,
@@ -232,8 +238,9 @@ class DashboardService:
                 period_start_date=period_start_date,
                 period_end_date=period_end_date,
                 realized_pnl=realized_pnl,
-                capital_delta=capital_delta,
-                projected_capital=(portfolio.capital + capital_delta).quantize(MONEY_QUANT),
+                capital_delta=Decimal("0"),
+                projected_capital=portfolio.capital,
+                message="갱신 대상 실현손익 없음",
             )
 
         existing = self._strategy_capital_update_for_period(config.id, period_start_date, period_end_date)

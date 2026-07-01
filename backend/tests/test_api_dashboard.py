@@ -16,6 +16,8 @@ from app.domain.enums import TradeSide, TradeSource
 from app.infrastructure.repositories.market_data import MarketPriceRepository
 from app.infrastructure.repositories.trades import TradeRepository
 from app.main import create_app
+import app.services.dashboard_service as dashboard_service_module
+import app.services.fear_greed_service as fear_greed_service_module
 from app.strategy_engine.dynamic_wave import DynamicWaveStrategy
 
 
@@ -24,6 +26,19 @@ def test_health_endpoint_returns_ok(test_client: TestClient) -> None:
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+def _price(symbol: str, day: date, close: str) -> OhlcvDto:
+    value = Decimal(close)
+    return OhlcvDto(
+        symbol=symbol,
+        date=day,
+        open=value,
+        high=value,
+        low=value,
+        close=value,
+        volume=1000,
+    )
 
 
 @pytest.fixture
@@ -237,6 +252,42 @@ def test_get_dashboard_reads_cached_prices_with_configured_provider_key(api_clie
     assert body["signals"]["available"] is True
 
 
+def test_get_dashboard_includes_market_sentiment(api_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        fear_greed_service_module.FearGreedService,
+        "get_current",
+        lambda self: fear_greed_service_module.MarketSentiment(
+            score=24,
+            rating="fear",
+            label="공포",
+            as_of=date(2026, 7, 1),
+            source="CNN Fear & Greed",
+            available=True,
+        ),
+    )
+    create_response = api_client.post(
+        "/api/strategy-configs",
+        json={
+            "name": "Sentiment Strategy",
+            "strategy_type": "dynamic_wave",
+            "symbol": "SOXL",
+            "initial_capital": "1000",
+            "fee_rate": "0.001",
+            "slippage_rate": "0",
+            "settings_json": DynamicWaveStrategy.default_settings(),
+        },
+    )
+    config_id = create_response.json()["id"]
+
+    response = api_client.get(f"/api/dashboard/{config_id}")
+
+    assert response.status_code == 200
+    sentiment = response.json()["market_sentiment"]
+    assert sentiment["score"] == 24
+    assert sentiment["label"] == "공포"
+    assert sentiment["source"] == "CNN Fear & Greed"
+
+
 def test_get_dashboard_auto_applies_capital_update_once(api_client: TestClient) -> None:
     settings = DynamicWaveStrategy.default_settings()
     settings["capital_update"] = {"type": "trading_days", "interval": 10, "period": "monthly"}
@@ -313,6 +364,126 @@ def test_get_dashboard_auto_applies_capital_update_once(api_client: TestClient) 
     assert len(auto_adjustments) == 1
     assert auto_adjustments[0]["period_start_date"] == "2026-01-02"
     assert auto_adjustments[0]["period_end_date"] == "2026-01-16"
+
+
+def test_capital_update_predicts_next_us_trading_day_with_holidays(
+    api_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        dashboard_service_module,
+        "current_market_date",
+        lambda symbol: date(2026, 6, 30),
+    )
+    settings = DynamicWaveStrategy.default_settings()
+    settings["capital_update"] = {"type": "trading_days", "interval": 10, "period": "monthly"}
+    create_response = api_client.post(
+        "/api/strategy-configs",
+        json={
+            "name": "US Calendar Capital",
+            "strategy_type": "dynamic_wave",
+            "symbol": "SOXL",
+            "initial_capital": "10000",
+            "fee_rate": "0.001",
+            "slippage_rate": "0",
+            "settings_json": settings,
+        },
+    )
+    config_id = create_response.json()["id"]
+
+    with Session(api_client.app.state.test_engine) as session:
+        MarketPriceRepository(session).upsert_prices(
+            "finance_data_reader",
+            [_price("SOXL", date(2026, 6, 26), "100")],
+        )
+        TradeRepository(session).create(
+            strategy_config_id=config_id,
+            trade_date=date(2026, 6, 25),
+            side=TradeSide.BUY,
+            quantity=Decimal("1"),
+            price=Decimal("100"),
+            fee=Decimal("0"),
+            realized_pnl=Decimal("0"),
+            sell_reason=None,
+            source=TradeSource.MANUAL,
+        )
+        session.commit()
+
+    response = api_client.get(f"/api/dashboard/{config_id}")
+
+    assert response.status_code == 200
+    capital_update = response.json()["capital_update"]
+    assert capital_update["status"] == "waiting"
+    assert capital_update["elapsed_trading_days"] == 3
+    assert capital_update["next_update_date"] == "2026-07-10"
+    assert capital_update["period_start_date"] == "2026-06-25"
+    assert capital_update["period_end_date"] == "2026-07-10"
+
+
+def test_capital_update_applies_on_exchange_calendar_due_date(
+    api_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        dashboard_service_module,
+        "current_market_date",
+        lambda symbol: date(2026, 7, 10),
+    )
+    settings = DynamicWaveStrategy.default_settings()
+    settings["capital_update"] = {"type": "trading_days", "interval": 10, "period": "monthly"}
+    settings["profit_compounding_rate"] = 60
+    create_response = api_client.post(
+        "/api/strategy-configs",
+        json={
+            "name": "US Calendar Apply",
+            "strategy_type": "dynamic_wave",
+            "symbol": "SOXL",
+            "initial_capital": "10000",
+            "fee_rate": "0.001",
+            "slippage_rate": "0",
+            "settings_json": settings,
+        },
+    )
+    config_id = create_response.json()["id"]
+
+    with Session(api_client.app.state.test_engine) as session:
+        MarketPriceRepository(session).upsert_prices(
+            "finance_data_reader",
+            [_price("SOXL", date(2026, 6, 26), "100")],
+        )
+        trades = TradeRepository(session)
+        trades.create(
+            strategy_config_id=config_id,
+            trade_date=date(2026, 6, 25),
+            side=TradeSide.BUY,
+            quantity=Decimal("1"),
+            price=Decimal("100"),
+            fee=Decimal("0"),
+            realized_pnl=Decimal("0"),
+            sell_reason=None,
+            source=TradeSource.MANUAL,
+        )
+        trades.create(
+            strategy_config_id=config_id,
+            trade_date=date(2026, 7, 9),
+            side=TradeSide.SELL,
+            quantity=Decimal("1"),
+            price=Decimal("200"),
+            fee=Decimal("0"),
+            realized_pnl=Decimal("100"),
+            sell_reason="profit_target",
+            source=TradeSource.MANUAL,
+        )
+        session.commit()
+
+    response = api_client.get(f"/api/dashboard/{config_id}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["capital_update"]["applied"] is True
+    assert body["capital_update"]["period_end_date"] == "2026-07-10"
+    assert body["capital_update"]["capital_delta"] == "60.000000"
+    assert body["portfolio"]["capital"] == "10060.000000"
 
 
 def test_positions_missing_config_returns_404(api_client: TestClient) -> None:

@@ -66,6 +66,15 @@ class CapitalUpdateStatusDto(BaseModel):
     message: str | None = None
 
 
+class MarketSentimentDto(BaseModel):
+    score: int | None = None
+    rating: str | None = None
+    label: str
+    as_of: date | None = None
+    source: str
+    available: bool = True
+
+
 class DashboardResponseDto(BaseModel):
     config: StrategyConfigResponseDto
     portfolio: PortfolioDto | None
@@ -74,3 +83,4 @@ class DashboardResponseDto(BaseModel):
     total_asset: Decimal | None
     signals: DashboardSignalResponseDto
     capital_update: CapitalUpdateStatusDto | None = None
+    market_sentiment: MarketSentimentDto | None = None

@@ -35,8 +35,11 @@ def test_seed_default_owner_is_idempotent() -> None:
         seed_default_owner(session, "default")
         owners = session.scalars(select(Owner)).all()
 
-    assert len(owners) == 1
-    assert owners[0].id == "default"
+    owners_by_id = {owner.id: owner for owner in owners}
+    assert set(owners_by_id) == {"default", "guest"}
+    assert owners_by_id["default"].is_admin is True
+    assert owners_by_id["guest"].is_admin is False
+    assert owners_by_id["guest"].is_active is True
 
 
 def test_market_price_repository_upserts_and_lists_prices_by_symbol_and_range() -> None:

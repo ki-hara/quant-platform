@@ -1,5 +1,5 @@
 import { apiGet, apiPost } from "./client";
-import type { AuthOwner, LoginResponse } from "../types/api";
+import type { AuthOwner, LoginResponse, PinChangeRequest } from "../types/api";
 
 export function listOwners(): Promise<AuthOwner[]> {
   return apiGet<AuthOwner[]>("/api/auth/owners");
@@ -15,4 +15,8 @@ export function createOwner(request: { id: string; name: string; pin: string }):
 
 export function getMe(): Promise<AuthOwner> {
   return apiGet<AuthOwner>("/api/auth/me");
+}
+
+export function changeMyPin(request: PinChangeRequest): Promise<AuthOwner> {
+  return apiPost<AuthOwner>("/api/auth/me/change-pin", request);
 }

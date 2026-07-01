@@ -17,6 +17,12 @@ function formatChartDate(time: unknown): string {
   return "";
 }
 
+function formatShortDate(date: string | null): string {
+  if (!date) return "";
+  const [, month, day] = date.split("-");
+  return `${Number(month)}/${Number(day)}`;
+}
+
 export function RsiChart({ chart }: RsiChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -58,7 +64,15 @@ export function RsiChart({ chart }: RsiChartProps) {
         position: marker.mode === "aggressive" ? "belowBar" : "aboveBar",
         color: marker.mode === "aggressive" ? "#d17a22" : "#24745a",
         shape: marker.mode === "aggressive" ? "arrowUp" : "arrowDown",
-        text: `${translateMode(marker.mode)} ${marker.rule_code ?? ""}`.trim(),
+        text: [
+          marker.period_start_date && marker.period_end_date
+            ? `${formatShortDate(marker.period_start_date)}~${formatShortDate(marker.period_end_date)}`
+            : null,
+          translateMode(marker.mode),
+          marker.rule_label ? `· ${marker.rule_label}` : null,
+        ]
+          .filter(Boolean)
+          .join(" "),
       })),
     );
     instance.timeScale().fitContent();

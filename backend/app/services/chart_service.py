@@ -81,7 +81,7 @@ class ChartService:
             LOC=loc,
             trade_markers=self._trade_markers(config_id, start_date, today),
             rsi=self._rsi_series(config.settings_json, start_date, today),
-            mode_markers=self._mode_markers(config_id, start_date, today + timedelta(days=7)),
+            mode_markers=self._mode_markers(config_id, start_date, today),
         )
 
     def _loc_line(self, config_id: int, symbol: str, config_settings: dict, today: date) -> ChartLineDto:
@@ -135,12 +135,6 @@ class ChartService:
         weekly_closes = aggregate_daily_closes_to_weekly_closes(
             [DailyClose(date=price.date, close=price.close) for price in prices]
         )
-        latest_completed_week_ending = latest_completed_mode_week_ending(today)
-        weekly_closes = [
-            weekly_close
-            for weekly_close in weekly_closes
-            if weekly_close.week_ending <= latest_completed_week_ending
-        ]
         points: list[RsiPointDto] = []
         for index in range(14, len(weekly_closes)):
             rsi = calculate_simple_rsi([item.close for item in weekly_closes[index - 14 : index + 1]])
@@ -149,12 +143,35 @@ class ChartService:
         return RsiSeriesDto(guides=RSI_GUIDES, points=points)
 
     def _mode_markers(self, config_id: int, start_date: date, end_date: date) -> list[ModeMarkerDto]:
+        current_recommendation = next(
+            (
+                recommendation
+                for recommendation in self.mode_recommendations.list_by_config(config_id)
+                if recommendation.effective_week <= end_date
+            ),
+            None,
+        )
+        if current_recommendation is None:
+            return []
+        period_start = current_recommendation.effective_week
+        period_end = period_start + timedelta(days=4)
+        if period_end < start_date:
+            return []
         return [
             ModeMarkerDto(
-                date=recommendation.effective_week,
-                mode=recommendation.recommended_mode,
-                rule_code=recommendation.rule_code,
+                date=period_end,
+                mode=current_recommendation.recommended_mode,
+                rule_code=current_recommendation.rule_code,
+                period_start_date=period_start,
+                period_end_date=period_end,
+                rule_label=self._mode_rule_label(current_recommendation.rule_code),
             )
-            for recommendation in self.mode_recommendations.list_by_config(config_id)
-            if start_date <= recommendation.effective_week <= end_date
         ]
+
+    @staticmethod
+    def _mode_rule_label(rule_code: str | None) -> str | None:
+        labels = {
+            "S1": "RSI 고점하락",
+            "A1": "RSI 30 상향돌파",
+        }
+        return labels.get(rule_code or "")

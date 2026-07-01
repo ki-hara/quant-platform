@@ -9,11 +9,45 @@ export type ChartRange = "1m" | "3m" | "6m" | "1y";
 export interface AuthOwner {
   id: string;
   name: string;
+  is_admin: boolean;
+  is_guest: boolean;
+  pin_change_allowed: boolean;
 }
 
 export interface LoginResponse {
   token: string;
   owner: AuthOwner;
+}
+
+export interface PinChangeRequest {
+  current_pin: string;
+  new_pin: string;
+}
+
+export interface AdminSummary {
+  total_users: number;
+  active_users: number;
+  strategy_count: number;
+  trade_count: number;
+  database_backend: string;
+  database_path: string | null;
+  latest_market_data_date: ISODate | null;
+}
+
+export interface AdminUser {
+  id: string;
+  name: string;
+  is_active: boolean;
+  is_admin: boolean;
+  is_guest: boolean;
+  pin_reset_allowed: boolean;
+  deactivate_allowed: boolean;
+  created_at: ISODateTime | null;
+}
+
+export interface PinResetResponse {
+  owner: AdminUser;
+  temporary_pin: string;
 }
 
 export interface StrategyInfo {
@@ -100,6 +134,16 @@ export interface DashboardResponse {
   total_asset: DecimalString | null;
   signals: DashboardSignal;
   capital_update: CapitalUpdateStatus | null;
+  market_sentiment: MarketSentiment | null;
+}
+
+export interface MarketSentiment {
+  score: number | null;
+  rating: string | null;
+  label: string;
+  as_of: ISODate | null;
+  source: string;
+  available: boolean;
 }
 
 export interface CapitalUpdateStatus {
@@ -373,6 +417,9 @@ export interface ModeMarker {
   date: ISODate;
   mode: StrategyMode;
   rule_code: string | null;
+  period_start_date: ISODate | null;
+  period_end_date: ISODate | null;
+  rule_label: string | null;
 }
 
 export interface TradingChart {

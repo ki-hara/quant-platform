@@ -106,7 +106,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         >
           {mode === "login" ? "새 사용자 만들기" : "기존 사용자로 로그인"}
         </button>
-        <p className="form-status">기본 사용자는 ID default, 초기 PIN 0000입니다.</p>
+        <p className="form-status">체험용 계정은 guest / 0000입니다. 개인 데이터 관리는 별도 사용자 계정을 사용하세요.</p>
       </section>
     </main>
   );

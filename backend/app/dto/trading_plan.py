@@ -127,6 +127,9 @@ class ModeMarkerDto(BaseModel):
     date: date
     mode: StrategyMode
     rule_code: str | None = None
+    period_start_date: date | None = None
+    period_end_date: date | None = None
+    rule_label: str | None = None
 
 
 class ChartResponseDto(BaseModel):

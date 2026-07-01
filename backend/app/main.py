@@ -150,6 +150,8 @@ def ensure_sqlite_schema() -> None:
             connection.execute(text("ALTER TABLE owners ADD COLUMN pin_hash VARCHAR(255)"))
         if "is_active" not in owner_columns:
             connection.execute(text("ALTER TABLE owners ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT 1"))
+        if "is_admin" not in owner_columns:
+            connection.execute(text("ALTER TABLE owners ADD COLUMN is_admin BOOLEAN NOT NULL DEFAULT 0"))
         if "created_at" not in owner_columns:
             connection.execute(text("ALTER TABLE owners ADD COLUMN created_at DATETIME"))
         connection.execute(

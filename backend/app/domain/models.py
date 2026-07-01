@@ -32,6 +32,7 @@ class Owner(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     pin_hash: Mapped[str | None] = mapped_column(String(255))
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
+    is_admin: Mapped[bool] = mapped_column(default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
     strategy_configs: Mapped[list["StrategyConfig"]] = relationship(back_populates="owner")

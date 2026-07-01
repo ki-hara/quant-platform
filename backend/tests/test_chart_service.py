@@ -157,11 +157,14 @@ def test_chart_returns_sorted_ohlcv_loc_trade_markers_and_rsi_guides() -> None:
             Decimal("60"),
             Decimal("65"),
         ]
-        assert chart.mode_markers
+        assert len(chart.mode_markers) == 1
+        assert chart.mode_markers[0].period_start_date == date(2026, 6, 15)
+        assert chart.mode_markers[0].period_end_date == date(2026, 6, 19)
+        assert chart.mode_markers[0].date == date(2026, 6, 19)
         assert chart.rsi.points
 
 
-def test_chart_rsi_excludes_current_week_until_weekend() -> None:
+def test_chart_rsi_includes_current_week_for_display() -> None:
     with create_session() as session:
         config = create_config(session)
         seed_prices(session, "TEST", date(2026, 1, 1), 400)
@@ -206,7 +209,7 @@ def test_chart_rsi_excludes_current_week_until_weekend() -> None:
         chart = ChartService(session).get_chart(config.id, range_key="6m", today=date(2026, 6, 25))
 
         assert chart.rsi.points
-        assert max(point.date for point in chart.rsi.points) == date(2026, 6, 19)
+        assert max(point.date for point in chart.rsi.points) == date(2026, 6, 26)
 
 
 @pytest.mark.parametrize(

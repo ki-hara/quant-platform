@@ -22,6 +22,7 @@ import type {
   DailyPlan,
   CapitalUpdateStatus,
   DashboardResponse,
+  MarketSentiment,
   ModeRecommendation,
   PositionRow,
   StrategyConfig,
@@ -39,7 +40,7 @@ import {
 } from "../utils/format";
 import { rememberStrategyConfigId, resolveRememberedStrategyConfigId } from "../utils/strategySelection";
 
-export function DashboardPage() {
+export function DashboardPage({ canBackup = false }: { canBackup?: boolean }) {
   const [configs, setConfigs] = useState<StrategyConfig[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
@@ -170,7 +171,8 @@ export function DashboardPage() {
 
   return (
     <div className="page-stack">
-      <section className="toolbar">
+      <section className="dashboard-command-row">
+        <div className="toolbar dashboard-toolbar">
         <label>
           전략 설정
           <select
@@ -192,10 +194,14 @@ export function DashboardPage() {
           <RefreshCw aria-hidden="true" size={16} />
           시장 데이터 갱신
         </button>
-        <a className="button-link" href={getSqliteBackupUrl()}>
-          <Download aria-hidden="true" size={16} />
-          DB 백업
-        </a>
+          {canBackup ? (
+            <a className="button-link" href={getSqliteBackupUrl()}>
+              <Download aria-hidden="true" size={16} />
+              DB 백업
+            </a>
+          ) : null}
+        </div>
+        <FearGreedGauge sentiment={dashboard?.market_sentiment ?? null} />
       </section>
 
       {loading ? <div className="notice">불러오는 중입니다.</div> : null}
@@ -241,6 +247,60 @@ export function DashboardPage() {
         </section>
       </div>
     </div>
+  );
+}
+
+function FearGreedGauge({ sentiment }: { sentiment: MarketSentiment | null }) {
+  const score = sentiment?.score;
+  const normalizedScore = score == null ? 50 : Math.max(0, Math.min(100, score));
+  const needleAngle = ((180 - normalizedScore * 1.8) * Math.PI) / 180;
+  const needleX = 150 + Math.cos(needleAngle) * 88;
+  const needleY = 150 - Math.sin(needleAngle) * 88;
+  const needleBaseX = 150 + Math.cos(needleAngle) * 9;
+  const needleBaseY = 150 - Math.sin(needleAngle) * 9;
+  const needlePerpX = Math.sin(needleAngle) * 4.8;
+  const needlePerpY = Math.cos(needleAngle) * 4.8;
+  const needlePoints = [
+    `${needleX},${needleY}`,
+    `${needleBaseX + needlePerpX},${needleBaseY + needlePerpY}`,
+    `${needleBaseX - needlePerpX},${needleBaseY - needlePerpY}`,
+  ].join(" ");
+  const label = sentiment?.label ?? "대기";
+
+  return (
+    <aside className="fear-greed-card" aria-label={`공포 탐욕 지수 ${score ?? "대기"}`}>
+      <svg className="fear-greed-gauge" viewBox="0 0 300 176" role="img" aria-hidden="true">
+        <path className="fg-segment fg-extreme-fear" d="M 31 150 A 119 119 0 0 1 53.72 80.03 L 77.99 97.66 A 89 89 0 0 0 61 150 Z" />
+        <path className="fg-segment fg-fear" d="M 53.72 80.03 A 119 119 0 0 1 115.72 36.82 L 124.55 65.47 A 89 89 0 0 0 77.99 97.66 Z" />
+        <path className="fg-segment fg-neutral" d="M 115.72 36.82 A 119 119 0 0 1 184.28 36.82 L 175.45 65.47 A 89 89 0 0 0 124.55 65.47 Z" />
+        <path className="fg-segment fg-greed" d="M 184.28 36.82 A 119 119 0 0 1 246.28 80.03 L 222.01 97.66 A 89 89 0 0 0 175.45 65.47 Z" />
+        <path className="fg-segment fg-extreme-greed" d="M 246.28 80.03 A 119 119 0 0 1 269 150 L 239 150 A 89 89 0 0 0 222.01 97.66 Z" />
+        <text x="66" y="148" className="fg-number">0</text>
+        <text x="100" y="101" className="fg-number">25</text>
+        <text x="150" y="80" className="fg-number">50</text>
+        <text x="200" y="101" className="fg-number">75</text>
+        <text x="234" y="148" className="fg-number">100</text>
+        <text x="55" y="120" className="fg-label fg-label-small" transform="rotate(-64 55 120)">
+          <tspan x="55" dy="0">EXTREME</tspan>
+          <tspan x="55" dy="11">FEAR</tspan>
+        </text>
+        <text x="91" y="68" className="fg-label" transform="rotate(-24 91 68)">FEAR</text>
+        <text x="150" y="44" className="fg-label" transform="rotate(2 150 44)">NEUTRAL</text>
+        <text x="209" y="68" className="fg-label" transform="rotate(24 209 68)">GREED</text>
+        <text x="245" y="120" className="fg-label fg-label-small" transform="rotate(64 245 120)">
+          <tspan x="245" dy="0">EXTREME</tspan>
+          <tspan x="245" dy="11">GREED</tspan>
+        </text>
+        <polygon className="fg-needle" points={needlePoints} />
+        <circle cx="150" cy="150" r="36" className="fg-hub-shadow" />
+        <circle cx="150" cy="150" r="31" className="fg-hub" />
+        <text x="150" y="161" className="fg-score">{score == null ? "-" : score}</text>
+      </svg>
+      <div className="fear-greed-meta">
+        <strong>{label}</strong>
+        <span>{sentiment?.as_of ?? "갱신 대기"}</span>
+      </div>
+    </aside>
   );
 }
 

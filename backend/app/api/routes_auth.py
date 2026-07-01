@@ -1,7 +1,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -20,8 +20,17 @@ SessionDep = Annotated[Session, Depends(get_session)]
 class OwnerDto(BaseModel):
     id: str
     name: str
+    is_admin: bool = False
+    is_guest: bool = False
+    pin_change_allowed: bool = True
 
     model_config = {"from_attributes": True}
+
+    @model_validator(mode="after")
+    def set_computed_flags(self) -> "OwnerDto":
+        self.is_guest = self.id == "guest"
+        self.pin_change_allowed = self.id != "guest"
+        return self
 
 
 class OwnerCreateDto(BaseModel):
@@ -40,6 +49,11 @@ class LoginResponseDto(BaseModel):
     owner: OwnerDto
 
 
+class PinChangeDto(BaseModel):
+    current_pin: str = Field(min_length=4, max_length=32)
+    new_pin: str = Field(min_length=4, max_length=32)
+
+
 @router.get("/owners", response_model=list[OwnerDto])
 def list_owners(session: SessionDep) -> list[Owner]:
     stmt = select(Owner).where(Owner.is_active.is_(True)).order_by(Owner.created_at, Owner.id)
@@ -48,7 +62,9 @@ def list_owners(session: SessionDep) -> list[Owner]:
 
 @router.post("/owners", response_model=OwnerDto, status_code=status.HTTP_201_CREATED)
 def create_owner(request: OwnerCreateDto, session: SessionDep) -> Owner:
-    owner = Owner(id=request.id, name=request.name, pin_hash=hash_pin(request.pin), is_active=True)
+    if request.id == "guest":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Guest user is reserved.")
+    owner = Owner(id=request.id, name=request.name, pin_hash=hash_pin(request.pin), is_active=True, is_admin=False)
     try:
         session.add(owner)
         session.commit()
@@ -69,4 +85,17 @@ def login(request: LoginRequestDto, session: SessionDep) -> LoginResponseDto:
 
 @router.get("/me", response_model=OwnerDto)
 def me(owner: CurrentOwnerDep) -> Owner:
+    return owner
+
+
+@router.post("/me/change-pin", response_model=OwnerDto)
+def change_my_pin(request: PinChangeDto, owner: CurrentOwnerDep, session: SessionDep) -> Owner:
+    if owner.id == "guest":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Guest PIN cannot be changed.")
+    if not verify_pin(request.current_pin, owner.pin_hash):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current PIN is incorrect.")
+    owner.pin_hash = hash_pin(request.new_pin)
+    session.add(owner)
+    session.commit()
+    session.refresh(owner)
     return owner
