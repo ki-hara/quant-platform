@@ -14,6 +14,8 @@ class DynamicWaveStrategy(Strategy):
     def default_settings() -> dict:
         return {
             "mode_rsi_symbol": "QQQ",
+            "trend_filter_symbols": ["QQQ", "SOXL"],
+            "position_sizing_policy": "fixed_quantity",
             "profit_compounding_rate": 60,
             "loss_compounding_rate": 20,
             "capital_update": {"type": "trading_days", "interval": 10, "period": "monthly"},
@@ -45,6 +47,7 @@ class DynamicWaveStrategy(Strategy):
             split_count=int(mode_settings["split_count"]),
             buy_threshold_percent=Decimal(str(mode_settings["buy_threshold_percent"])),
             open_position_count=len(context.open_positions),
+            position_sizing_policy=str(context.settings.get("position_sizing_policy", "fixed_quantity")),
         )
 
     def should_buy(self, context: StrategyContext) -> BuySignal:

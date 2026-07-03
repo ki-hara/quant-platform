@@ -153,7 +153,7 @@ function App() {
           ) : null}
         </header>
 
-        {activeTab === "dashboard" && <DashboardPage canBackup={owner.is_admin} />}
+        {activeTab === "dashboard" && <DashboardPage />}
         {activeTab === "backtest" && <BacktestPage />}
         {activeTab === "capital" && <CapitalAdjustmentPage />}
         {activeTab === "settings" && <SettingsPage />}

@@ -9,6 +9,7 @@ from app.infrastructure.market_data.finance_data_reader_provider import FinanceD
 from app.infrastructure.repositories.market_data import MarketPriceRepository
 from app.infrastructure.repositories.strategies import StrategyConfigRepository
 from app.services.mode_service import ModeService
+from app.services.trend_filter_service import trend_filter_symbols
 
 
 def get_market_data_provider() -> MarketDataProvider:
@@ -33,6 +34,11 @@ class MarketRefreshService:
         self.market_prices.upsert_prices(settings.market_data_provider, investment_prices)
         rsi_prices = self.provider.get_ohlcv(rsi_symbol, start_date, today)
         self.market_prices.upsert_prices(settings.market_data_provider, rsi_prices)
+        for symbol in trend_filter_symbols(config.settings_json, config.symbol):
+            if symbol in {config.symbol, rsi_symbol}:
+                continue
+            trend_prices = self.provider.get_ohlcv(symbol, start_date, today)
+            self.market_prices.upsert_prices(settings.market_data_provider, trend_prices)
 
         recommendation = ModeService(self.session).get_mode_recommendation(config_id, as_of=today)
         return MarketRefreshResponseDto(

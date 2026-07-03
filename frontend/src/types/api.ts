@@ -135,6 +135,23 @@ export interface DashboardResponse {
   signals: DashboardSignal;
   capital_update: CapitalUpdateStatus | null;
   market_sentiment: MarketSentiment | null;
+  trend_filter: TrendFilter | null;
+}
+
+export interface TrendFilterSymbol {
+  symbol: string;
+  status: string;
+  label: string;
+  risk_label: string;
+  streak: number;
+  latest_cci: DecimalString | null;
+  as_of: ISODate | null;
+  zero_distance: DecimalString | null;
+}
+
+export interface TrendFilter {
+  symbols: TrendFilterSymbol[];
+  summary: string;
 }
 
 export interface MarketSentiment {
@@ -413,6 +430,21 @@ export interface RsiSeries {
   points: RsiPoint[];
 }
 
+export interface CciPoint {
+  date: ISODate;
+  value: DecimalString;
+}
+
+export interface CciSymbolSeries {
+  symbol: string;
+  points: CciPoint[];
+}
+
+export interface CciSeries {
+  guides: DecimalString[];
+  series: CciSymbolSeries[];
+}
+
 export interface ModeMarker {
   date: ISODate;
   mode: StrategyMode;
@@ -428,6 +460,7 @@ export interface TradingChart {
   trade_markers: TradeMarker[];
   rsi: RsiSeries;
   mode_markers: ModeMarker[];
+  cci: CciSeries;
 }
 
 export interface MarketRefreshResponse {

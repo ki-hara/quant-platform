@@ -27,6 +27,7 @@ import {
   translateReason,
   translateSide,
 } from "../utils/format";
+import { hasCrossedLocOrders, netLocOrders, tickSizeForSymbol, type LocOrderInput } from "../utils/locNetting";
 import { rememberStrategyConfigId, resolveRememberedStrategyConfigId } from "../utils/strategySelection";
 
 function initialManualForm(symbol?: string | null) {
@@ -57,6 +58,7 @@ interface SellSignalRow {
 }
 
 type SellOrderRow = SellSignalRow & { position: PositionRow };
+type LivePositionSizingPolicy = "fixed_quantity" | "full_allocation";
 
 export function TradesPage() {
   const [configs, setConfigs] = useState<StrategyConfig[]>([]);
@@ -65,6 +67,7 @@ export function TradesPage() {
   const [trades, setTrades] = useState<TradeRow[]>([]);
   const [plan, setPlan] = useState<DailyPlan | null>(null);
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
+  const [livePositionSizingPolicy, setLivePositionSizingPolicy] = useState<LivePositionSizingPolicy>("fixed_quantity");
   const [manualForm, setManualForm] = useState(() => initialManualForm());
   const [positionEdits, setPositionEdits] = useState<Record<number, { quantity: string; buy_price: string; status: string }>>({});
   const [loading, setLoading] = useState(false);
@@ -107,6 +110,17 @@ export function TradesPage() {
     [openPositions, sellSignalByPosition],
   );
 
+  const locNettingPreview = useMemo(() => {
+    const orders = buildLocNettingInputs(plan, sellOrderRows);
+    const tickSize = tickSizeForSymbol(selectedSymbol);
+    return {
+      needed: hasCrossedLocOrders(orders),
+      orders,
+      nettedOrders: netLocOrders(orders, tickSize),
+      tickSize,
+    };
+  }, [plan, sellOrderRows, selectedSymbol]);
+
   useEffect(() => {
     listStrategyConfigs()
       .then((rows) => {
@@ -117,10 +131,10 @@ export function TradesPage() {
   }, []);
 
   useEffect(() => {
-    if (selectedId) void loadRows(selectedId);
-  }, [selectedId]);
+    if (selectedId) void loadRows(selectedId, livePositionSizingPolicy);
+  }, [selectedId, livePositionSizingPolicy]);
 
-  async function loadRows(configId = selectedId) {
+  async function loadRows(configId = selectedId, positionSizingPolicy = livePositionSizingPolicy) {
     if (!configId) return;
     try {
       setLoading(true);
@@ -128,7 +142,7 @@ export function TradesPage() {
       const [positionRows, tradeRows, dailyPlan, dashboardData] = await Promise.all([
         listPositions(configId),
         listTrades(configId),
-        getDailyPlan(configId),
+        getDailyPlan(configId, positionSizingPolicy),
         getDashboard(configId),
       ]);
       setPositions(positionRows);
@@ -341,6 +355,22 @@ export function TradesPage() {
                 <span className="signal-label">오늘의 LOC 매수 주문표</span>
                 <strong>{plan?.LOC.orders?.length ? `${Math.min(plan.LOC.orders.length, 5)}건` : "주문 없음"}</strong>
               </div>
+              <div className="order-policy-switch" role="group" aria-label="매수 수량 계산">
+                <button
+                  type="button"
+                  className={livePositionSizingPolicy === "fixed_quantity" ? "is-active" : undefined}
+                  onClick={() => setLivePositionSizingPolicy("fixed_quantity")}
+                >
+                  정량매수
+                </button>
+                <button
+                  type="button"
+                  className={livePositionSizingPolicy === "full_allocation" ? "is-active" : undefined}
+                  onClick={() => setLivePositionSizingPolicy("full_allocation")}
+                >
+                  정액매수
+                </button>
+              </div>
             </div>
             <div className="order-board-body">
               {plan?.LOC.orders?.length ? (
@@ -401,6 +431,21 @@ export function TradesPage() {
             </div>
           )}
         </div>
+        {locNettingPreview.needed ? (
+          <div className="loc-netting-card">
+            <div className="loc-netting-header">
+              <div>
+                <strong>자전거래 방지 주문표</strong>
+                <span>매수/매도 LOC 가격이 겹쳐 퉁치기 주문으로 변환했습니다.</span>
+              </div>
+              <em>호가 {locNettingPreview.tickSize}</em>
+            </div>
+            <div className="loc-netting-tables">
+              <LocNettingTable title="원주문" orders={locNettingPreview.orders} symbol={selectedSymbol} />
+              <LocNettingTable title="퉁치기 주문" orders={locNettingPreview.nettedOrders} symbol={selectedSymbol} highlighted />
+            </div>
+          </div>
+        ) : null}
       </section>
 
       <div className="page-grid">
@@ -635,6 +680,33 @@ export function TradesPage() {
   );
 }
 
+function LocNettingTable({
+  title,
+  orders,
+  symbol,
+  highlighted = false,
+}: {
+  title: string;
+  orders: LocOrderInput[];
+  symbol: string | null | undefined;
+  highlighted?: boolean;
+}) {
+  return (
+    <div className={`loc-netting-table ${highlighted ? "is-highlighted" : ""}`}>
+      <strong>{title}</strong>
+      <div className="loc-netting-rows">
+        {orders.map((order, index) => (
+          <div className="loc-netting-row" key={`${order.side}-${order.limitPrice}-${order.quantity}-${index}`}>
+            <span className={order.side === "buy" ? "is-buy" : "is-sell"}>{order.side === "buy" ? "매수" : "매도"}</span>
+            <strong>{formatMoney(String(order.limitPrice), symbol)}</strong>
+            <em>{order.quantity}주</em>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function buildTradeColumns(symbol: string | null | undefined): TableColumn<TradeRow>[] {
   return [
     { key: "date", header: "일자", render: (row) => row.date },
@@ -646,6 +718,37 @@ function buildTradeColumns(symbol: string | null | undefined): TableColumn<Trade
     { key: "pnl", header: "실현손익", align: "right", render: (row) => formatMoney(row.realized_pnl, symbol) },
     { key: "reason", header: "사유", render: (row) => translateReason(row.sell_reason) },
   ];
+}
+
+function buildLocNettingInputs(plan: DailyPlan | null, sellOrderRows: SellOrderRow[]): LocOrderInput[] {
+  const buyOrders =
+    plan?.LOC.orders?.length
+      ? plan.LOC.orders.map((order) => ({
+          side: "buy" as const,
+          limitPrice: Number(order.limit_price),
+          quantity: Number(order.quantity),
+        }))
+      : plan?.LOC.quantity
+        ? [
+            {
+              side: "buy" as const,
+              limitPrice: Number(plan.LOC.limit_price),
+              quantity: Number(plan.LOC.quantity),
+            },
+          ]
+        : [];
+
+  const sellOrders = sellOrderRows
+    .map((signal) => ({
+      side: "sell" as const,
+      limitPrice: Number(signal.sell_limit_price ?? signal.position.buy_price),
+      quantity: Number(signal.position.quantity),
+    }))
+    .filter((order) => Number.isFinite(order.limitPrice) && order.limitPrice > 0 && order.quantity > 0);
+
+  return [...buyOrders, ...sellOrders].filter(
+    (order) => Number.isFinite(order.limitPrice) && order.limitPrice > 0 && order.quantity > 0,
+  );
 }
 
 function formatOptionalMoney(value: string | null | undefined, symbol?: string | null): string {

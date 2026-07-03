@@ -14,6 +14,7 @@ from app.infrastructure.repositories.trades import TradeRepository
 from app.services.exchange_calendar_service import add_exchange_trading_days, count_exchange_trading_days
 from app.services.fear_greed_service import FearGreedService
 from app.services.market_session_service import current_market_date
+from app.services.trend_filter_service import TrendFilterService
 from app.strategy_engine.context import StrategyContext, StrategyPosition
 from app.strategy_engine.loc import MONEY_QUANT
 from app.strategy_engine.registry import registry
@@ -38,6 +39,7 @@ class DashboardDto:
     signals: DashboardSignalDto
     capital_update: dict | None = None
     market_sentiment: object | None = None
+    trend_filter: object | None = None
 
 
 class DashboardService:
@@ -84,6 +86,11 @@ class DashboardService:
             signals=signals,
             capital_update=capital_update,
             market_sentiment=FearGreedService().get_current(),
+            trend_filter=TrendFilterService(self.market_prices, self.market_data_provider).get_summary(
+                config.symbol,
+                config.settings_json,
+                date.today(),
+            ),
         )
 
     def _signals(

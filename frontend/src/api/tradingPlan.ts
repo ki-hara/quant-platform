@@ -8,8 +8,13 @@ import type {
   TradingChart,
 } from "../types/api";
 
-export function getDailyPlan(configId: number): Promise<DailyPlan> {
-  return apiGet<DailyPlan>(`/api/strategy-configs/${configId}/daily-plan`);
+export function getDailyPlan(
+  configId: number,
+  positionSizingPolicy: "fixed_quantity" | "full_allocation" = "fixed_quantity",
+): Promise<DailyPlan> {
+  return apiGet<DailyPlan>(
+    `/api/strategy-configs/${configId}/daily-plan?position_sizing_policy=${positionSizingPolicy}`,
+  );
 }
 
 export function getChart(configId: number, range: ChartRange): Promise<TradingChart> {

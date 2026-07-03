@@ -22,7 +22,13 @@ class DailyPlanService:
         self.portfolios = PortfolioRepository(session)
         self.positions = PositionRepository(session)
 
-    def get_daily_plan(self, config_id: int, today: date, now: datetime | None = None) -> DailyPlanDto:
+    def get_daily_plan(
+        self,
+        config_id: int,
+        today: date,
+        now: datetime | None = None,
+        position_sizing_policy: str = "fixed_quantity",
+    ) -> DailyPlanDto:
         config = self.configs.get(config_id)
         if config is None:
             raise ValueError(f"Strategy config not found: {config_id}")
@@ -39,6 +45,8 @@ class DailyPlanService:
         mode_settings = config.settings_json[state.confirmed_mode.value]
         split_count = int(mode_settings["split_count"])
         buy_threshold = Decimal(str(mode_settings["buy_threshold_percent"]))
+        if position_sizing_policy not in {"fixed_quantity", "full_allocation"}:
+            raise ValueError(f"Unknown position sizing policy: {position_sizing_policy}")
 
         if latest_price is None or portfolio is None:
             loc_plan = LocPlan(
@@ -64,6 +72,7 @@ class DailyPlanService:
                 split_count=split_count,
                 buy_threshold_percent=buy_threshold,
                 open_position_count=len(open_positions),
+                position_sizing_policy=position_sizing_policy,
             )
             previous_close = latest_price.close
             data_as_of = latest_price.date

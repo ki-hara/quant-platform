@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 import pytest
@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session
 from app.db.base import Base
 from app.db.seed import seed_default_owner
 from app.domain.enums import PositionStatus, StrategyMode, TradeSide, TradeSource
+from app.dto.market_data import OhlcvDto
+from app.infrastructure.repositories.market_data import MarketPriceRepository
 from app.infrastructure.repositories.portfolios import PortfolioRepository, PositionRepository
 from app.infrastructure.repositories.modes import ModeStateRepository
 from app.infrastructure.repositories.trades import TradeRepository
@@ -524,3 +526,32 @@ def test_dashboard_missing_market_data_returns_unavailable_signals() -> None:
         assert dashboard.total_asset is None
         assert dashboard.signals.available is False
         assert dashboard.signals.reason == "market_data_unavailable"
+
+
+def test_dashboard_includes_trend_filter_for_default_symbols() -> None:
+    with create_session() as session:
+        config = create_config(session)
+        market_prices = MarketPriceRepository(session)
+        for symbol in ["TEST", "QQQ", "SOXL"]:
+            market_prices.upsert_prices(
+                "finance_data_reader",
+                [
+                    OhlcvDto(
+                        symbol=symbol,
+                        date=date(2025, 1, 3) + timedelta(days=7 * index),
+                        open=Decimal(str(100 + index)),
+                        high=Decimal(str(101 + index)),
+                        low=Decimal(str(99 + index)),
+                        close=Decimal(str(100 + index)),
+                        volume=1000,
+                    )
+                    for index in range(80)
+                ],
+            )
+
+        dashboard = DashboardService(session).get_dashboard(config.id)
+
+        assert dashboard.trend_filter is not None
+        assert [row.symbol for row in dashboard.trend_filter.symbols] == ["QQQ", "SOXL"]
+        assert dashboard.trend_filter.symbols[0].label == "상승장 유지"
+        assert dashboard.trend_filter.summary

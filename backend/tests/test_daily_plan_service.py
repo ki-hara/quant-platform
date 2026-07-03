@@ -189,6 +189,88 @@ def test_daily_plan_calculates_exact_loc_price_and_quantity_from_previous_close(
         assert plan.mode_split_count == 7
 
 
+def test_daily_plan_defaults_to_fixed_quantity_policy() -> None:
+    with create_session() as session:
+        config = create_config(session)
+        portfolio = PortfolioRepository(session).get_by_config(config.id)
+        assert portfolio is not None
+        portfolio.capital = Decimal("10000")
+        portfolio.cash = Decimal("10000")
+        PortfolioRepository(session).save(portfolio)
+        seed_daily_prices(session, "TEST", date(2026, 6, 18), ["99", "100"])
+        seed_weekly_prices(
+            session,
+            [
+                "99",
+                "100",
+                "101",
+                "102",
+                "103",
+                "104",
+                "105",
+                "106",
+                "107",
+                "108",
+                "109",
+                "110",
+                "111",
+                "112",
+                "113",
+                "114",
+                "113",
+                "112",
+            ],
+        )
+
+        plan = DailyPlanService(session).get_daily_plan(config.id, today=date(2026, 6, 19))
+
+        assert plan.LOC.quantity == 13
+        assert [order.quantity for order in plan.LOC.orders] == [13]
+
+
+def test_daily_plan_full_allocation_policy_returns_ladder_orders() -> None:
+    with create_session() as session:
+        config = create_config(session)
+        portfolio = PortfolioRepository(session).get_by_config(config.id)
+        assert portfolio is not None
+        portfolio.capital = Decimal("10000")
+        portfolio.cash = Decimal("10000")
+        PortfolioRepository(session).save(portfolio)
+        seed_daily_prices(session, "TEST", date(2026, 6, 18), ["99", "100"])
+        seed_weekly_prices(
+            session,
+            [
+                "99",
+                "100",
+                "101",
+                "102",
+                "103",
+                "104",
+                "105",
+                "106",
+                "107",
+                "108",
+                "109",
+                "110",
+                "111",
+                "112",
+                "113",
+                "114",
+                "113",
+                "112",
+            ],
+        )
+
+        plan = DailyPlanService(session).get_daily_plan(
+            config.id,
+            today=date(2026, 6, 19),
+            position_sizing_policy="full_allocation",
+        )
+
+        assert plan.LOC.quantity == 13
+        assert [order.quantity for order in plan.LOC.orders] == [13, 2, 2, 1, 1]
+
+
 def test_daily_plan_uses_last_confirmed_us_close_before_cutoff() -> None:
     with create_session() as session:
         config = create_config(session)

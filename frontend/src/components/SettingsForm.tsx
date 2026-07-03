@@ -3,7 +3,7 @@ import { FormEvent, useMemo, useState } from "react";
 import type { StrategyConfig, StrategyConfigCreateRequest, StrategyInfo, StrategySchema } from "../types/api";
 import { translateStrategyType } from "../utils/format";
 
-type FieldValue = string | number | boolean;
+type FieldValue = string | number | boolean | string[];
 
 interface FieldDescriptor {
   key: string;
@@ -81,6 +81,7 @@ export function SettingsForm({
   const [settings, setSettings] = useState<Record<string, FieldValue>>(() =>
     flattenSettings(editingConfig?.settings_json),
   );
+  const [trendSymbolInput, setTrendSymbolInput] = useState("");
   const mergedSettings = { ...defaults, ...settings };
   const visibleFields = fields.filter((field) => isFieldVisible(field, fields, mergedSettings));
   const activePreset = presetForSettings(mergedSettings);
@@ -104,10 +105,58 @@ export function SettingsForm({
     return (
       <label key={field.key}>
         {field.label}
-        {field.key === "capital_update.type" ? (
+        {field.key === "trend_filter_symbols" ? (
+          <div className="symbol-editor">
+            <div className="symbol-chip-list">
+              {normalizeTrendSymbols(value).map((symbol) => (
+                <span className="symbol-chip" key={symbol}>
+                  {symbol}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSettings((current) => ({
+                        ...current,
+                        [field.key]: normalizeTrendSymbols(value).filter((candidate) => candidate !== symbol),
+                      }))
+                    }
+                    aria-label={`${symbol} 삭제`}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+            <div className="symbol-add-row">
+              <input
+                value={trendSymbolInput}
+                onChange={(event) => setTrendSymbolInput(event.target.value.toUpperCase())}
+                placeholder="SOXX"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const next = trendSymbolInput.trim().toUpperCase();
+                  if (!next) return;
+                  setSettings((current) => ({
+                    ...current,
+                    [field.key]: Array.from(new Set([...normalizeTrendSymbols(value), next])),
+                  }));
+                  setTrendSymbolInput("");
+                }}
+              >
+                추가
+              </button>
+            </div>
+          </div>
+        ) : field.key === "capital_update.type" ? (
           <select value={String(value)} onChange={(event) => setSettings((current) => ({ ...current, [field.key]: event.target.value }))}>
             <option value="trading_days">거래일 간격</option>
             <option value="calendar">달력 주기</option>
+          </select>
+        ) : field.key === "position_sizing_policy" ? (
+          <select value={String(value)} onChange={(event) => setSettings((current) => ({ ...current, [field.key]: event.target.value }))}>
+            <option value="full_allocation">정액매수</option>
+            <option value="fixed_quantity">정량매수</option>
           </select>
         ) : field.key === "capital_update.period" ? (
           <select value={String(value)} onChange={(event) => setSettings((current) => ({ ...current, [field.key]: event.target.value }))}>
@@ -280,6 +329,7 @@ function sectionForField(key: string): "rsi" | "safe" | "aggressive" {
 
 function isFieldVisible(field: FieldDescriptor, fields: FieldDescriptor[], values: Record<string, FieldValue>): boolean {
   if (field.key === "base_index") return false;
+  if (field.key === "position_sizing_policy") return false;
   if (field.key !== "capital_update.interval" && field.key !== "capital_update.period") return true;
   const typeField = fields.find((candidate) => candidate.key === "capital_update.type");
   const updateType = String(values["capital_update.type"] ?? typeField?.defaultValue ?? "trading_days");
@@ -302,6 +352,14 @@ function valueForInput(key: string, value: string): FieldValue {
   return coerceValue(value);
 }
 
+function normalizeTrendSymbols(value: FieldValue | undefined): string[] {
+  const values = Array.isArray(value) ? value : String(value ?? "").split(",");
+  return values
+    .map((symbol) => String(symbol).trim().toUpperCase())
+    .filter(Boolean)
+    .filter((symbol, index, array) => array.indexOf(symbol) === index);
+}
+
 function inputStepFor(key: string): string {
   if (key.endsWith("_percent") || key.endsWith("_rate")) return "any";
   if (key.endsWith("_days") || key.endsWith("split_count") || key === "capital_update.interval") return "1";
@@ -309,8 +367,10 @@ function inputStepFor(key: string): string {
 }
 
 function labelFor(key: string): string {
+  if (key === "position_sizing_policy") return "실전 매수 수량 계산";
   const labels: Record<string, string> = {
     mode_rsi_symbol: "모드 변경 RSI 종목",
+    trend_filter_symbols: "추세 필터 종목",
     profit_compounding_rate: "이익복리율 (PCR)",
     loss_compounding_rate: "손실복리율 (LCR)",
     "capital_update.type": "투자금 갱신 방식",

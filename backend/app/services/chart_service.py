@@ -6,6 +6,9 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.domain.enums import TradeSide
 from app.dto.trading_plan import (
+    CciPointDto,
+    CciSeriesDto,
+    CciSymbolSeriesDto,
     ChartCandleDto,
     ChartLineDto,
     ChartResponseDto,
@@ -20,6 +23,7 @@ from app.infrastructure.repositories.portfolios import PositionRepository
 from app.infrastructure.repositories.strategies import StrategyConfigRepository
 from app.infrastructure.repositories.trades import TradeRepository
 from app.services.market_session_service import latest_confirmed_market_date
+from app.services.trend_filter_service import trend_filter_symbols
 from app.strategy_engine.loc import calculate_loc_plan
 from app.strategy_engine.weekly_rsi import (
     DailyClose,
@@ -27,9 +31,11 @@ from app.strategy_engine.weekly_rsi import (
     calculate_simple_rsi,
     latest_completed_mode_week_ending,
 )
+from app.strategy_engine.weekly_cci import DailyOhlc, weekly_cci_series
 
 
 RANGE_DAYS = {"1m": 31, "3m": 93, "6m": 186, "1y": 366}
+CCI_GUIDES = [Decimal("0.000000")]
 RSI_GUIDES = [
     Decimal("35.000000"),
     Decimal("40.000000"),
@@ -82,6 +88,7 @@ class ChartService:
             trade_markers=self._trade_markers(config_id, start_date, today),
             rsi=self._rsi_series(config.settings_json, start_date, today),
             mode_markers=self._mode_markers(config_id, start_date, today),
+            cci=self._cci_series(config.symbol, config.settings_json, start_date, today),
         )
 
     def _loc_line(self, config_id: int, symbol: str, config_settings: dict, today: date) -> ChartLineDto:
@@ -141,6 +148,30 @@ class ChartService:
             if rsi is not None and weekly_closes[index].week_ending >= start_date:
                 points.append(RsiPointDto(date=weekly_closes[index].week_ending, value=rsi))
         return RsiSeriesDto(guides=RSI_GUIDES, points=points)
+
+    def _cci_series(self, config_symbol: str, config_settings: dict, start_date: date, today: date) -> CciSeriesDto:
+        series: list[CciSymbolSeriesDto] = []
+        for symbol in trend_filter_symbols(config_settings, config_symbol):
+            prices = self.market_prices.list_prices(
+                settings.market_data_provider,
+                symbol,
+                date(1970, 1, 1),
+                today,
+            )
+            cci_points = weekly_cci_series(
+                [DailyOhlc(date=price.date, high=price.high, low=price.low, close=price.close) for price in prices]
+            )
+            series.append(
+                CciSymbolSeriesDto(
+                    symbol=symbol,
+                    points=[
+                        CciPointDto(date=point.date, value=point.value)
+                        for point in cci_points
+                        if point.date >= start_date
+                    ],
+                )
+            )
+        return CciSeriesDto(guides=CCI_GUIDES, series=series)
 
     def _mode_markers(self, config_id: int, start_date: date, end_date: date) -> list[ModeMarkerDto]:
         current_recommendation = next(

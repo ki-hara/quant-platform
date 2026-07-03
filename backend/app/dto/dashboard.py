@@ -75,6 +75,26 @@ class MarketSentimentDto(BaseModel):
     available: bool = True
 
 
+class TrendFilterSymbolDto(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    symbol: str
+    status: str
+    label: str
+    risk_label: str
+    streak: int
+    latest_cci: Decimal | None = None
+    as_of: date | None = None
+    zero_distance: Decimal | None = None
+
+
+class TrendFilterDto(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    symbols: list[TrendFilterSymbolDto]
+    summary: str
+
+
 class DashboardResponseDto(BaseModel):
     config: StrategyConfigResponseDto
     portfolio: PortfolioDto | None
@@ -84,3 +104,4 @@ class DashboardResponseDto(BaseModel):
     signals: DashboardSignalResponseDto
     capital_update: CapitalUpdateStatusDto | None = None
     market_sentiment: MarketSentimentDto | None = None
+    trend_filter: TrendFilterDto | None = None

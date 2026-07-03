@@ -45,6 +45,7 @@ def calculate_loc_plan(
     split_count: int,
     buy_threshold_percent: Decimal,
     open_position_count: int,
+    position_sizing_policy: str = "full_allocation",
 ) -> LocPlan:
     if split_count <= 0:
         raise ValueError("split_count_must_be_positive")
@@ -72,6 +73,8 @@ def calculate_loc_plan(
     else:
         blocking_reason = None
     orders = _ladder_orders(limit_price, allocation, quantity)
+    if position_sizing_policy == "fixed_quantity":
+        orders = orders[:1]
 
     return LocPlan(
         limit_price=limit_price,

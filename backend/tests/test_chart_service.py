@@ -164,6 +164,20 @@ def test_chart_returns_sorted_ohlcv_loc_trade_markers_and_rsi_guides() -> None:
         assert chart.rsi.points
 
 
+def test_chart_includes_cci_series_for_configured_trend_symbols() -> None:
+    with create_session() as session:
+        config = create_config(session)
+        seed_prices(session, "TEST", date(2026, 1, 1), 400)
+        seed_prices(session, "QQQ", date(2026, 1, 2), 240)
+        seed_prices(session, "SOXL", date(2026, 1, 2), 240)
+
+        chart = ChartService(session).get_chart(config.id, range_key="6m", today=date(2026, 8, 1))
+
+        assert [series.symbol for series in chart.cci.series] == ["QQQ", "SOXL"]
+        assert chart.cci.guides == [Decimal("0")]
+        assert all(series.points for series in chart.cci.series)
+
+
 def test_chart_rsi_includes_current_week_for_display() -> None:
     with create_session() as session:
         config = create_config(session)

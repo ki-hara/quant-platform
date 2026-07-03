@@ -121,6 +121,27 @@ class RsiSeriesDto(BaseModel):
     points: list[RsiPointDto]
 
 
+class CciPointDto(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    date: date
+    value: Decimal
+
+
+class CciSymbolSeriesDto(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    symbol: str
+    points: list[CciPointDto]
+
+
+class CciSeriesDto(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    guides: list[Decimal]
+    series: list[CciSymbolSeriesDto]
+
+
 class ModeMarkerDto(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -140,6 +161,7 @@ class ChartResponseDto(BaseModel):
     trade_markers: list[TradeMarkerDto]
     rsi: RsiSeriesDto
     mode_markers: list[ModeMarkerDto]
+    cci: CciSeriesDto
 
 
 class MarketRefreshResponseDto(BaseModel):

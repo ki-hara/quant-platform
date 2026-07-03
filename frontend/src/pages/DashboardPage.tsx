@@ -1,6 +1,5 @@
-import { Download, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { getSqliteBackupUrl } from "../api/admin";
 import { getDashboard } from "../api/dashboard";
 import { listStrategyConfigs } from "../api/strategies";
 import { listTrades } from "../api/trades";
@@ -12,6 +11,7 @@ import {
   setConfirmedMode,
 } from "../api/tradingPlan";
 import { DailyPlanPanel } from "../components/DailyPlanPanel";
+import { CciChart } from "../components/CciChart";
 import { MarketChart } from "../components/MarketChart";
 import { MetricStrip } from "../components/MetricStrip";
 import { ModeControl } from "../components/ModeControl";
@@ -40,7 +40,7 @@ import {
 } from "../utils/format";
 import { rememberStrategyConfigId, resolveRememberedStrategyConfigId } from "../utils/strategySelection";
 
-export function DashboardPage({ canBackup = false }: { canBackup?: boolean }) {
+export function DashboardPage() {
   const [configs, setConfigs] = useState<StrategyConfig[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
@@ -193,13 +193,7 @@ export function DashboardPage({ canBackup = false }: { canBackup?: boolean }) {
         <button type="button" onClick={handleRefresh} disabled={!selectedId || loading || working}>
           <RefreshCw aria-hidden="true" size={16} />
           시장 데이터 갱신
-        </button>
-          {canBackup ? (
-            <a className="button-link" href={getSqliteBackupUrl()}>
-              <Download aria-hidden="true" size={16} />
-              DB 백업
-            </a>
-          ) : null}
+        </button>
         </div>
         <FearGreedGauge sentiment={dashboard?.market_sentiment ?? null} />
       </section>
@@ -224,6 +218,7 @@ export function DashboardPage({ canBackup = false }: { canBackup?: boolean }) {
 
       <MarketChart chart={chart} range={range} onRangeChange={setRange} />
       <RsiChart chart={chart} />
+      <CciChart chart={chart} trendFilter={dashboard?.trend_filter ?? null} />
 
       <div className="page-grid">
         <section className="panel">

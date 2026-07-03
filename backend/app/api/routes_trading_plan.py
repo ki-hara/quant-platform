@@ -77,10 +77,15 @@ def get_daily_plan(
     session: SessionDep,
     owner: CurrentOwnerDep,
     today: date | None = None,
+    position_sizing_policy: str = "fixed_quantity",
 ) -> object:
     ensure_config_owner(config_id, owner, session)
     try:
-        return DailyPlanService(session).get_daily_plan(config_id, today or date.today())
+        return DailyPlanService(session).get_daily_plan(
+            config_id,
+            today or date.today(),
+            position_sizing_policy=position_sizing_policy,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=_status_code_for_error(str(exc)), detail=str(exc)) from exc
 
