@@ -95,6 +95,13 @@ class TrendFilterDto(BaseModel):
     summary: str
 
 
+class MarketStatusDto(BaseModel):
+    exchange: str
+    market_date: date
+    is_open: bool
+    label: str
+
+
 class DashboardResponseDto(BaseModel):
     config: StrategyConfigResponseDto
     portfolio: PortfolioDto | None
@@ -105,3 +112,4 @@ class DashboardResponseDto(BaseModel):
     capital_update: CapitalUpdateStatusDto | None = None
     market_sentiment: MarketSentimentDto | None = None
     trend_filter: TrendFilterDto | None = None
+    market_status: MarketStatusDto | None = None

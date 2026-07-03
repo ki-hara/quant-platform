@@ -194,6 +194,7 @@ export function DashboardPage() {
           <RefreshCw aria-hidden="true" size={16} />
           시장 데이터 갱신
         </button>
+        {dashboard?.market_status ? <MarketStatusBadge status={dashboard.market_status} /> : null}
         </div>
         <FearGreedGauge sentiment={dashboard?.market_sentiment ?? null} />
       </section>
@@ -241,6 +242,19 @@ export function DashboardPage() {
           <Table columns={tradeColumns} rows={recentTrades} getRowKey={(row) => row.id} />
         </section>
       </div>
+    </div>
+  );
+}
+
+function MarketStatusBadge({
+  status,
+}: {
+  status: { label: string; market_date: string; is_open: boolean; exchange: string };
+}) {
+  return (
+    <div className={`market-status-badge ${status.is_open ? "is-open" : "is-closed"}`}>
+      <strong>{status.label}</strong>
+      <span>{status.market_date} 주문일</span>
     </div>
   );
 }

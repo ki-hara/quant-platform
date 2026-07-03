@@ -11,9 +11,9 @@ from app.infrastructure.repositories.market_data import MarketPriceRepository
 from app.infrastructure.repositories.portfolios import PortfolioRepository, PositionRepository
 from app.infrastructure.repositories.strategies import StrategyConfigRepository
 from app.infrastructure.repositories.trades import TradeRepository
-from app.services.exchange_calendar_service import add_exchange_trading_days, count_exchange_trading_days
+from app.services.exchange_calendar_service import add_exchange_trading_days, count_exchange_trading_days, is_exchange_trading_day
 from app.services.fear_greed_service import FearGreedService
-from app.services.market_session_service import current_market_date
+from app.services.market_session_service import current_market_date, is_korean_symbol
 from app.services.trend_filter_service import TrendFilterService
 from app.strategy_engine.context import StrategyContext, StrategyPosition
 from app.strategy_engine.loc import MONEY_QUANT
@@ -40,6 +40,7 @@ class DashboardDto:
     capital_update: dict | None = None
     market_sentiment: object | None = None
     trend_filter: object | None = None
+    market_status: dict | None = None
 
 
 class DashboardService:
@@ -91,6 +92,7 @@ class DashboardService:
                 config.settings_json,
                 date.today(),
             ),
+            market_status=build_market_status(config.symbol, current_market_date(config.symbol)),
         )
 
     def _signals(
@@ -350,6 +352,19 @@ def _sell_urgency(reason: str | None, days_to_deadline: int) -> str:
     if days_to_deadline <= 2:
         return "near_deadline"
     return "normal"
+
+
+def build_market_status(symbol: str, market_date: date) -> dict:
+    exchange = "KR" if is_korean_symbol(symbol) else "US"
+    is_open = is_exchange_trading_day(symbol, market_date)
+    exchange_label = "\ud55c\uad6d\uc7a5" if exchange == "KR" else "\ubbf8\uad6d\uc7a5"
+    status_label = "\uac1c\uc7a5\uc77c" if is_open else "\ud734\uc7a5"
+    return {
+        "exchange": exchange,
+        "market_date": market_date,
+        "is_open": is_open,
+        "label": f"{exchange_label} {status_label}",
+    }
 
 
 def _capital_update_interval(settings: dict) -> int:

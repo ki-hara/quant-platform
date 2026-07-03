@@ -136,6 +136,14 @@ export interface DashboardResponse {
   capital_update: CapitalUpdateStatus | null;
   market_sentiment: MarketSentiment | null;
   trend_filter: TrendFilter | null;
+  market_status: MarketStatus | null;
+}
+
+export interface MarketStatus {
+  exchange: "US" | "KR" | string;
+  market_date: ISODate;
+  is_open: boolean;
+  label: string;
 }
 
 export interface TrendFilterSymbol {

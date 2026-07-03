@@ -13,7 +13,7 @@ from app.infrastructure.repositories.market_data import MarketPriceRepository
 from app.infrastructure.repositories.portfolios import PortfolioRepository, PositionRepository
 from app.infrastructure.repositories.modes import ModeStateRepository
 from app.infrastructure.repositories.trades import TradeRepository
-from app.services.dashboard_service import DashboardService
+from app.services.dashboard_service import DashboardService, build_market_status
 from app.services.manual_trade_service import ManualTradeRequest, ManualTradeService
 from app.services.portfolio_adjustment_service import PortfolioAdjustmentRequest, PortfolioAdjustmentService
 from app.services.signal_execution_service import SignalExecutionRequest, SignalExecutionService
@@ -526,6 +526,15 @@ def test_dashboard_missing_market_data_returns_unavailable_signals() -> None:
         assert dashboard.total_asset is None
         assert dashboard.signals.available is False
         assert dashboard.signals.reason == "market_data_unavailable"
+
+
+def test_build_market_status_marks_us_observed_holiday_closed() -> None:
+    status = build_market_status("SOXL", date(2026, 7, 3))
+
+    assert status["exchange"] == "US"
+    assert status["market_date"] == date(2026, 7, 3)
+    assert status["is_open"] is False
+    assert status["label"] == "미국장 휴장"
 
 
 def test_dashboard_includes_trend_filter_for_default_symbols() -> None:
