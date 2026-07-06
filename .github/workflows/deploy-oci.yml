@@ -48,21 +48,29 @@ jobs:
           script_stop: true
           script: |
             set -e
+            echo "Entering app repository"
             cd ~/quant-platform
+            echo "Stopping stale server-side build clients"
             pkill -f "docker compose up -d --buil[d]" || true
+            echo "Updating deployment checkout"
             git fetch origin main
             git reset --hard origin/main
             cd deploy/oci
             ENV_FILE=/opt/quant-platform/.env
+            echo "Checking production env file"
             if [ ! -f "$ENV_FILE" ]; then
               echo "Missing $ENV_FILE. Create it from deploy/oci/production.env.example before deploying."
               exit 1
             fi
             if [ ! -r "$ENV_FILE" ]; then
-              sudo chown "$(id -u):$(id -g)" "$ENV_FILE"
-              sudo chmod 600 "$ENV_FILE"
+              sudo -n chown "$(id -u):$(id -g)" "$ENV_FILE"
+              sudo -n chmod 600 "$ENV_FILE"
             fi
-            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+            echo "Logging in to GHCR"
+            echo "${{ secrets.GITHUB_TOKEN }}" | timeout 2m docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+            echo "Pulling prebuilt image"
             timeout 10m docker compose pull
+            echo "Starting container"
             timeout 5m docker compose up -d --no-build --remove-orphans
+            echo "Pruning old images"
             timeout 2m docker image prune -f
