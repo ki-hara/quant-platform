@@ -49,6 +49,7 @@ jobs:
           script: |
             set -e
             cd ~/quant-platform
+            pkill -f "docker compose up -d --buil[d]" || true
             git fetch origin main
             git reset --hard origin/main
             cd deploy/oci
@@ -62,6 +63,6 @@ jobs:
               sudo chmod 600 "$ENV_FILE"
             fi
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-            docker compose pull
-            docker compose up -d
-            docker image prune -f
+            timeout 10m docker compose pull
+            timeout 5m docker compose up -d --no-build --remove-orphans
+            timeout 2m docker image prune -f
