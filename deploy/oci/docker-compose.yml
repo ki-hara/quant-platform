@@ -1,8 +1,6 @@
 services:
   app:
-    build:
-      context: ../..
-      dockerfile: Dockerfile
+    image: ghcr.io/ki-hara/quant-platform:main
     container_name: quant-platform
     restart: unless-stopped
     ports:

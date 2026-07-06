@@ -13,15 +13,38 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    env:
+      IMAGE_NAME: ghcr.io/ki-hara/quant-platform
 
     steps:
+      - name: Checkout repository
+        run: |
+          git init .
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --depth=1 origin "${GITHUB_SHA}"
+          git checkout --detach "${GITHUB_SHA}"
+
+      - name: Build and push container image
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker build \
+            --tag "${IMAGE_NAME}:${GITHUB_SHA}" \
+            --tag "${IMAGE_NAME}:main" \
+            .
+          docker push "${IMAGE_NAME}:${GITHUB_SHA}"
+          docker push "${IMAGE_NAME}:main"
+
       - name: Deploy on Oracle VM
         uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262
         with:
           host: ${{ secrets.OCI_HOST }}
           username: ${{ secrets.OCI_USER }}
           key: ${{ secrets.OCI_SSH_KEY }}
-          command_timeout: 60m
+          command_timeout: 20m
           script_stop: true
           script: |
             set -e
@@ -38,5 +61,7 @@ jobs:
               sudo chown "$(id -u):$(id -g)" "$ENV_FILE"
               sudo chmod 600 "$ENV_FILE"
             fi
-            docker compose up -d --build
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+            docker compose pull
+            docker compose up -d
             docker image prune -f
