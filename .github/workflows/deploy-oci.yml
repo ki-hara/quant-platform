@@ -69,8 +69,8 @@ jobs:
             echo "Logging in to GHCR"
             echo "${{ secrets.GITHUB_TOKEN }}" | timeout 2m docker login ghcr.io -u "${{ github.actor }}" --password-stdin
             echo "Pulling prebuilt image"
-            timeout 10m docker compose pull
+            timeout 3m docker compose pull
             echo "Starting container"
-            timeout 5m docker compose up -d --no-build --remove-orphans
+            timeout 3m docker compose up -d --no-build --remove-orphans
             echo "Pruning old images"
-            timeout 2m docker image prune -f
+            timeout 1m docker image prune -f
