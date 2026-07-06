@@ -130,12 +130,12 @@ def test_daily_plan_uses_last_completed_close_and_confirmed_mode() -> None:
         plan = plan_service.get_daily_plan(config.id, today=date(2026, 6, 20))
 
         assert plan.plan_date == date(2026, 6, 20)
-        assert plan.market_data_as_of == date(2026, 6, 20)
+        assert plan.market_data_as_of == date(2026, 6, 18)
         assert plan.confirmed_mode == StrategyMode.SAFE
         assert plan.recommended_mode == StrategyMode.SAFE
         assert plan.differs is False
-        assert plan.previous_close == Decimal("101.000000")
-        assert plan.LOC.limit_price == Decimal("104.030000")
+        assert plan.previous_close == Decimal("99.000000")
+        assert plan.LOC.limit_price == Decimal("101.970000")
         assert plan.LOC.quantity == 1
         assert plan.buy_available is True
         assert plan.LOC.blocking_reason is None
@@ -178,12 +178,12 @@ def test_daily_plan_calculates_exact_loc_price_and_quantity_from_previous_close(
 
         plan = plan_service.get_daily_plan(config.id, today=date(2026, 6, 19))
 
-        assert plan.market_data_as_of == date(2026, 6, 19)
-        assert plan.previous_close == Decimal("100.000000")
-        assert plan.LOC.limit_price == Decimal("103.000000")
+        assert plan.market_data_as_of == date(2026, 6, 18)
+        assert plan.previous_close == Decimal("99.000000")
+        assert plan.LOC.limit_price == Decimal("101.970000")
         assert plan.LOC.allocation == Decimal("142.857143")
         assert plan.LOC.quantity == 1
-        assert plan.LOC.required_cash == Decimal("103.103000")
+        assert plan.LOC.required_cash == Decimal("102.071970")
         assert plan.buy_available is True
         assert plan.open_position_count == 0
         assert plan.mode_split_count == 7
@@ -224,8 +224,8 @@ def test_daily_plan_defaults_to_fixed_quantity_policy() -> None:
 
         plan = DailyPlanService(session).get_daily_plan(config.id, today=date(2026, 6, 19))
 
-        assert plan.LOC.quantity == 13
-        assert [order.quantity for order in plan.LOC.orders] == [13]
+        assert plan.LOC.quantity == 14
+        assert [order.quantity for order in plan.LOC.orders] == [14]
 
 
 def test_daily_plan_full_allocation_policy_returns_ladder_orders() -> None:
@@ -267,8 +267,8 @@ def test_daily_plan_full_allocation_policy_returns_ladder_orders() -> None:
             position_sizing_policy="full_allocation",
         )
 
-        assert plan.LOC.quantity == 13
-        assert [order.quantity for order in plan.LOC.orders] == [13, 2, 2, 1, 1]
+        assert plan.LOC.quantity == 14
+        assert [order.quantity for order in plan.LOC.orders] == [14, 2, 2, 1, 1]
 
 
 def test_daily_plan_uses_last_confirmed_us_close_before_cutoff() -> None:
@@ -292,6 +292,46 @@ def test_daily_plan_uses_last_confirmed_us_close_before_cutoff() -> None:
         assert plan.loc_basis_date == date(2026, 6, 24)
         assert plan.previous_close == Decimal("229.570007")
         assert plan.LOC.limit_price == Decimal("236.457107")
+
+
+def test_daily_plan_uses_previous_trading_day_close_for_today_order_after_kr_close() -> None:
+    with create_session() as session:
+        config = create_config(session)
+        config.symbol = "0193T0"
+        session.commit()
+        MarketPriceRepository(session).upsert_prices(
+            "finance_data_reader",
+            [
+                OhlcvDto(
+                    symbol="0193T0",
+                    date=date(2026, 7, 3),
+                    open=Decimal("22655"),
+                    high=Decimal("27880"),
+                    low=Decimal("19435"),
+                    close=Decimal("27400"),
+                    volume=267083350,
+                ),
+                OhlcvDto(
+                    symbol="0193T0",
+                    date=date(2026, 7, 6),
+                    open=Decimal("27670"),
+                    high=Decimal("28925"),
+                    low=Decimal("24280"),
+                    close=Decimal("25310"),
+                    volume=157845904,
+                ),
+            ],
+        )
+
+        plan = DailyPlanService(session).get_daily_plan(
+            config.id,
+            today=date(2026, 7, 6),
+            now=datetime(2026, 7, 6, 17, 0, tzinfo=ZoneInfo("Asia/Seoul")),
+        )
+
+        assert plan.loc_basis_date == date(2026, 7, 3)
+        assert plan.previous_close == Decimal("27400.000000")
+        assert plan.LOC.limit_price == Decimal("28222.000000")
 
 
 @pytest.mark.parametrize(

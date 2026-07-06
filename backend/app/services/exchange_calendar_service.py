@@ -13,6 +13,13 @@ def add_exchange_trading_days(symbol: str, start_date: date, trading_days: int) 
     return current
 
 
+def previous_exchange_trading_day(symbol: str, value: date) -> date:
+    current = value - timedelta(days=1)
+    while not is_exchange_trading_day(symbol, current):
+        current -= timedelta(days=1)
+    return current
+
+
 def count_exchange_trading_days(symbol: str, start_date: date, end_date: date) -> int:
     if end_date <= start_date:
         return 0

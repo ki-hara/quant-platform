@@ -9,7 +9,8 @@ from app.infrastructure.repositories.market_data import MarketPriceRepository
 from app.infrastructure.repositories.modes import ModeStateRepository
 from app.infrastructure.repositories.portfolios import PortfolioRepository, PositionRepository
 from app.infrastructure.repositories.strategies import StrategyConfigRepository
-from app.services.market_session_service import latest_confirmed_market_date
+from app.services.exchange_calendar_service import previous_exchange_trading_day
+from app.services.market_session_service import current_market_date
 from app.strategy_engine.loc import LocPlan, calculate_loc_plan
 
 
@@ -36,7 +37,8 @@ class DailyPlanService:
         state = self.mode_states.get_or_create_safe(config_id)
         portfolio = self.portfolios.get_by_config(config_id)
         open_positions = self.positions.list_open(config_id)
-        basis_date = latest_confirmed_market_date(config.symbol, now)
+        order_date = current_market_date(config.symbol, now) if now is not None else today
+        basis_date = previous_exchange_trading_day(config.symbol, order_date)
         latest_price = self.market_prices.latest_price_on_or_before(
             settings.market_data_provider,
             config.symbol,
@@ -80,7 +82,7 @@ class DailyPlanService:
             cash = portfolio.cash
 
         return DailyPlanDto(
-            plan_date=today,
+            plan_date=order_date,
             market_data_as_of=data_as_of,
             symbol=config.symbol,
             confirmed_mode=state.confirmed_mode,
