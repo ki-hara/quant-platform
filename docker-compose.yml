@@ -4,6 +4,7 @@ services:
     ports:
       - "8000:8000"
     environment:
+      QUANT_ENV: local
       QUANT_DATABASE_URL: sqlite:////data/quant_platform.db
       QUANT_DEFAULT_OWNER_ID: default
       QUANT_DEFAULT_OWNER_PIN: "0000"

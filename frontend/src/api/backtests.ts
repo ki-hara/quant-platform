@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiUrl } from "./client";
+import { apiGet, apiGetText, apiPost } from "./client";
 import type {
   BacktestCreateRequest,
   BacktestDailySnapshot,
@@ -15,15 +15,15 @@ export function getBacktest(runId: number): Promise<BacktestRun> {
 }
 
 export function getBacktestDailyCsvUrl(runId: number): string {
-  return apiUrl(`/api/backtests/${runId}/daily.csv`);
+  return `/api/backtests/${runId}/daily.csv`;
 }
 
 export function getBacktestTradesCsvUrl(runId: number): string {
-  return apiUrl(`/api/backtests/${runId}/trades.csv`);
+  return `/api/backtests/${runId}/trades.csv`;
 }
 
 export function getBacktestSummaryCsvUrl(runId: number): string {
-  return apiUrl(`/api/backtests/${runId}/summary.csv`);
+  return `/api/backtests/${runId}/summary.csv`;
 }
 
 export async function getBacktestDailyCsv(runId: number): Promise<BacktestDailySnapshot[]> {
@@ -65,9 +65,7 @@ export async function getBacktestTradesCsv(runId: number): Promise<BacktestTrade
 }
 
 async function fetchCsv(url: string): Promise<Record<string, string>[]> {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(await response.text());
-  const text = await response.text();
+  const text = await apiGetText(url);
   return parseCsv(text);
 }
 

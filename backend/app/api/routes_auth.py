@@ -1,6 +1,7 @@
 from typing import Annotated
+import time
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -15,6 +16,10 @@ from app.domain.models import Owner
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 SessionDep = Annotated[Session, Depends(get_session)]
+
+MAX_LOGIN_FAILURES = 5
+LOGIN_LOCK_SECONDS = 5 * 60
+_login_failures: dict[str, tuple[int, float]] = {}
 
 
 class OwnerDto(BaseModel):
@@ -55,7 +60,7 @@ class PinChangeDto(BaseModel):
 
 
 @router.get("/owners", response_model=list[OwnerDto])
-def list_owners(session: SessionDep) -> list[Owner]:
+def list_owners(owner: CurrentOwnerDep, session: SessionDep) -> list[Owner]:
     stmt = select(Owner).where(Owner.is_active.is_(True)).order_by(Owner.created_at, Owner.id)
     return list(session.scalars(stmt))
 
@@ -76,10 +81,14 @@ def create_owner(request: OwnerCreateDto, session: SessionDep) -> Owner:
 
 
 @router.post("/login", response_model=LoginResponseDto)
-def login(request: LoginRequestDto, session: SessionDep) -> LoginResponseDto:
+def login(request: LoginRequestDto, http_request: Request, session: SessionDep) -> LoginResponseDto:
+    failure_key = _login_failure_key(request.owner_id, http_request)
+    _raise_if_login_locked(failure_key)
     owner = session.get(Owner, request.owner_id)
     if owner is None or not owner.is_active or not verify_pin(request.pin, owner.pin_hash):
+        _record_login_failure(failure_key)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User or PIN is incorrect.")
+    _login_failures.pop(failure_key, None)
     return LoginResponseDto(token=create_owner_token(owner.id), owner=OwnerDto.model_validate(owner))
 
 
@@ -99,3 +108,33 @@ def change_my_pin(request: PinChangeDto, owner: CurrentOwnerDep, session: Sessio
     session.commit()
     session.refresh(owner)
     return owner
+
+
+def _login_failure_key(owner_id: str, request: Request) -> str:
+    host = request.client.host if request.client else "unknown"
+    return f"{host}:{owner_id}"
+
+
+def _raise_if_login_locked(key: str) -> None:
+    failures = _login_failures.get(key)
+    now = time.monotonic()
+    if failures is None:
+        return
+    count, locked_until = failures
+    if count >= MAX_LOGIN_FAILURES and locked_until > now:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many failed login attempts. Please try again later.",
+        )
+    if locked_until and locked_until <= now:
+        _login_failures.pop(key, None)
+
+
+def _record_login_failure(key: str) -> None:
+    now = time.monotonic()
+    count, locked_until = _login_failures.get(key, (0, 0))
+    if locked_until and locked_until <= now:
+        count = 0
+    count += 1
+    next_locked_until = now + LOGIN_LOCK_SECONDS if count >= MAX_LOGIN_FAILURES else 0
+    _login_failures[key] = (count, next_locked_until)

@@ -9,6 +9,7 @@ import {
   getBacktestTradesCsvUrl,
 } from "../api/backtests";
 import { listStrategyConfigs } from "../api/strategies";
+import { apiDownload } from "../api/client";
 import { BacktestChart } from "../components/BacktestChart";
 import { MetricStrip } from "../components/MetricStrip";
 import { Table, type TableColumn } from "../components/Table";
@@ -287,6 +288,12 @@ export function BacktestPage() {
 }
 
 function CsvLink({ href, label, disabled }: { href?: string; label: string; disabled: boolean }) {
+  async function handleClick() {
+    if (!href) return;
+    const parts = href.split("/");
+    await apiDownload(href, parts[parts.length - 1] ?? "backtest.csv");
+  }
+
   if (disabled || !href) {
     return (
       <button className="button-link" type="button" disabled>
@@ -297,10 +304,10 @@ function CsvLink({ href, label, disabled }: { href?: string; label: string; disa
   }
 
   return (
-    <a className="button-link" href={href}>
+    <button className="button-link" type="button" onClick={handleClick}>
       <Download aria-hidden="true" size={16} />
       {label}
-    </a>
+    </button>
   );
 }
 

@@ -41,11 +41,31 @@ export async function apiDelete(path: string): Promise<void> {
   if (!response.ok) throw new Error(await errorMessage(response));
 }
 
-export function apiUrl(path: string): string {
-  const token = getAuthToken();
-  const url = new URL(`${API_BASE_URL}${path}`, window.location.href);
-  if (token) url.searchParams.set("access_token", token);
-  return url.toString();
+export async function apiGetText(path: string): Promise<string> {
+  const response = await fetch(`${API_BASE_URL}${path}`, { headers: authHeaders() });
+  if (!response.ok) throw new Error(await errorMessage(response));
+  return response.text();
+}
+
+export async function apiGetBlob(path: string): Promise<Blob> {
+  const response = await fetch(`${API_BASE_URL}${path}`, { headers: authHeaders() });
+  if (!response.ok) throw new Error(await errorMessage(response));
+  return response.blob();
+}
+
+export async function apiDownload(path: string, filename: string): Promise<void> {
+  const blob = await apiGetBlob(path);
+  const url = window.URL.createObjectURL(blob);
+  try {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  } finally {
+    window.URL.revokeObjectURL(url);
+  }
 }
 
 function authHeaders(): Record<string, string> {

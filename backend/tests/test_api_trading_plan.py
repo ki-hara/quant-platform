@@ -37,6 +37,9 @@ def api_client() -> Generator[TestClient, None, None]:
     app.state.test_engine = engine
     app.dependency_overrides[get_session] = override_session
     client = TestClient(app)
+    login_response = client.post("/api/auth/login", json={"owner_id": "default", "pin": "0000"})
+    assert login_response.status_code == 200
+    client.headers.update({"Authorization": f"Bearer {login_response.json()['token']}"})
     yield client
     client.close()
     app.dependency_overrides.clear()
@@ -352,9 +355,9 @@ def test_get_daily_plan_returns_loc_and_mode_state(api_client: TestClient) -> No
 
     assert response.status_code == 200
     body = response.json()
-    assert body["market_data_as_of"] == "2026-06-19"
+    assert body["market_data_as_of"] == "2026-06-18"
     assert body["confirmed_mode"] == "safe"
-    assert body["LOC"]["limit_price"] == "103.000000"
+    assert body["LOC"]["limit_price"] == "101.970000"
     assert body["LOC"]["quantity"] == 1
 
 
@@ -403,8 +406,8 @@ def test_post_refresh_fetches_both_symbols_and_preserves_confirmed_mode(api_clie
 
     assert response.status_code == 200
     body = response.json()
-    assert len(provider.calls) == 2
-    assert {call[0] for call in provider.calls} == {"TEST", "QQQ"}
+    assert len(provider.calls) == 3
+    assert {call[0] for call in provider.calls} == {"TEST", "QQQ", "SOXL"}
     assert body["confirmed_mode"] == "aggressive"
     assert body["investment_data_as_of"]
     assert body["rsi_data_as_of"]

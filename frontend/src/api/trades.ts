@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPut, apiUrl } from "./client";
+import { apiDelete, apiGet, apiPost, apiPut } from "./client";
 import type {
   ManualTradeRequest,
   ManualTradeResponse,
@@ -63,6 +63,5 @@ export function recordManualTrade(request: ManualTradeRequest): Promise<ManualTr
 }
 
 export async function deleteTrade(tradeId: number): Promise<void> {
-  const response = await fetch(apiUrl(`/api/trades/${tradeId}`), { method: "DELETE" });
-  if (!response.ok) throw new Error(await response.text());
+  await apiDelete(`/api/trades/${tradeId}`);
 }

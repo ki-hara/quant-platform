@@ -13,7 +13,7 @@ from app.api.routes_portfolios import router as portfolios_router
 from app.api.routes_trading_plan import router as trading_plan_router
 from app.api.routes_strategies import router as strategies_router
 from app.api.routes_trades import router as trades_router
-from app.core.config import settings
+from app.core.config import settings, validate_production_settings
 from app.db.base import Base
 from app.db.seed import seed_default_owner
 from app.db.session import SessionLocal, engine
@@ -45,6 +45,7 @@ def create_app() -> FastAPI:
 
     @app.on_event("startup")
     def startup() -> None:
+        validate_production_settings()
         Base.metadata.create_all(engine)
         ensure_sqlite_schema()
         with SessionLocal() as session:

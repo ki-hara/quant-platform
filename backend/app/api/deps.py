@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import Depends, Header, HTTPException, Query, status
+from fastapi import Depends, Header, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.security import parse_owner_token
@@ -15,9 +15,8 @@ SessionDep = Annotated[Session, Depends(get_session)]
 def get_current_owner(
     session: SessionDep,
     authorization: Annotated[str | None, Header()] = None,
-    access_token: Annotated[str | None, Query()] = None,
 ) -> Owner:
-    token = access_token
+    token = None
     if authorization and authorization.lower().startswith("bearer "):
         token = authorization.split(" ", 1)[1].strip()
     if not token:

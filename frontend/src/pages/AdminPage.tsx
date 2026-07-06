@@ -3,8 +3,8 @@ import { useEffect, useState } from "react";
 import {
   activateUser,
   deactivateUser,
+  downloadSqliteBackup,
   getAdminSummary,
-  getSqliteBackupUrl,
   listAdminUsers,
   resetUserPin,
 } from "../api/admin";
@@ -59,6 +59,16 @@ export function AdminPage() {
       setError(errorMessage(caught));
     } finally {
       setWorkingId(null);
+    }
+  }
+
+  async function handleDownloadBackup() {
+    try {
+      setMessage("");
+      setError("");
+      await downloadSqliteBackup();
+    } catch (caught) {
+      setError(errorMessage(caught));
     }
   }
 
@@ -145,10 +155,10 @@ export function AdminPage() {
             <h2>DB 백업</h2>
             <span>현재 SQLite 데이터베이스를 다운로드합니다.</span>
           </div>
-          <a className="button-link" href={getSqliteBackupUrl()}>
+          <button type="button" onClick={handleDownloadBackup}>
             <Download aria-hidden="true" size={16} />
             DB 백업
-          </a>
+          </button>
         </div>
       </section>
     </div>

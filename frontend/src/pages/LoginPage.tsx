@@ -1,5 +1,5 @@
-import { FormEvent, useEffect, useState } from "react";
-import { createOwner, listOwners, loginOwner } from "../api/auth";
+import { FormEvent, useState } from "react";
+import { createOwner, loginOwner } from "../api/auth";
 import { setAuthToken } from "../api/client";
 import type { AuthOwner } from "../types/api";
 
@@ -8,22 +8,13 @@ interface LoginPageProps {
 }
 
 export function LoginPage({ onLogin }: LoginPageProps) {
-  const [owners, setOwners] = useState<AuthOwner[]>([]);
+  const owners: AuthOwner[] = [];
   const [mode, setMode] = useState<"login" | "create">("login");
-  const [ownerId, setOwnerId] = useState("");
+  const [ownerId, setOwnerId] = useState("default");
   const [name, setName] = useState("");
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const [working, setWorking] = useState(false);
-
-  useEffect(() => {
-    listOwners()
-      .then((rows) => {
-        setOwners(rows);
-        setOwnerId(rows[0]?.id ?? "default");
-      })
-      .catch((caught) => setError(errorMessage(caught)));
-  }, []);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

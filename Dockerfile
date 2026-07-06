@@ -17,11 +17,10 @@ WORKDIR /app
 ENV PATH="/app/.venv/bin:$PATH" \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
+    QUANT_ENV="production" \
     QUANT_DATABASE_URL="sqlite:////data/quant_platform.db" \
     QUANT_STATIC_DIR="/app/static" \
     QUANT_DEFAULT_OWNER_ID="default" \
-    QUANT_DEFAULT_OWNER_PIN="0000" \
-    QUANT_AUTH_SECRET="change-me-for-deployment" \
     QUANT_MARKET_DATA_PROVIDER="finance_data_reader"
 
 RUN pip install --no-cache-dir uv==0.11.2 && mkdir -p /data

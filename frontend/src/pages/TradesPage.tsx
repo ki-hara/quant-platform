@@ -116,7 +116,7 @@ export function TradesPage() {
     return {
       needed: hasCrossedLocOrders(orders),
       orders,
-      nettedOrders: netLocOrders(orders, tickSize),
+      nettedOrders: sortLocOrdersByPriceDesc(netLocOrders(orders, tickSize)),
       tickSize,
     };
   }, [plan, sellOrderRows, selectedSymbol]);
@@ -749,6 +749,10 @@ function buildLocNettingInputs(plan: DailyPlan | null, sellOrderRows: SellOrderR
   return [...buyOrders, ...sellOrders].filter(
     (order) => Number.isFinite(order.limitPrice) && order.limitPrice > 0 && order.quantity > 0,
   );
+}
+
+function sortLocOrdersByPriceDesc(orders: LocOrderInput[]): LocOrderInput[] {
+  return [...orders].sort((left, right) => right.limitPrice - left.limitPrice);
 }
 
 function formatOptionalMoney(value: string | null | undefined, symbol?: string | null): string {

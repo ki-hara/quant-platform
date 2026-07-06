@@ -1,8 +1,9 @@
-import { apiGet, apiPost, apiUrl } from "./client";
+import { apiDownload, apiGet, apiPost } from "./client";
 import type { AdminSummary, AdminUser, PinResetResponse } from "../types/api";
 
-export function getSqliteBackupUrl(): string {
-  return apiUrl("/api/admin/sqlite-backup");
+export function downloadSqliteBackup(): Promise<void> {
+  const timestamp = new Date().toISOString().replace(/[-:]/g, "").slice(0, 15);
+  return apiDownload("/api/admin/sqlite-backup", `quant-platform-backup-${timestamp}.db`);
 }
 
 export function getAdminSummary(): Promise<AdminSummary> {

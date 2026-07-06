@@ -1,0 +1,4 @@
+# Require explicit owner review for deployment and workflow changes.
+.github/workflows/ @ki-hara
+deploy/ @ki-hara
+Dockerfile @ki-hara

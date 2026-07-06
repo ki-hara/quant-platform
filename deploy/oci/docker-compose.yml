@@ -7,12 +7,13 @@ services:
     restart: unless-stopped
     ports:
       - "80:8080"
+    env_file:
+      - /opt/quant-platform/.env
     environment:
+      QUANT_ENV: production
       QUANT_DATABASE_URL: sqlite:////data/quant_platform.db
       QUANT_STATIC_DIR: /app/static
       QUANT_DEFAULT_OWNER_ID: default
-      QUANT_DEFAULT_OWNER_PIN: "0000"
-      QUANT_AUTH_SECRET: change-this-on-server
       QUANT_MARKET_DATA_PROVIDER: finance_data_reader
     volumes:
       - /opt/quant-platform/data:/data
