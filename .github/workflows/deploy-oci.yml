@@ -29,5 +29,14 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
             cd deploy/oci
+            ENV_FILE=/opt/quant-platform/.env
+            if [ ! -f "$ENV_FILE" ]; then
+              echo "Missing $ENV_FILE. Create it from deploy/oci/production.env.example before deploying."
+              exit 1
+            fi
+            if [ ! -r "$ENV_FILE" ]; then
+              sudo chown "$(id -u):$(id -g)" "$ENV_FILE"
+              sudo chmod 600 "$ENV_FILE"
+            fi
             docker compose up -d --build
             docker image prune -f
