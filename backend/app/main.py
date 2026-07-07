@@ -103,6 +103,12 @@ def ensure_sqlite_schema() -> None:
         }
         if "limit_price" not in trade_columns:
             connection.execute(text("ALTER TABLE trades ADD COLUMN limit_price NUMERIC(18, 6)"))
+        if "position_id" not in trade_columns:
+            connection.execute(text("ALTER TABLE trades ADD COLUMN position_id INTEGER"))
+        if "entry_date" not in trade_columns:
+            connection.execute(text("ALTER TABLE trades ADD COLUMN entry_date DATE"))
+        if "entry_price" not in trade_columns:
+            connection.execute(text("ALTER TABLE trades ADD COLUMN entry_price NUMERIC(18, 6)"))
         backtest_trade_columns = {
             row[1]
             for row in connection.execute(text("PRAGMA table_info(backtest_trades)"))

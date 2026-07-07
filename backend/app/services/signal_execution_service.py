@@ -182,5 +182,8 @@ class SignalExecutionService:
             realized_pnl=realized_pnl,
             sell_reason=request.sell_reason,
             source=request.source,
+            position_id=position.id,
+            entry_date=position.buy_date,
+            entry_price=position.buy_price,
         )
         return SignalExecutionResult(trade=trade, cash=portfolio.cash, realized_pnl=realized_pnl)

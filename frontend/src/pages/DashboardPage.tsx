@@ -2,7 +2,7 @@ import { RefreshCw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { getDashboard } from "../api/dashboard";
 import { listStrategyConfigs } from "../api/strategies";
-import { listTrades } from "../api/trades";
+import { listPositionHistory } from "../api/trades";
 import {
   getChart,
   getDailyPlan,
@@ -24,18 +24,16 @@ import type {
   DashboardResponse,
   MarketSentiment,
   ModeRecommendation,
+  PositionHistoryRow,
   PositionRow,
   StrategyConfig,
   StrategyMode,
-  TradeRow,
   TradingChart,
 } from "../types/api";
 import {
   formatMoney,
   translateMode,
   translateReason,
-  translateSide,
-  translateSource,
   translateStatus,
 } from "../utils/format";
 import { rememberStrategyConfigId, resolveRememberedStrategyConfigId } from "../utils/strategySelection";
@@ -47,7 +45,7 @@ export function DashboardPage() {
   const [plan, setPlan] = useState<DailyPlan | null>(null);
   const [mode, setMode] = useState<ModeRecommendation | null>(null);
   const [chart, setChart] = useState<TradingChart | null>(null);
-  const [recentTrades, setRecentTrades] = useState<TradeRow[]>([]);
+  const [recentTrades, setRecentTrades] = useState<PositionHistoryRow[]>([]);
   const [range, setRange] = useState<ChartRange>("1m");
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
@@ -90,7 +88,7 @@ export function DashboardPage() {
         getDailyPlan(configId),
         getModeRecommendation(configId),
         getChart(configId, chartRange),
-        listTrades(configId),
+        listPositionHistory(configId),
       ]);
       setDashboard(dashboardData);
       setPlan(planData);
@@ -232,14 +230,17 @@ export function DashboardPage() {
           <Table columns={positionColumns} rows={dashboard?.open_positions ?? []} getRowKey={(row) => row.id} />
         </section>
 
-        <section className="panel">
+        <section className="panel position-history-panel position-history-panel-compact">
           <div className="panel-header">
             <div>
               <h2>최근 거래내역</h2>
-              <span>최대 8건</span>
             </div>
           </div>
-          <Table columns={tradeColumns} rows={recentTrades} getRowKey={(row) => row.id} />
+          <Table
+            columns={tradeColumns}
+            rows={recentTrades}
+            getRowKey={(row, index) => `${row.position_id ?? "trade"}-${row.buy_date}-${row.sell_date ?? "open"}-${index}`}
+          />
         </section>
       </div>
     </div>
@@ -382,15 +383,29 @@ const positionColumns: TableColumn<PositionRow>[] = [
   { key: "status", header: "상태", render: (row) => translateStatus(row.status) },
 ];
 
-const tradeColumns: TableColumn<TradeRow>[] = [
-  { key: "date", header: "일자", render: (row) => row.date },
-  { key: "side", header: "구분", render: (row) => translateSide(row.side) },
-  { key: "quantity", header: "수량", align: "right", render: (row) => formatMoney(row.quantity) },
-  { key: "price", header: "가격", align: "right", render: (row) => formatMoney(row.price) },
-  { key: "pnl", header: "실현손익", align: "right", render: (row) => formatMoney(row.realized_pnl) },
-  { key: "reason", header: "사유", render: (row) => translateReason(row.sell_reason) },
-  { key: "source", header: "출처", render: (row) => translateSource(row.source) },
+const tradeColumns: TableColumn<PositionHistoryRow>[] = [
+  { key: "buy_date", header: "매수일", render: (row) => row.buy_date },
+  { key: "sell_date", header: "매도일", render: (row) => row.sell_date ?? "-" },
+  { key: "quantity", header: "수량", align: "right", render: (row) => `${wholeShare(row.quantity) || "0"}주` },
+  { key: "entry_price", header: "매수가", align: "right", render: (row) => formatMoney(row.entry_price) },
+  { key: "exit_price", header: "매도가", align: "right", render: (row) => formatOptionalMoney(row.exit_price) },
+  { key: "pnl", header: "실현손익", align: "right", render: (row) => formatOptionalMoney(row.realized_pnl) },
+  { key: "status", header: "상태/사유", render: (row) => positionHistoryStatus(row) },
 ];
+
+function positionHistoryStatus(row: PositionHistoryRow): string {
+  if (row.sell_reason) return translateReason(row.sell_reason);
+  return translateStatus(row.status);
+}
+
+function formatOptionalMoney(value: string | null | undefined): string {
+  return value ? formatMoney(value) : "-";
+}
+
+function wholeShare(value: string | number | null | undefined): string {
+  const number = Math.trunc(Number(value ?? 0));
+  return Number.isFinite(number) && number > 0 ? String(number) : "";
+}
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "요청 처리 중 오류가 발생했습니다.";

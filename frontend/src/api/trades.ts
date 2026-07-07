@@ -4,6 +4,7 @@ import type {
   ManualTradeResponse,
   LocOrderFillRequest,
   LocOrderRow,
+  PositionHistoryRow,
   PositionRow,
   SignalExecutionRequest,
   SignalExecutionResponse,
@@ -30,6 +31,10 @@ export function createBuyOrderPosition(
 
 export function listTrades(configId: number): Promise<TradeRow[]> {
   return apiGet<TradeRow[]>(`/api/strategy-configs/${configId}/trades`);
+}
+
+export function listPositionHistory(configId: number): Promise<PositionHistoryRow[]> {
+  return apiGet<PositionHistoryRow[]>(`/api/strategy-configs/${configId}/position-history`);
 }
 
 export function listLocOrders(configId: number): Promise<LocOrderRow[]> {

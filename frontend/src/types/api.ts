@@ -192,6 +192,9 @@ export interface TradeRow {
   date: ISODate;
   side: string;
   quantity: DecimalString;
+  position_id: number | null;
+  entry_date: ISODate | null;
+  entry_price: DecimalString | null;
   limit_price: DecimalString | null;
   price: DecimalString;
   fee: DecimalString;
@@ -239,6 +242,20 @@ export interface ManualTradeResponse {
   trade: TradeRow;
   cash: DecimalString;
   realized_pnl: DecimalString;
+}
+
+export interface PositionHistoryRow {
+  trade_id: number | null;
+  position_id: number | null;
+  buy_date: ISODate;
+  sell_date: ISODate | null;
+  status: string;
+  quantity: DecimalString;
+  entry_price: DecimalString;
+  exit_price: DecimalString | null;
+  fee: DecimalString;
+  realized_pnl: DecimalString | null;
+  sell_reason: string | null;
 }
 
 export interface BacktestRun {

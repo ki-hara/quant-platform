@@ -5,8 +5,8 @@ import { listStrategyConfigs } from "../api/strategies";
 import {
   createBuyOrderPosition,
   deleteTrade,
+  listPositionHistory,
   listPositions,
-  listTrades,
   recordManualTrade,
   updatePosition,
 } from "../api/trades";
@@ -15,9 +15,9 @@ import { Table, type TableColumn } from "../components/Table";
 import type {
   DailyPlan,
   DashboardResponse,
+  PositionHistoryRow,
   PositionRow,
   StrategyConfig,
-  TradeRow,
 } from "../types/api";
 import {
   formatMoney,
@@ -25,7 +25,6 @@ import {
   translateCode,
   translateMode,
   translateReason,
-  translateSide,
 } from "../utils/format";
 import { hasCrossedLocOrders, netLocOrders, tickSizeForSymbol, type LocOrderInput } from "../utils/locNetting";
 import { rememberStrategyConfigId, resolveRememberedStrategyConfigId } from "../utils/strategySelection";
@@ -64,7 +63,7 @@ export function TradesPage() {
   const [configs, setConfigs] = useState<StrategyConfig[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [positions, setPositions] = useState<PositionRow[]>([]);
-  const [trades, setTrades] = useState<TradeRow[]>([]);
+  const [positionHistory, setPositionHistory] = useState<PositionHistoryRow[]>([]);
   const [plan, setPlan] = useState<DailyPlan | null>(null);
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
   const [livePositionSizingPolicy, setLivePositionSizingPolicy] = useState<LivePositionSizingPolicy>("fixed_quantity");
@@ -139,9 +138,9 @@ export function TradesPage() {
     try {
       setLoading(true);
       setError("");
-      const [positionRows, tradeRows, dailyPlan, dashboardData] = await Promise.all([
+      const [positionRows, positionHistoryRows, dailyPlan, dashboardData] = await Promise.all([
         listPositions(configId),
-        listTrades(configId),
+        listPositionHistory(configId),
         getDailyPlan(configId, positionSizingPolicy),
         getDashboard(configId),
       ]);
@@ -158,7 +157,7 @@ export function TradesPage() {
           ]),
         ),
       );
-      setTrades(tradeRows);
+      setPositionHistory(positionHistoryRows);
       setPlan(dailyPlan);
       setDashboard(dashboardData);
     } catch (caught) {
@@ -185,7 +184,7 @@ export function TradesPage() {
   }
 
   function fillSellRecommendation(position: PositionRow, signal: SellSignalRow | undefined) {
-    const price = String(signal?.sell_limit_price ?? position.buy_price);
+    const price = sellExecutionPrice(position);
     const quantity = wholeShare(position.quantity);
     const fee = estimateFee(price, quantity, dashboard?.config.fee_rate);
     setManualForm((current) => ({
@@ -199,6 +198,10 @@ export function TradesPage() {
       position_id: String(position.id),
       sell_reason: signal?.reason ?? "manual_signal",
     }));
+  }
+
+  function sellExecutionPrice(position: PositionRow): string {
+    return String(plan?.previous_close ?? plan?.loc_basis_close ?? dashboard?.latest_price?.close ?? position.buy_price);
   }
 
   async function handleManualSubmit(event: FormEvent<HTMLFormElement>) {
@@ -247,13 +250,14 @@ export function TradesPage() {
     }
   }
 
-  async function handleDeleteTrade(trade: TradeRow) {
-    if (!window.confirm(`${trade.date} ${translateSide(trade.side)} 거래를 삭제할까요?`)) return;
+  async function handleDeletePositionHistory(row: PositionHistoryRow) {
+    if (!row.trade_id || !row.sell_date) return;
+    if (!window.confirm(`${row.sell_date} 매도 거래를 삭제할까요?`)) return;
     try {
-      setDeletingId(trade.id);
+      setDeletingId(row.trade_id);
       setError("");
       setMessage("");
-      await deleteTrade(trade.id);
+      await deleteTrade(row.trade_id);
       setMessage("거래내역을 삭제했습니다.");
       await loadRows(selectedId);
     } catch (caught) {
@@ -292,8 +296,8 @@ export function TradesPage() {
     }
   }
 
-  const tradeColumnsWithActions: TableColumn<TradeRow>[] = [
-    ...buildTradeColumns(selectedSymbol),
+  const positionHistoryColumns: TableColumn<PositionHistoryRow>[] = [
+    ...buildPositionHistoryColumns(selectedSymbol),
     {
       key: "delete",
       header: "삭제",
@@ -302,9 +306,9 @@ export function TradesPage() {
         <button
           className="icon-button"
           type="button"
-          title="수동/보정 매수 거래만 삭제할 수 있습니다."
-          disabled={deletingId === row.id || !["manual", "correction"].includes(row.source)}
-          onClick={() => handleDeleteTrade(row)}
+          title="매도 체결 거래를 삭제합니다."
+          disabled={!row.trade_id || deletingId === row.trade_id}
+          onClick={() => handleDeletePositionHistory(row)}
         >
           <Trash2 aria-hidden="true" size={15} />
         </button>
@@ -453,7 +457,7 @@ export function TradesPage() {
           <div className="panel-header">
             <div>
               <h2>보유 포지션</h2>
-              <span>수량, 매수가, 체결 상태를 직접 보정합니다.</span>
+              <span>대기 중인 LOC 매수 주문의 체결 여부와 실제 체결 수량·가격을 확인합니다.</span>
             </div>
             <span className="status-pill compact is-muted">{positions.length}건</span>
           </div>
@@ -560,7 +564,7 @@ export function TradesPage() {
                   </button>
                 ))}
               </div>
-              <span>매수는 주문 수량을 입력하고, 체결가는 보유 포지션에서 보정합니다.</span>
+              <span>매수 주문은 대기 포지션으로 등록하고, 매도 체결은 선택한 보유 포지션에 기록합니다.</span>
             </div>
           </div>
           <form className="form-stack order-entry-form" onSubmit={handleManualSubmit}>
@@ -582,12 +586,14 @@ export function TradesPage() {
                     className={manualForm.position_id === String(position.id) ? "is-active" : undefined}
                     onClick={() => {
                       const signal = sellSignalByPosition.get(position.id);
-                      const price = String(signal?.sell_limit_price ?? position.buy_price);
+                      const price = sellExecutionPrice(position);
+                      const quantity = wholeShare(position.quantity);
                       setManualForm((current) => ({
                         ...current,
                         position_id: String(position.id),
-                        quantity: wholeShare(position.quantity),
+                        quantity,
                         price,
+                        fee: estimateFee(price, quantity, dashboard?.config.fee_rate),
                         sell_reason: signal?.reason ?? current.sell_reason,
                       }));
                     }}
@@ -662,19 +668,21 @@ export function TradesPage() {
             <button type="submit" disabled={!selectedId || saving}>
               <Save aria-hidden="true" size={16} /> {saving ? "저장 중" : manualForm.side === "buy" ? "주문 저장" : "거래 저장"}
             </button>
-            <p className="form-status">매수 체결 수량과 매수가는 보유 포지션에서 보정합니다.</p>
           </form>
         </section>
       </div>
 
-      <section className="panel">
+      <section className="panel position-history-panel">
         <div className="panel-header">
           <div>
-            <h2>거래내역</h2>
-            <span>체결 이력 {trades.length}건</span>
+            <h2>거래 내역</h2>
           </div>
         </div>
-        <Table columns={tradeColumnsWithActions} rows={trades} getRowKey={(row) => row.id} />
+        <Table
+          columns={positionHistoryColumns}
+          rows={positionHistory}
+          getRowKey={(row, index) => `${row.position_id ?? "trade"}-${row.buy_date}-${row.sell_date ?? "open"}-${index}`}
+        />
       </section>
     </div>
   );
@@ -707,16 +715,16 @@ function LocNettingTable({
   );
 }
 
-function buildTradeColumns(symbol: string | null | undefined): TableColumn<TradeRow>[] {
+function buildPositionHistoryColumns(symbol: string | null | undefined): TableColumn<PositionHistoryRow>[] {
   return [
-    { key: "date", header: "일자", render: (row) => row.date },
-    { key: "side", header: "구분", render: (row) => translateSide(row.side) },
-    { key: "quantity", header: "수량", align: "right", render: (row) => wholeShare(row.quantity) || "0" },
-    { key: "limit_price", header: "LOC가", align: "right", render: (row) => formatOptionalMoney(row.limit_price, symbol) },
-    { key: "price", header: "체결가", align: "right", render: (row) => formatMoney(row.price, symbol) },
+    { key: "buy_date", header: "매수일", render: (row) => row.buy_date },
+    { key: "sell_date", header: "매도일", render: (row) => row.sell_date ?? "-" },
+    { key: "quantity", header: "수량", align: "right", render: (row) => `${wholeShare(row.quantity) || "0"}주` },
+    { key: "entry_price", header: "매수가", align: "right", render: (row) => formatMoney(row.entry_price, symbol) },
+    { key: "exit_price", header: "매도가", align: "right", render: (row) => formatOptionalMoney(row.exit_price, symbol) },
+    { key: "pnl", header: "실현손익", align: "right", render: (row) => formatOptionalMoney(row.realized_pnl, symbol) },
     { key: "fee", header: "수수료", align: "right", render: (row) => formatMoney(row.fee, symbol) },
-    { key: "pnl", header: "실현손익", align: "right", render: (row) => formatMoney(row.realized_pnl, symbol) },
-    { key: "reason", header: "사유", render: (row) => translateReason(row.sell_reason) },
+    { key: "status", header: "상태/사유", render: (row) => positionHistoryStatus(row) },
   ];
 }
 
@@ -818,6 +826,15 @@ function holdingStatusClass(signal: SellSignalRow | undefined): string {
   if (signal.urgency === "near_deadline") return "is-warning";
   if (signal.urgency === "profit_target") return "is-success";
   return "";
+}
+
+function positionHistoryStatus(row: PositionHistoryRow): string {
+  if (row.sell_reason) return translateReason(row.sell_reason);
+  return translateCode(row.status.toLowerCase(), {
+    pending: "대기",
+    open: "보유중",
+    closed: "청산",
+  });
 }
 
 function positionStatusText(status: string): string {

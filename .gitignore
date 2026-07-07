@@ -1,9 +1,12 @@
 .superpowers/
+.gstack/
 .venv/
 __pycache__/
 .pytest_cache/
+*.log
 quant_platform.db
 node_modules/
 dist/
 .env
 .env.*
+rsi/

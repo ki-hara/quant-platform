@@ -20,6 +20,7 @@ from app.dto.dashboard import PositionDto
 from app.dto.trades import (
     ManualTradeRequestDto,
     ManualTradeResponseDto,
+    PositionHistoryDto,
     SignalExecutionRequestDto,
     SignalExecutionResponseDto,
     TradeResponseDto,
@@ -181,6 +182,12 @@ def _estimate_fee(config, price: Decimal, quantity: Decimal) -> Decimal:
 def list_trades(config_id: int, session: SessionDep, owner: CurrentOwnerDep) -> list[object]:
     ensure_config_owner(config_id, owner, session)
     return TradeRepository(session).list_by_strategy_config(config_id)
+
+
+@router.get("/strategy-configs/{config_id}/position-history", response_model=list[PositionHistoryDto])
+def list_position_history(config_id: int, session: SessionDep, owner: CurrentOwnerDep) -> list[object]:
+    ensure_config_owner(config_id, owner, session)
+    return TradeRepository(session).list_position_history(config_id)
 
 
 @router.get("/trades/{config_id}", response_model=list[TradeResponseDto])

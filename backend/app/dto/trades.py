@@ -15,6 +15,9 @@ class TradeResponseDto(BaseModel):
     date: date
     side: str
     quantity: Decimal
+    position_id: int | None = None
+    entry_date: date | None = None
+    entry_price: Decimal | None = None
     limit_price: Decimal | None = None
     price: Decimal
     fee: Decimal
@@ -62,6 +65,20 @@ class ManualTradeResponseDto(BaseModel):
     trade: TradeResponseDto
     cash: Decimal
     realized_pnl: Decimal
+
+
+class PositionHistoryDto(BaseModel):
+    trade_id: int | None = None
+    position_id: int | None
+    buy_date: date
+    sell_date: date | None = None
+    status: str
+    quantity: Decimal
+    entry_price: Decimal
+    exit_price: Decimal | None = None
+    fee: Decimal
+    realized_pnl: Decimal | None = None
+    sell_reason: str | None = None
 
 
 class PositionsResponseDto(BaseModel):

@@ -1023,6 +1023,64 @@ th {
   color: var(--muted);
 }
 
+.position-history-panel table {
+  min-width: 860px;
+  table-layout: fixed;
+}
+
+.position-history-panel th,
+.position-history-panel td {
+  padding-inline: 12px;
+}
+
+.position-history-panel th:nth-child(1),
+.position-history-panel td:nth-child(1),
+.position-history-panel th:nth-child(2),
+.position-history-panel td:nth-child(2) {
+  width: 118px;
+}
+
+.position-history-panel th:nth-child(3),
+.position-history-panel td:nth-child(3) {
+  width: 74px;
+}
+
+.position-history-panel th:nth-child(4),
+.position-history-panel td:nth-child(4),
+.position-history-panel th:nth-child(5),
+.position-history-panel td:nth-child(5) {
+  width: 128px;
+}
+
+.position-history-panel th:nth-child(6),
+.position-history-panel td:nth-child(6) {
+  width: 132px;
+}
+
+.position-history-panel th:nth-child(7),
+.position-history-panel td:nth-child(7) {
+  width: 108px;
+}
+
+.position-history-panel th:nth-child(8),
+.position-history-panel td:nth-child(8) {
+  width: 132px;
+}
+
+.position-history-panel th:nth-child(9),
+.position-history-panel td:nth-child(9) {
+  width: 58px;
+}
+
+.position-history-panel-compact table {
+  min-width: 760px;
+}
+
+.position-history-panel-compact th:nth-child(7),
+.position-history-panel-compact td:nth-child(7) {
+  width: 132px;
+}
+
 .toolbar,
 .form-grid,
 .execution-form {
