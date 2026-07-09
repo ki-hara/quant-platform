@@ -226,6 +226,44 @@ def test_chart_rsi_includes_current_week_for_display() -> None:
         assert max(point.date for point in chart.rsi.points) == date(2026, 6, 26)
 
 
+def test_chart_shows_current_mode_period_marker_from_week_start() -> None:
+    with create_session() as session:
+        config = create_config(session)
+        seed_prices(session, "TEST", date(2026, 1, 1), 400)
+        seed_weekly_prices(
+            session,
+            [
+                "99",
+                "100",
+                "101",
+                "102",
+                "103",
+                "104",
+                "105",
+                "106",
+                "107",
+                "108",
+                "109",
+                "110",
+                "111",
+                "112",
+                "113",
+                "114",
+                "113",
+                "112",
+                "111",
+            ],
+        )
+        ModeService(session).get_mode_recommendation(config.id, as_of=date(2026, 7, 6))
+
+        chart = ChartService(session).get_chart(config.id, range_key="6m", today=date(2026, 7, 6))
+
+        assert len(chart.mode_markers) == 1
+        assert chart.mode_markers[0].period_start_date == date(2026, 7, 6)
+        assert chart.mode_markers[0].period_end_date == date(2026, 7, 10)
+        assert chart.mode_markers[0].date == date(2026, 7, 10)
+
+
 @pytest.mark.parametrize(
     ("range_key", "expected_days"),
     [("1m", 31), ("3m", 93), ("6m", 186), ("1y", 366)],

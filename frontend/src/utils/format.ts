@@ -48,6 +48,13 @@ export function formatDecimal(value: string | number | null | undefined, digits 
   return number.toFixed(digits);
 }
 
+export function formatPriceInput(value: string | number | null | undefined, digits = 2): string {
+  if (value === null || value === undefined || value === "") return "";
+  const number = Number(value);
+  if (Number.isNaN(number)) return String(value);
+  return number.toFixed(digits);
+}
+
 export function formatPercent(value: string | number | null | undefined): string {
   if (value === null || value === undefined || value === "") return "-";
   const number = Number(value);

@@ -1,4 +1,4 @@
-import { createChart, type IChartApi, type ISeriesApi } from "lightweight-charts";
+import { createChart, type IChartApi, type ISeriesApi, type LineData, type WhitespaceData } from "lightweight-charts";
 import { useEffect, useRef } from "react";
 import type { TradingChart } from "../types/api";
 import { translateMode } from "../utils/format";
@@ -47,7 +47,7 @@ export function RsiChart({ chart }: RsiChartProps) {
       lineWidth: 2,
       priceLineVisible: false,
     });
-    rsi.setData(chart.rsi.points.map((point) => ({ time: point.date, value: Number(point.value) })));
+    rsi.setData(rsiLineDataWithMarkerDates(chart));
     chart.rsi.guides.forEach((guide) => {
       rsi.createPriceLine({
         price: Number(guide),
@@ -103,4 +103,26 @@ export function RsiChart({ chart }: RsiChartProps) {
       )}
     </section>
   );
+}
+
+export function rsiLineDataWithMarkerDates(chart: TradingChart): Array<LineData<string> | WhitespaceData<string>> {
+  const lineData: Array<LineData<string> | WhitespaceData<string>> = chart.rsi.points.map((point) => ({
+    time: point.date,
+    value: Number(point.value),
+  }));
+  const existingDates = new Set(lineData.map((point) => String(point.time)));
+  const lastRsiDate = chart.rsi.points.reduce<string | null>(
+    (latest, point) => (latest === null || point.date > latest ? point.date : latest),
+    null,
+  );
+  const futureMarkerDates = chart.mode_markers
+    .map((marker) => marker.date)
+    .filter((date) => lastRsiDate !== null && date > lastRsiDate && !existingDates.has(date));
+
+  futureMarkerDates.forEach((date) => {
+    existingDates.add(date);
+    lineData.push({ time: date });
+  });
+
+  return lineData.sort((left, right) => String(left.time).localeCompare(String(right.time)));
 }

@@ -308,7 +308,7 @@ function buildNestedSettings(fields: FieldDescriptor[], values: Record<string, F
       target[part] = target[part] && typeof target[part] === "object" ? target[part] : {};
       target = target[part] as Record<string, unknown>;
     });
-    target[parts[parts.length - 1]] = values[field.key] ?? field.defaultValue;
+    target[parts[parts.length - 1]] = valueForSubmit(field.key, values[field.key] ?? field.defaultValue);
   });
   return root;
 }
@@ -349,7 +349,13 @@ function inputTypeFor(key: string): "number" | "text" {
 
 function valueForInput(key: string, value: string): FieldValue {
   if (key === "mode_rsi_symbol") return value.toUpperCase();
-  return coerceValue(value);
+  return value;
+}
+
+function valueForSubmit(key: string, value: FieldValue): FieldValue {
+  if (key === "mode_rsi_symbol" || key === "trend_filter_symbols") return value;
+  if (typeof value === "string") return coerceValue(value);
+  return value;
 }
 
 function normalizeTrendSymbols(value: FieldValue | undefined): string[] {

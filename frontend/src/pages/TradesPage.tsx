@@ -21,6 +21,7 @@ import type {
 } from "../types/api";
 import {
   formatMoney,
+  formatPriceInput,
   marketDateIso,
   translateCode,
   translateMode,
@@ -174,8 +175,8 @@ export function TradesPage() {
       trade_date: plan.plan_date,
       side: "buy",
       quantity: wholeShare(plan.LOC.quantity),
-      limit_price: plan.LOC.limit_price,
-      price: plan.LOC.limit_price,
+      limit_price: formatPriceInput(plan.LOC.limit_price),
+      price: formatPriceInput(plan.LOC.limit_price),
       fee: "0",
       mode: plan.confirmed_mode,
       position_id: "",
