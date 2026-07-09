@@ -202,7 +202,7 @@ export function TradesPage() {
   }
 
   function sellExecutionPrice(position: PositionRow): string {
-    return String(plan?.previous_close ?? plan?.loc_basis_close ?? dashboard?.latest_price?.close ?? position.buy_price);
+    return formatPriceInput(plan?.previous_close ?? plan?.loc_basis_close ?? dashboard?.latest_price?.close ?? position.buy_price);
   }
 
   async function handleManualSubmit(event: FormEvent<HTMLFormElement>) {
