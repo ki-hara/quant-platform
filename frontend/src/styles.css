@@ -640,11 +640,13 @@ h2 {
 }
 
 .snapshot-action-cell {
-  width: 74px;
+  width: 92px;
+  min-width: 92px;
   white-space: nowrap;
 }
 
 .snapshot-action-cell .inline-actions {
+  flex-wrap: nowrap;
   justify-content: flex-end;
 }
 
