@@ -625,6 +625,29 @@ h2 {
   gap: 6px;
 }
 
+.snapshot-name-cell {
+  width: 20%;
+  min-width: 150px;
+}
+
+.snapshot-memo-cell {
+  width: auto;
+}
+
+.snapshot-date-cell {
+  width: 96px;
+  white-space: nowrap;
+}
+
+.snapshot-action-cell {
+  width: 74px;
+  white-space: nowrap;
+}
+
+.snapshot-action-cell .inline-actions {
+  justify-content: flex-end;
+}
+
 .muted-text {
   color: var(--muted);
   font-size: 12px;

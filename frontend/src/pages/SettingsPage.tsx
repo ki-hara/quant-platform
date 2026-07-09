@@ -345,13 +345,14 @@ function snapshotColumns(
   disabled: boolean,
 ): TableColumn<StrategyConfigSnapshot>[] {
   return [
-    { key: "name", header: "이름", render: (row) => row.name },
-    { key: "memo", header: "메모", render: (row) => row.memo ?? "-" },
-    { key: "created", header: "생성일", render: (row) => row.created_at.slice(0, 10) },
+    { key: "name", header: "이름", className: "snapshot-name-cell", render: (row) => row.name },
+    { key: "memo", header: "메모", className: "snapshot-memo-cell", render: (row) => row.memo ?? "-" },
+    { key: "created", header: "생성일", align: "right", className: "snapshot-date-cell", render: (row) => row.created_at.slice(0, 10) },
     {
       key: "actions",
       header: "작업",
-      align: "center",
+      align: "right",
+      className: "snapshot-action-cell",
       render: (row) => (
         <div className="inline-actions">
           <button

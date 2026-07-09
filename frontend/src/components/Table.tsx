@@ -4,6 +4,7 @@ export interface TableColumn<T> {
   key: string;
   header: string;
   align?: "left" | "right" | "center";
+  className?: string;
   render: (row: T) => ReactNode;
 }
 
@@ -26,7 +27,7 @@ export function Table<T>({
         <thead>
           <tr>
             {columns.map((column) => (
-              <th key={column.key} className={column.align ? `align-${column.align}` : undefined}>
+              <th key={column.key} className={columnClassName(column)}>
                 {column.header}
               </th>
             ))}
@@ -45,7 +46,7 @@ export function Table<T>({
                 {columns.map((column) => (
                   <td
                     key={column.key}
-                    className={column.align ? `align-${column.align}` : undefined}
+                    className={columnClassName(column)}
                   >
                     {column.render(row)}
                   </td>
@@ -57,4 +58,8 @@ export function Table<T>({
       </table>
     </div>
   );
+}
+
+function columnClassName<T>(column: TableColumn<T>): string | undefined {
+  return [column.align ? `align-${column.align}` : null, column.className].filter(Boolean).join(" ") || undefined;
 }
