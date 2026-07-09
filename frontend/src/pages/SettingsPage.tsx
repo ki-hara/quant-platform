@@ -347,8 +347,6 @@ function snapshotColumns(
   return [
     { key: "name", header: "이름", render: (row) => row.name },
     { key: "memo", header: "메모", render: (row) => row.memo ?? "-" },
-    { key: "fee", header: "수수료율", align: "right", render: (row) => row.fee_rate },
-    { key: "slippage", header: "슬리피지", align: "right", render: (row) => row.slippage_rate },
     { key: "created", header: "생성일", render: (row) => row.created_at.slice(0, 10) },
     {
       key: "actions",
