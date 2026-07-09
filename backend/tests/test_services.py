@@ -19,6 +19,7 @@ from app.services.portfolio_adjustment_service import PortfolioAdjustmentRequest
 from app.services.signal_execution_service import SignalExecutionRequest, SignalExecutionService
 from app.services.strategy_config_service import (
     StrategyConfigCreateRequest,
+    StrategyConfigSnapshotCreateRequest,
     StrategyConfigUpdateRequest,
     StrategyConfigService,
 )
@@ -473,6 +474,90 @@ def test_strategy_config_update_allows_unchanged_initial_capital() -> None:
         )
 
         assert updated.name == "Renamed"
+
+
+def test_strategy_config_snapshot_preserves_live_portfolio_when_applied() -> None:
+    with create_session() as session:
+        service = StrategyConfigService(session)
+        config = service.create_config(
+            "default",
+            StrategyConfigCreateRequest(
+                name="Live Strategy",
+                strategy_type="dynamic_wave",
+                symbol="SOXL",
+                initial_capital=Decimal("10000"),
+                fee_rate=Decimal("0.001"),
+                slippage_rate=Decimal("0"),
+                settings_json={
+                    **DynamicWaveStrategy.default_settings(),
+                    "safe": {
+                        **DynamicWaveStrategy.default_settings()["safe"],
+                        "buy_threshold_percent": 3,
+                    },
+                },
+            ),
+        )
+        portfolio = PortfolioRepository(session).get_by_config(config.id)
+        assert portfolio is not None
+        portfolio.cash = Decimal("9000")
+        portfolio.capital = Decimal("10000")
+        session.commit()
+
+        snapshot = service.create_snapshot(
+            config.id,
+            StrategyConfigSnapshotCreateRequest(
+                name="High trend",
+                memo="Original high trend settings",
+            ),
+        )
+        service.update_config(
+            config.id,
+            StrategyConfigUpdateRequest(
+                fee_rate=Decimal("0.002"),
+                slippage_rate=Decimal("0.001"),
+                settings_json={
+                    **DynamicWaveStrategy.default_settings(),
+                    "safe": {
+                        **DynamicWaveStrategy.default_settings()["safe"],
+                        "buy_threshold_percent": 7.5,
+                    },
+                },
+            ),
+        )
+
+        applied = service.apply_snapshot(config.id, snapshot.id)
+        portfolio_after = PortfolioRepository(session).get_by_config(config.id)
+
+        assert applied.fee_rate == Decimal("0.001")
+        assert applied.slippage_rate == Decimal("0")
+        assert applied.settings_json["safe"]["buy_threshold_percent"] == 3
+        assert applied.symbol == "SOXL"
+        assert portfolio_after is not None
+        assert portfolio_after.cash == Decimal("9000")
+        assert portfolio_after.capital == Decimal("10000")
+
+
+def test_strategy_config_snapshots_list_newest_first_and_delete_removes_snapshot() -> None:
+    with create_session() as session:
+        service = StrategyConfigService(session)
+        config = create_config(session)
+
+        first = service.create_snapshot(
+            config.id,
+            StrategyConfigSnapshotCreateRequest(name="First", memo=None),
+        )
+        second = service.create_snapshot(
+            config.id,
+            StrategyConfigSnapshotCreateRequest(name="Second", memo="later"),
+        )
+
+        snapshots = service.list_snapshots(config.id)
+        assert [snapshot.id for snapshot in snapshots] == [second.id, first.id]
+
+        service.delete_snapshot(config.id, first.id)
+
+        remaining = service.list_snapshots(config.id)
+        assert [snapshot.id for snapshot in remaining] == [second.id]
 
 
 def test_strategy_config_update_rejects_unknown_strategy_type() -> None:

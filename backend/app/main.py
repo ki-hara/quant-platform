@@ -76,6 +76,31 @@ def ensure_sqlite_schema() -> None:
         }
         if "archived_at" not in strategy_columns:
             connection.execute(text("ALTER TABLE strategy_configs ADD COLUMN archived_at DATETIME"))
+        connection.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS strategy_config_snapshots (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    strategy_config_id INTEGER NOT NULL,
+                    name VARCHAR(255) NOT NULL,
+                    memo VARCHAR(500),
+                    strategy_type VARCHAR(100) NOT NULL,
+                    symbol VARCHAR(32) NOT NULL,
+                    fee_rate NUMERIC(18, 6) NOT NULL,
+                    slippage_rate NUMERIC(18, 6) NOT NULL,
+                    settings_json JSON NOT NULL,
+                    created_at DATETIME NOT NULL,
+                    FOREIGN KEY(strategy_config_id) REFERENCES strategy_configs (id)
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_strategy_config_snapshots_strategy_config_id "
+                "ON strategy_config_snapshots (strategy_config_id)"
+            )
+        )
         snapshot_columns = {
             row[1]
             for row in connection.execute(text("PRAGMA table_info(backtest_daily_snapshots)"))

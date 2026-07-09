@@ -7,6 +7,8 @@ from app.api.deps import CurrentOwnerDep, ensure_config_owner
 from app.db.session import get_session
 from app.dto.strategies import (
     StrategyConfigCreateDto,
+    StrategyConfigSnapshotCreateDto,
+    StrategyConfigSnapshotResponseDto,
     StrategyConfigResponseDto,
     StrategyConfigUpdateDto,
     StrategyDto,
@@ -14,6 +16,7 @@ from app.dto.strategies import (
 )
 from app.services.strategy_config_service import (
     StrategyConfigCreateRequest,
+    StrategyConfigSnapshotCreateRequest,
     StrategyConfigUpdateRequest,
     StrategyConfigService,
 )
@@ -115,5 +118,73 @@ def archive_strategy_config(config_id: int, session: SessionDep, owner: CurrentO
     ensure_config_owner(config_id, owner, session)
     try:
         StrategyConfigService(session).archive_config(config_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.get(
+    "/strategy-configs/{config_id}/snapshots",
+    response_model=list[StrategyConfigSnapshotResponseDto],
+)
+def list_strategy_config_snapshots(
+    config_id: int,
+    session: SessionDep,
+    owner: CurrentOwnerDep,
+) -> list[object]:
+    ensure_config_owner(config_id, owner, session)
+    return StrategyConfigService(session).list_snapshots(config_id)
+
+
+@router.post(
+    "/strategy-configs/{config_id}/snapshots",
+    response_model=StrategyConfigSnapshotResponseDto,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_strategy_config_snapshot(
+    config_id: int,
+    request: StrategyConfigSnapshotCreateDto,
+    session: SessionDep,
+    owner: CurrentOwnerDep,
+) -> object:
+    ensure_config_owner(config_id, owner, session)
+    try:
+        return StrategyConfigService(session).create_snapshot(
+            config_id,
+            StrategyConfigSnapshotCreateRequest(name=request.name, memo=request.memo),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post(
+    "/strategy-configs/{config_id}/snapshots/{snapshot_id}/apply",
+    response_model=StrategyConfigResponseDto,
+)
+def apply_strategy_config_snapshot(
+    config_id: int,
+    snapshot_id: int,
+    session: SessionDep,
+    owner: CurrentOwnerDep,
+) -> object:
+    ensure_config_owner(config_id, owner, session)
+    try:
+        return StrategyConfigService(session).apply_snapshot(config_id, snapshot_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.delete(
+    "/strategy-configs/{config_id}/snapshots/{snapshot_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_strategy_config_snapshot(
+    config_id: int,
+    snapshot_id: int,
+    session: SessionDep,
+    owner: CurrentOwnerDep,
+) -> None:
+    ensure_config_owner(config_id, owner, session)
+    try:
+        StrategyConfigService(session).delete_snapshot(config_id, snapshot_id)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc

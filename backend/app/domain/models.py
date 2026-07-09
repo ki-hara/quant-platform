@@ -73,6 +73,28 @@ class StrategyConfig(Base):
     mode_recommendations: Mapped[list["ModeRecommendation"]] = relationship(
         back_populates="strategy_config",
     )
+    snapshots: Mapped[list["StrategyConfigSnapshot"]] = relationship(back_populates="strategy_config")
+
+
+class StrategyConfigSnapshot(Base):
+    __tablename__ = "strategy_config_snapshots"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    strategy_config_id: Mapped[int] = mapped_column(
+        ForeignKey("strategy_configs.id"),
+        nullable=False,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    memo: Mapped[str | None] = mapped_column(String(500))
+    strategy_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    symbol: Mapped[str] = mapped_column(String(32), nullable=False)
+    fee_rate: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
+    slippage_rate: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
+    settings_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    strategy_config: Mapped[StrategyConfig] = relationship(back_populates="snapshots")
 
 
 class MarketPrice(Base):

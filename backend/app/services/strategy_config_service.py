@@ -1,10 +1,12 @@
 from dataclasses import dataclass
+from copy import deepcopy
 from decimal import Decimal
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.domain.models import StrategyConfig
+from app.domain.models import StrategyConfig, StrategyConfigSnapshot
 from app.infrastructure.repositories.modes import ModeStateRepository
 from app.infrastructure.repositories.portfolios import PortfolioRepository
 from app.infrastructure.repositories.strategies import StrategyConfigRepository
@@ -31,6 +33,12 @@ class StrategyConfigUpdateRequest:
     fee_rate: Decimal | None = None
     slippage_rate: Decimal | None = None
     settings_json: dict[str, Any] | None = None
+
+
+@dataclass(frozen=True)
+class StrategyConfigSnapshotCreateRequest:
+    name: str
+    memo: str | None = None
 
 
 class StrategyConfigService:
@@ -73,6 +81,69 @@ class StrategyConfigService:
         if config is None:
             raise ValueError(f"Strategy config not found: {config_id}")
         return config
+
+    def list_snapshots(self, config_id: int) -> list[StrategyConfigSnapshot]:
+        self.get_config(config_id)
+        stmt = (
+            select(StrategyConfigSnapshot)
+            .where(StrategyConfigSnapshot.strategy_config_id == config_id)
+            .order_by(StrategyConfigSnapshot.created_at.desc(), StrategyConfigSnapshot.id.desc())
+        )
+        return list(self.session.scalars(stmt))
+
+    def create_snapshot(
+        self,
+        config_id: int,
+        request: StrategyConfigSnapshotCreateRequest,
+    ) -> StrategyConfigSnapshot:
+        try:
+            config = self.get_config(config_id)
+            snapshot = StrategyConfigSnapshot(
+                strategy_config_id=config.id,
+                name=request.name,
+                memo=request.memo,
+                strategy_type=config.strategy_type,
+                symbol=config.symbol,
+                fee_rate=config.fee_rate,
+                slippage_rate=config.slippage_rate,
+                settings_json=deepcopy(config.settings_json),
+            )
+            self.session.add(snapshot)
+            self.session.commit()
+            self.session.refresh(snapshot)
+            return snapshot
+        except Exception:
+            self.session.rollback()
+            raise
+
+    def apply_snapshot(self, config_id: int, snapshot_id: int) -> StrategyConfig:
+        try:
+            config = self.get_config(config_id)
+            snapshot = self._get_snapshot(config_id, snapshot_id)
+            config.fee_rate = snapshot.fee_rate
+            config.slippage_rate = snapshot.slippage_rate
+            config.settings_json = deepcopy(snapshot.settings_json)
+            config = self.configs.save(config)
+            self.session.commit()
+            return config
+        except Exception:
+            self.session.rollback()
+            raise
+
+    def delete_snapshot(self, config_id: int, snapshot_id: int) -> None:
+        try:
+            snapshot = self._get_snapshot(config_id, snapshot_id)
+            self.session.delete(snapshot)
+            self.session.commit()
+        except Exception:
+            self.session.rollback()
+            raise
+
+    def _get_snapshot(self, config_id: int, snapshot_id: int) -> StrategyConfigSnapshot:
+        snapshot = self.session.get(StrategyConfigSnapshot, snapshot_id)
+        if snapshot is None or snapshot.strategy_config_id != config_id:
+            raise ValueError(f"Strategy config snapshot not found: {snapshot_id}")
+        return snapshot
 
     def archive_config(self, config_id: int) -> StrategyConfig:
         try:

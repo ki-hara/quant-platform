@@ -37,6 +37,26 @@ class StrategyConfigUpdateDto(BaseModel):
     settings_json: dict[str, Any] | None = None
 
 
+class StrategyConfigSnapshotCreateDto(BaseModel):
+    name: str
+    memo: str | None = None
+
+
+class StrategyConfigSnapshotResponseDto(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    strategy_config_id: int
+    name: str
+    memo: str | None = None
+    strategy_type: str
+    symbol: str
+    fee_rate: Decimal
+    slippage_rate: Decimal
+    settings_json: dict[str, Any]
+    created_at: datetime
+
+
 class StrategyConfigResponseDto(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
