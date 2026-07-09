@@ -75,6 +75,19 @@ export interface StrategyConfig {
   archived_at: ISODateTime | null;
 }
 
+export interface StrategyConfigSnapshot {
+  id: number;
+  strategy_config_id: number;
+  name: string;
+  memo: string | null;
+  strategy_type: string;
+  symbol: string;
+  fee_rate: DecimalString;
+  slippage_rate: DecimalString;
+  settings_json: Record<string, unknown>;
+  created_at: ISODateTime;
+}
+
 export interface StrategyConfigCreateRequest {
   name: string;
   strategy_type: string;
@@ -86,6 +99,11 @@ export interface StrategyConfigCreateRequest {
 }
 
 export type StrategyConfigUpdateRequest = Partial<StrategyConfigCreateRequest>;
+
+export interface StrategyConfigSnapshotCreateRequest {
+  name: string;
+  memo: string | null;
+}
 
 export interface PortfolioRow {
   strategy_config_id: number;

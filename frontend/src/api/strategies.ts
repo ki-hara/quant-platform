@@ -1,5 +1,7 @@
 import { apiDelete, apiGet, apiPost, apiPut } from "./client";
 import type {
+  StrategyConfigSnapshot,
+  StrategyConfigSnapshotCreateRequest,
   StrategyConfig,
   StrategyConfigCreateRequest,
   StrategyConfigUpdateRequest,
@@ -38,4 +40,23 @@ export function updateStrategyConfig(
 
 export function deleteStrategyConfig(configId: number): Promise<void> {
   return apiDelete(`/api/strategy-configs/${configId}`);
+}
+
+export function listStrategyConfigSnapshots(configId: number): Promise<StrategyConfigSnapshot[]> {
+  return apiGet<StrategyConfigSnapshot[]>(`/api/strategy-configs/${configId}/snapshots`);
+}
+
+export function createStrategyConfigSnapshot(
+  configId: number,
+  request: StrategyConfigSnapshotCreateRequest,
+): Promise<StrategyConfigSnapshot> {
+  return apiPost<StrategyConfigSnapshot>(`/api/strategy-configs/${configId}/snapshots`, request);
+}
+
+export function applyStrategyConfigSnapshot(configId: number, snapshotId: number): Promise<StrategyConfig> {
+  return apiPost<StrategyConfig>(`/api/strategy-configs/${configId}/snapshots/${snapshotId}/apply`);
+}
+
+export function deleteStrategyConfigSnapshot(configId: number, snapshotId: number): Promise<void> {
+  return apiDelete(`/api/strategy-configs/${configId}/snapshots/${snapshotId}`);
 }
