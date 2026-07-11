@@ -278,7 +278,7 @@ class LocOrder(Base):
     recommended_quantity: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
     mode: Mapped[StrategyMode] = mapped_column(enum_column(StrategyMode), nullable=False)
     status: Mapped[LocOrderStatus] = mapped_column(enum_column(LocOrderStatus), nullable=False)
-    trade_id: Mapped[int | None] = mapped_column(ForeignKey("trades.id"))
+    trade_id: Mapped[int | None] = mapped_column(ForeignKey("trades.id", ondelete="SET NULL"))
     memo: Mapped[str | None] = mapped_column(String(500))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

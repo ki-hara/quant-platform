@@ -158,3 +158,17 @@ def test_fill_order_rejects_a_stale_pending_order_loaded_by_another_session(tmp_
         ).all()
         assert len(trades) == 1
         assert len(positions) == 1
+
+
+def test_delete_filled_trade_preserves_order_without_orphaned_trade_reference() -> None:
+    with create_session() as session:
+        config = create_config(session)
+        order = create_pending_order(session, config.id)
+        filled = LocOrderService(session).fill_order(order.id, fill_request())
+        assert filled.trade_id is not None
+
+        ManualTradeService(session).delete_trade(filled.trade_id)
+
+        session.refresh(order)
+        assert order.trade_id is None
+        assert session.get(LocOrder, order.id) is not None

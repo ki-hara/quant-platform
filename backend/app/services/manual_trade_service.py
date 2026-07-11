@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import NotFoundError, ValidationAppError
 from app.domain.enums import PositionStatus, StrategyMode, TradeSide, TradeSource
-from app.domain.models import LivePortfolio, PortfolioAdjustment, Position, StrategyConfig, Trade
+from app.domain.models import LivePortfolio, LocOrder, PortfolioAdjustment, Position, StrategyConfig, Trade
 from app.infrastructure.repositories.portfolios import PortfolioRepository, PositionRepository
 from app.infrastructure.repositories.strategies import StrategyConfigRepository
 from app.infrastructure.repositories.trades import TradeRepository
@@ -103,6 +103,12 @@ class ManualTradeService:
                     "live_portfolio_not_found",
                     f"Live portfolio not found for config: {trade.strategy_config_id}",
                 )
+            linked_orders = self.session.scalars(
+                select(LocOrder).where(LocOrder.trade_id == trade.id)
+            ).all()
+            for order in linked_orders:
+                order.trade_id = None
+                self.session.add(order)
             self.trades.delete(trade)
             self._rebuild_live_ledger(config, portfolio)
             self.session.commit()
