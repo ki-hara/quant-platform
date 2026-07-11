@@ -21,7 +21,6 @@ import type {
 } from "../types/api";
 import {
   formatMoney,
-  formatPriceInput,
   marketDateIso,
   translateCode,
   translateMode,
@@ -29,6 +28,7 @@ import {
 } from "../utils/format";
 import { hasCrossedLocOrders, netLocOrders, tickSizeForSymbol, type LocOrderInput } from "../utils/locNetting";
 import { isAbortError, LatestRequest } from "../utils/latestRequest";
+import { recommendedBuyPrice, recommendedSellPrice } from "../utils/orderPrices";
 import { rememberStrategyConfigId, resolveRememberedStrategyConfigId } from "../utils/strategySelection";
 
 function initialManualForm(symbol?: string | null) {
@@ -192,8 +192,8 @@ export function TradesPage() {
       trade_date: plan.plan_date,
       side: "buy",
       quantity: wholeShare(plan.LOC.quantity),
-      limit_price: formatPriceInput(plan.LOC.limit_price),
-      price: formatPriceInput(plan.LOC.limit_price),
+      limit_price: recommendedBuyPrice(plan.LOC.limit_price),
+      price: recommendedBuyPrice(plan.LOC.limit_price),
       fee: "0",
       mode: plan.confirmed_mode,
       position_id: "",
@@ -219,7 +219,12 @@ export function TradesPage() {
   }
 
   function sellExecutionPrice(position: PositionRow): string {
-    return formatPriceInput(plan?.previous_close ?? plan?.loc_basis_close ?? dashboard?.latest_price?.close ?? position.buy_price);
+    return recommendedSellPrice({
+      previousClose: plan?.previous_close,
+      locBasisClose: plan?.loc_basis_close,
+      latestClose: dashboard?.latest_price?.close,
+      buyPrice: position.buy_price,
+    });
   }
 
   async function handleManualSubmit(event: FormEvent<HTMLFormElement>) {
