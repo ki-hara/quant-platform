@@ -11,8 +11,8 @@ import type {
   TradeRow,
 } from "../types/api";
 
-export function listPositions(configId: number): Promise<PositionRow[]> {
-  return apiGet<PositionRow[]>(`/api/strategy-configs/${configId}/positions`);
+export function listPositions(configId: number, signal?: AbortSignal): Promise<PositionRow[]> {
+  return apiGet<PositionRow[]>(`/api/strategy-configs/${configId}/positions`, signal);
 }
 
 export function updatePosition(
@@ -33,8 +33,8 @@ export function listTrades(configId: number): Promise<TradeRow[]> {
   return apiGet<TradeRow[]>(`/api/strategy-configs/${configId}/trades`);
 }
 
-export function listPositionHistory(configId: number): Promise<PositionHistoryRow[]> {
-  return apiGet<PositionHistoryRow[]>(`/api/strategy-configs/${configId}/position-history`);
+export function listPositionHistory(configId: number, signal?: AbortSignal): Promise<PositionHistoryRow[]> {
+  return apiGet<PositionHistoryRow[]>(`/api/strategy-configs/${configId}/position-history`, signal);
 }
 
 export function listLocOrders(configId: number): Promise<LocOrderRow[]> {

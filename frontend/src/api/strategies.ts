@@ -9,16 +9,16 @@ import type {
   StrategySchema,
 } from "../types/api";
 
-export function listStrategies(): Promise<StrategyInfo[]> {
-  return apiGet<StrategyInfo[]>("/api/strategies");
+export function listStrategies(signal?: AbortSignal): Promise<StrategyInfo[]> {
+  return apiGet<StrategyInfo[]>("/api/strategies", signal);
 }
 
-export function getStrategySchema(strategyType: string): Promise<StrategySchema> {
-  return apiGet<StrategySchema>(`/api/strategies/${strategyType}/schema`);
+export function getStrategySchema(strategyType: string, signal?: AbortSignal): Promise<StrategySchema> {
+  return apiGet<StrategySchema>(`/api/strategies/${strategyType}/schema`, signal);
 }
 
-export function listStrategyConfigs(): Promise<StrategyConfig[]> {
-  return apiGet<StrategyConfig[]>("/api/strategy-configs");
+export function listStrategyConfigs(signal?: AbortSignal): Promise<StrategyConfig[]> {
+  return apiGet<StrategyConfig[]>("/api/strategy-configs", signal);
 }
 
 export function createStrategyConfig(
@@ -42,8 +42,11 @@ export function deleteStrategyConfig(configId: number): Promise<void> {
   return apiDelete(`/api/strategy-configs/${configId}`);
 }
 
-export function listStrategyConfigSnapshots(configId: number): Promise<StrategyConfigSnapshot[]> {
-  return apiGet<StrategyConfigSnapshot[]>(`/api/strategy-configs/${configId}/snapshots`);
+export function listStrategyConfigSnapshots(
+  configId: number,
+  signal?: AbortSignal,
+): Promise<StrategyConfigSnapshot[]> {
+  return apiGet<StrategyConfigSnapshot[]>(`/api/strategy-configs/${configId}/snapshots`, signal);
 }
 
 export function createStrategyConfigSnapshot(

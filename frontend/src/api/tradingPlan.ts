@@ -11,18 +11,20 @@ import type {
 export function getDailyPlan(
   configId: number,
   positionSizingPolicy: "fixed_quantity" | "full_allocation" = "fixed_quantity",
+  signal?: AbortSignal,
 ): Promise<DailyPlan> {
   return apiGet<DailyPlan>(
     `/api/strategy-configs/${configId}/daily-plan?position_sizing_policy=${positionSizingPolicy}`,
+    signal,
   );
 }
 
-export function getChart(configId: number, range: ChartRange): Promise<TradingChart> {
-  return apiGet<TradingChart>(`/api/strategy-configs/${configId}/chart?range=${range}`);
+export function getChart(configId: number, range: ChartRange, signal?: AbortSignal): Promise<TradingChart> {
+  return apiGet<TradingChart>(`/api/strategy-configs/${configId}/chart?range=${range}`, signal);
 }
 
-export function getModeRecommendation(configId: number): Promise<ModeRecommendation> {
-  return apiGet<ModeRecommendation>(`/api/strategy-configs/${configId}/mode-recommendation`);
+export function getModeRecommendation(configId: number, signal?: AbortSignal): Promise<ModeRecommendation> {
+  return apiGet<ModeRecommendation>(`/api/strategy-configs/${configId}/mode-recommendation`, signal);
 }
 
 export function setConfirmedMode(

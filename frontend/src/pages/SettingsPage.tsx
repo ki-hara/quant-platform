@@ -23,6 +23,7 @@ import type {
 } from "../types/api";
 import { formatMoney, translateStrategyType } from "../utils/format";
 import { rememberStrategyConfigId, resolveRememberedStrategyConfigId } from "../utils/strategySelection";
+import { isAbortError } from "../utils/latestRequest";
 
 export function SettingsPage() {
   const [strategies, setStrategies] = useState<StrategyInfo[]>([]);
@@ -46,9 +47,14 @@ export function SettingsPage() {
   );
 
   useEffect(() => {
+    const controller = new AbortController();
     async function load() {
       try {
-        const [strategyRows, configRows] = await Promise.all([listStrategies(), listStrategyConfigs()]);
+        const [strategyRows, configRows] = await Promise.all([
+          listStrategies(controller.signal),
+          listStrategyConfigs(controller.signal),
+        ]);
+        if (controller.signal.aborted) return;
         setStrategies(strategyRows);
         setConfigs(configRows);
         const rememberedId = resolveRememberedStrategyConfigId(configRows);
@@ -56,22 +62,29 @@ export function SettingsPage() {
         setEditingId(rememberedId);
         setSelectedStrategyType(rememberedConfig?.strategy_type ?? strategyRows[0]?.type ?? "");
       } catch (caught) {
-        setError(errorMessage(caught));
+        if (!isAbortError(caught)) setError(errorMessage(caught));
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     }
 
     void load();
+    return () => controller.abort();
   }, []);
 
   useEffect(() => {
     if (!selectedStrategyType) return;
-    getStrategySchema(selectedStrategyType).then(setSchema).catch((caught) => setError(errorMessage(caught)));
+    const controller = new AbortController();
+    getStrategySchema(selectedStrategyType, controller.signal)
+      .then(setSchema)
+      .catch((caught) => {
+        if (!isAbortError(caught)) setError(errorMessage(caught));
+      });
+    return () => controller.abort();
   }, [selectedStrategyType]);
 
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
 
     async function loadSnapshots() {
       if (!editingId) {
@@ -83,16 +96,16 @@ export function SettingsPage() {
       try {
         setSnapshotLoading(true);
         setSnapshots([]);
-        const rows = await listStrategyConfigSnapshots(editingId);
-        if (!cancelled) {
+        const rows = await listStrategyConfigSnapshots(editingId, controller.signal);
+        if (!controller.signal.aborted) {
           setSnapshots(rows);
         }
       } catch (caught) {
-        if (!cancelled) {
+        if (!controller.signal.aborted && !isAbortError(caught)) {
           setError(errorMessage(caught));
         }
       } finally {
-        if (!cancelled) {
+        if (!controller.signal.aborted) {
           setSnapshotLoading(false);
         }
       }
@@ -101,7 +114,7 @@ export function SettingsPage() {
     void loadSnapshots();
 
     return () => {
-      cancelled = true;
+      controller.abort();
     };
   }, [editingId]);
 

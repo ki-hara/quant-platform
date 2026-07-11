@@ -1,5 +1,5 @@
 import { RefreshCw } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getDashboard } from "../api/dashboard";
 import { listStrategyConfigs } from "../api/strategies";
 import { listPositionHistory } from "../api/trades";
@@ -37,6 +37,7 @@ import {
   translateStatus,
 } from "../utils/format";
 import { rememberStrategyConfigId, resolveRememberedStrategyConfigId } from "../utils/strategySelection";
+import { isAbortError, LatestRequest } from "../utils/latestRequest";
 
 export function DashboardPage() {
   const [configs, setConfigs] = useState<StrategyConfig[]>([]);
@@ -51,25 +52,28 @@ export function DashboardPage() {
   const [working, setWorking] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const operationalRequestsRef = useRef<LatestRequest | null>(null);
+  if (operationalRequestsRef.current === null) operationalRequestsRef.current = new LatestRequest();
+  const operationalRequests = operationalRequestsRef.current;
 
   useEffect(() => {
-    let active = true;
+    const controller = new AbortController();
     async function loadConfigs() {
       try {
         setLoading(true);
-        const rows = await listStrategyConfigs();
-        if (!active) return;
+        const rows = await listStrategyConfigs(controller.signal);
+        if (controller.signal.aborted) return;
         setConfigs(rows);
         setSelectedId((current) => current ?? resolveRememberedStrategyConfigId(rows));
       } catch (caught) {
-        if (active) setError(errorMessage(caught));
+        if (!isAbortError(caught)) setError(errorMessage(caught));
       } finally {
-        if (active) setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     }
     void loadConfigs();
     return () => {
-      active = false;
+      controller.abort();
     };
   }, []);
 
@@ -78,27 +82,36 @@ export function DashboardPage() {
     void loadOperationalData(selectedId, range);
   }, [selectedId, range]);
 
+  useEffect(() => () => operationalRequests.cancel(), [operationalRequests]);
+
   async function loadOperationalData(configId = selectedId, chartRange = range) {
     if (!configId) return;
+    const controller = operationalRequests.start();
     try {
       setLoading(true);
       setError("");
       const [dashboardData, planData, modeData, chartData, trades] = await Promise.all([
-        getDashboard(configId),
-        getDailyPlan(configId),
-        getModeRecommendation(configId),
-        getChart(configId, chartRange),
-        listPositionHistory(configId),
+        getDashboard(configId, controller.signal),
+        getDailyPlan(configId, "fixed_quantity", controller.signal),
+        getModeRecommendation(configId, controller.signal),
+        getChart(configId, chartRange, controller.signal),
+        listPositionHistory(configId, controller.signal),
       ]);
+      if (!operationalRequests.isCurrent(controller)) return;
       setDashboard(dashboardData);
       setPlan(planData);
       setMode(modeData);
       setChart(chartData);
       setRecentTrades(trades.slice(0, 8));
     } catch (caught) {
-      setError(errorMessage(caught));
+      if (operationalRequests.isCurrent(controller) && !isAbortError(caught)) {
+        setError(errorMessage(caught));
+      }
     } finally {
-      setLoading(false);
+      if (operationalRequests.isCurrent(controller)) {
+        setLoading(false);
+        operationalRequests.finish(controller);
+      }
     }
   }
 

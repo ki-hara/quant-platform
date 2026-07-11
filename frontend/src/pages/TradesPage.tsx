@@ -1,5 +1,5 @@
 import { RefreshCw, Save, Trash2, Wand2 } from "lucide-react";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { getDashboard } from "../api/dashboard";
 import { listStrategyConfigs } from "../api/strategies";
 import {
@@ -28,6 +28,7 @@ import {
   translateReason,
 } from "../utils/format";
 import { hasCrossedLocOrders, netLocOrders, tickSizeForSymbol, type LocOrderInput } from "../utils/locNetting";
+import { isAbortError, LatestRequest } from "../utils/latestRequest";
 import { rememberStrategyConfigId, resolveRememberedStrategyConfigId } from "../utils/strategySelection";
 
 function initialManualForm(symbol?: string | null) {
@@ -75,6 +76,9 @@ export function TradesPage() {
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const rowRequestsRef = useRef<LatestRequest | null>(null);
+  if (rowRequestsRef.current === null) rowRequestsRef.current = new LatestRequest();
+  const rowRequests = rowRequestsRef.current;
   const selectedSymbol = dashboard?.config.symbol ?? plan?.symbol ?? configs.find((config) => config.id === selectedId)?.symbol;
 
   const sortedPositions = useMemo(
@@ -122,29 +126,37 @@ export function TradesPage() {
   }, [plan, sellOrderRows, selectedSymbol]);
 
   useEffect(() => {
-    listStrategyConfigs()
+    const controller = new AbortController();
+    listStrategyConfigs(controller.signal)
       .then((rows) => {
         setConfigs(rows);
         setSelectedId(resolveRememberedStrategyConfigId(rows));
       })
-      .catch((caught) => setError(errorMessage(caught)));
+      .catch((caught) => {
+        if (!isAbortError(caught)) setError(errorMessage(caught));
+      });
+    return () => controller.abort();
   }, []);
 
   useEffect(() => {
     if (selectedId) void loadRows(selectedId, livePositionSizingPolicy);
   }, [selectedId, livePositionSizingPolicy]);
 
+  useEffect(() => () => rowRequests.cancel(), [rowRequests]);
+
   async function loadRows(configId = selectedId, positionSizingPolicy = livePositionSizingPolicy) {
     if (!configId) return;
+    const controller = rowRequests.start();
     try {
       setLoading(true);
       setError("");
       const [positionRows, positionHistoryRows, dailyPlan, dashboardData] = await Promise.all([
-        listPositions(configId),
-        listPositionHistory(configId),
-        getDailyPlan(configId, positionSizingPolicy),
-        getDashboard(configId),
+        listPositions(configId, controller.signal),
+        listPositionHistory(configId, controller.signal),
+        getDailyPlan(configId, positionSizingPolicy, controller.signal),
+        getDashboard(configId, controller.signal),
       ]);
+      if (!rowRequests.isCurrent(controller)) return;
       setPositions(positionRows);
       setPositionEdits(
         Object.fromEntries(
@@ -162,9 +174,14 @@ export function TradesPage() {
       setPlan(dailyPlan);
       setDashboard(dashboardData);
     } catch (caught) {
-      setError(errorMessage(caught));
+      if (rowRequests.isCurrent(controller) && !isAbortError(caught)) {
+        setError(errorMessage(caught));
+      }
     } finally {
-      setLoading(false);
+      if (rowRequests.isCurrent(controller)) {
+        setLoading(false);
+        rowRequests.finish(controller);
+      }
     }
   }
 

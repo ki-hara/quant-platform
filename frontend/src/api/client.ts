@@ -10,8 +10,8 @@ export function setAuthToken(token: string | null): void {
   else window.localStorage.removeItem(TOKEN_KEY);
 }
 
-export async function apiGet<T>(path: string): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, { headers: authHeaders() });
+export async function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, { headers: authHeaders(), signal });
   if (!response.ok) throw new Error(await errorMessage(response));
   return response.json() as Promise<T>;
 }
