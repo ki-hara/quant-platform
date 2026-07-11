@@ -46,7 +46,12 @@ class ManualTradeService:
         self.positions = PositionRepository(session)
         self.trades = TradeRepository(session)
 
-    def record_manual_trade(self, request: ManualTradeRequest) -> ManualTradeResult:
+    def record_manual_trade(
+        self,
+        request: ManualTradeRequest,
+        *,
+        commit: bool = True,
+    ) -> ManualTradeResult:
         try:
             self._validate_request(request)
             if self.configs.get(request.config_id) is None:
@@ -69,7 +74,8 @@ class ManualTradeService:
                     "unsupported_trade_side",
                     f"Unsupported trade side: {request.side}",
                 )
-            self.session.commit()
+            if commit:
+                self.session.commit()
             return result
         except Exception:
             self.session.rollback()

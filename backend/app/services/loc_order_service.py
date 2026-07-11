@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.domain.enums import LocOrderStatus, TradeSide, TradeSource
@@ -56,29 +56,45 @@ class LocOrderService:
         return order
 
     def fill_order(self, order_id: int, request: LocOrderFillRequest) -> LocOrder:
-        order = self._get_order(order_id)
-        if order.status != LocOrderStatus.PENDING:
-            raise ValueError("Only pending LOC orders can be filled.")
-        result = ManualTradeService(self.session).record_manual_trade(
-            ManualTradeRequest(
-                config_id=order.strategy_config_id,
-                side=TradeSide.BUY,
-                trade_date=order.order_date,
-                quantity=request.quantity,
-                price=request.price,
-                fee=request.fee,
-                limit_price=order.limit_price,
-                source=TradeSource.MANUAL,
-                mode=order.mode,
+        try:
+            order = self._get_order(order_id)
+            if order.status != LocOrderStatus.PENDING:
+                raise ValueError("Only pending LOC orders can be filled.")
+            result = ManualTradeService(self.session).record_manual_trade(
+                ManualTradeRequest(
+                    config_id=order.strategy_config_id,
+                    side=TradeSide.BUY,
+                    trade_date=order.order_date,
+                    quantity=request.quantity,
+                    price=request.price,
+                    fee=request.fee,
+                    limit_price=order.limit_price,
+                    source=TradeSource.MANUAL,
+                    mode=order.mode,
+                ),
+                commit=False,
             )
-        )
-        order.status = LocOrderStatus.FILLED
-        order.trade_id = result.trade.id
-        order.memo = request.memo or order.memo
-        self.session.add(order)
-        self.session.commit()
-        self.session.refresh(order)
-        return order
+            transition = self.session.execute(
+                update(LocOrder)
+                .where(
+                    LocOrder.id == order.id,
+                    LocOrder.status == LocOrderStatus.PENDING,
+                )
+                .values(
+                    status=LocOrderStatus.FILLED,
+                    trade_id=result.trade.id,
+                    memo=request.memo or order.memo,
+                )
+                .execution_options(synchronize_session=False)
+            )
+            if transition.rowcount != 1:
+                raise ValueError("Only pending LOC orders can be filled.")
+            self.session.commit()
+            self.session.refresh(order)
+            return order
+        except Exception:
+            self.session.rollback()
+            raise
 
     def mark_unfilled(self, order_id: int) -> LocOrder:
         order = self._get_order(order_id)
