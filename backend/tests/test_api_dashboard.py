@@ -56,7 +56,7 @@ def api_client() -> Generator[TestClient, None, None]:
         with Session(engine) as session:
             yield session
 
-    app = create_app()
+    app = create_app(database_engine=engine, session_factory=lambda: Session(engine))
     app.state.test_engine = engine
     app.dependency_overrides[get_session] = override_session
     client = TestClient(app)

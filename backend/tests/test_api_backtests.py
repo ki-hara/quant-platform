@@ -61,7 +61,7 @@ def api_client() -> Generator[TestClient, None, None]:
     from app.api.routes_backtests import get_market_data_service
 
     fake_market_data_service = FakeMarketDataService()
-    app = create_app()
+    app = create_app(database_engine=engine, session_factory=lambda: Session(engine))
     app.dependency_overrides[get_session] = override_session
     app.dependency_overrides[get_market_data_service] = lambda: fake_market_data_service
     app.state.fake_market_data_service = fake_market_data_service
