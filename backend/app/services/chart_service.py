@@ -29,7 +29,6 @@ from app.strategy_engine.weekly_rsi import (
     DailyClose,
     aggregate_daily_closes_to_weekly_closes,
     calculate_simple_rsi,
-    latest_completed_mode_week_ending,
 )
 from app.strategy_engine.weekly_cci import DailyOhlc, weekly_cci_series
 
