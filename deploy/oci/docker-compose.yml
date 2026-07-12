@@ -1,6 +1,6 @@
 services:
   app:
-    image: ghcr.io/ki-hara/quant-platform:main
+    image: ghcr.io/ki-hara/quant-platform:${IMAGE_TAG:-main}
     container_name: quant-platform
     restart: unless-stopped
     ports:
