@@ -6,7 +6,9 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.core.security import hash_pin
 from app.db.base import Base
+from app.domain.models import Owner
 from app.main import create_app
 
 
@@ -28,7 +30,7 @@ def test_fresh_database_records_latest_schema_version() -> None:
         versions = connection.scalars(
             text("SELECT version FROM schema_migrations ORDER BY version")
         ).all()
-    assert versions == [migrations.LATEST_SCHEMA_VERSION]
+    assert versions == list(range(1, migrations.LATEST_SCHEMA_VERSION + 1))
 
 
 def test_legacy_database_receives_all_required_tables_and_columns() -> None:
@@ -79,7 +81,7 @@ def test_migrations_are_idempotent() -> None:
 
     with engine.connect() as connection:
         count = connection.scalar(text("SELECT COUNT(*) FROM schema_migrations"))
-    assert count == 1
+    assert count == migrations.LATEST_SCHEMA_VERSION
 
 
 def test_create_app_uses_injected_database_for_lifespan_startup() -> None:
@@ -96,6 +98,70 @@ def test_create_app_uses_injected_database_for_lifespan_startup() -> None:
 
     assert "schema_migrations" in inspect(engine).get_table_names()
 
+def test_create_app_uses_injected_session_factory_for_requests() -> None:
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    session_factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+    Base.metadata.create_all(engine)
+    with session_factory.begin() as session:
+        session.add(
+            Owner(
+                id="injected-owner",
+                name="Injected Owner",
+                pin_hash=hash_pin("2468"),
+                is_active=True,
+                is_admin=False,
+            )
+        )
+
+    app = create_app(database_engine=engine, session_factory=session_factory)
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/auth/login",
+            json={"owner_id": "injected-owner", "pin": "2468"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["owner"]["id"] == "injected-owner"
+
+
+def test_migration_rebuilds_existing_loc_orders_foreign_key() -> None:
+    migrations = migration_module()
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    with engine.begin() as connection:
+        connection.execute(text("DROP TABLE loc_orders"))
+        connection.execute(
+            text(
+                """
+                CREATE TABLE loc_orders (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    strategy_config_id INTEGER NOT NULL,
+                    order_date DATE NOT NULL,
+                    symbol VARCHAR(32) NOT NULL,
+                    limit_price NUMERIC(18, 6) NOT NULL,
+                    recommended_quantity NUMERIC(18, 6) NOT NULL,
+                    mode VARCHAR(10) NOT NULL,
+                    status VARCHAR(10) NOT NULL,
+                    trade_id INTEGER,
+                    memo VARCHAR(500),
+                    created_at DATETIME NOT NULL,
+                    updated_at DATETIME NOT NULL,
+                    FOREIGN KEY(strategy_config_id) REFERENCES strategy_configs (id),
+                    FOREIGN KEY(trade_id) REFERENCES trades (id)
+                )
+                """
+            )
+        )
+
+    migrations.run_sqlite_migrations(engine)
+
+    with engine.connect() as connection:
+        foreign_keys = connection.execute(text("PRAGMA foreign_key_list(loc_orders)")).all()
+    assert any(key[2] == "trades" and key[6] == "SET NULL" for key in foreign_keys)
 
 def test_create_app_has_no_deprecated_startup_handlers() -> None:
     app = create_app()

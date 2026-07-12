@@ -1,5 +1,6 @@
 from collections.abc import Generator
 
+from fastapi import Request
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import Session, sessionmaker
@@ -34,6 +35,7 @@ engine = create_database_engine(settings.database_url)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
 
-def get_session() -> Generator[Session, None, None]:
-    with SessionLocal() as session:
+def get_session(request: Request) -> Generator[Session, None, None]:
+    session_factory = getattr(request.app.state, "session_factory", SessionLocal)
+    with session_factory() as session:
         yield session

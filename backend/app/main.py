@@ -37,6 +37,7 @@ def create_app(
         yield
 
     app = FastAPI(title="Quant Strategy Platform", version="0.1.0", lifespan=lifespan)
+    app.state.session_factory = session_factory
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],

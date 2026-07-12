@@ -168,8 +168,63 @@ def _upgrade_legacy_schema(connection: Connection) -> None:
         )
     )
 
+def _has_loc_order_trade_set_null_foreign_key(connection: Connection) -> bool:
+    foreign_keys = connection.execute(text("PRAGMA foreign_key_list(loc_orders)"))
+    return any(row[2] == "trades" and row[6] == "SET NULL" for row in foreign_keys)
 
-MIGRATIONS: tuple[Migration, ...] = ((1, "legacy_schema", _upgrade_legacy_schema),)
+
+def _rebuild_loc_orders_trade_foreign_key(connection: Connection) -> None:
+    if _has_loc_order_trade_set_null_foreign_key(connection):
+        return
+
+    connection.execute(
+        text(
+            """
+            CREATE TABLE loc_orders_replacement (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                strategy_config_id INTEGER NOT NULL,
+                order_date DATE NOT NULL,
+                symbol VARCHAR(32) NOT NULL,
+                limit_price NUMERIC(18, 6) NOT NULL,
+                recommended_quantity NUMERIC(18, 6) NOT NULL,
+                mode VARCHAR(10) NOT NULL,
+                status VARCHAR(10) NOT NULL,
+                trade_id INTEGER,
+                memo VARCHAR(500),
+                created_at DATETIME NOT NULL,
+                updated_at DATETIME NOT NULL,
+                FOREIGN KEY(strategy_config_id) REFERENCES strategy_configs (id),
+                FOREIGN KEY(trade_id) REFERENCES trades (id) ON DELETE SET NULL
+            )
+            """
+        )
+    )
+    connection.execute(
+        text(
+            """
+            INSERT INTO loc_orders_replacement (
+                id, strategy_config_id, order_date, symbol, limit_price,
+                recommended_quantity, mode, status, trade_id, memo, created_at, updated_at
+            )
+            SELECT
+                id, strategy_config_id, order_date, symbol, limit_price,
+                recommended_quantity, mode, status, trade_id, memo, created_at, updated_at
+            FROM loc_orders
+            """
+        )
+    )
+    connection.execute(text("DROP TABLE loc_orders"))
+    connection.execute(text("ALTER TABLE loc_orders_replacement RENAME TO loc_orders"))
+    connection.execute(
+        text("CREATE INDEX ix_loc_orders_strategy_config_id ON loc_orders (strategy_config_id)")
+    )
+    connection.execute(text("CREATE INDEX ix_loc_orders_order_date ON loc_orders (order_date)"))
+
+
+MIGRATIONS: tuple[Migration, ...] = (
+    (1, "legacy_schema", _upgrade_legacy_schema),
+    (2, "loc_orders_trade_fk_set_null", _rebuild_loc_orders_trade_foreign_key),
+)
 LATEST_SCHEMA_VERSION = MIGRATIONS[-1][0]
 
 
