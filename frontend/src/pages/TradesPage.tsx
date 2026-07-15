@@ -477,7 +477,7 @@ export function TradesPage() {
       </section>
 
       <div className="page-grid">
-        <section className="panel">
+        <section className="panel positions-panel">
           <div className="panel-header">
             <div>
               <h2>보유 포지션</h2>
@@ -501,68 +501,71 @@ export function TradesPage() {
                     <strong>{position.buy_date}</strong>
                     <em className={`state-badge ${positionStatusClass(edit.status)}`}>{positionStatusText(edit.status)}</em>
                   </div>
-                  <div className="readonly-field">
-                    <span>매도 기준</span>
-                    <strong>{positionExitPolicyText(position, selectedSymbol)}</strong>
+                  <div className="position-exit-policy">
+                    <span>매도 LOC</span>
+                    <strong>{positionSellLimitText(position, selectedSymbol)}</strong>
+                    <small>{positionSellTargetText(position)}</small>
                   </div>
                   <div className="readonly-field">
-                    <span>LOC가</span>
+                    <span>매수 LOC</span>
                     <strong>{formatOptionalMoney(position.limit_price, selectedSymbol)}</strong>
                   </div>
-                  <label>
-                    수량
-                    <input
-                      type="number"
-                      step="1"
-                      min="0"
-                      value={edit.quantity}
-                      inputMode="numeric"
-                      onChange={(event) =>
-                        setPositionEdits((current) => ({
-                          ...current,
-                          [position.id]: { ...edit, quantity: normalizeShareInput(event.target.value) },
-                        }))
-                      }
-                    />
-                  </label>
-                  <label>
-                    체결가
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={edit.buy_price}
-                      inputMode="decimal"
-                      onChange={(event) =>
-                        setPositionEdits((current) => ({
-                          ...current,
-                          [position.id]: { ...edit, buy_price: event.target.value },
-                        }))
-                      }
-                    />
-                  </label>
-                  <label>
-                    상태
-                    <select
-                      value={edit.status}
-                      onChange={(event) =>
-                        setPositionEdits((current) => ({
-                          ...current,
-                          [position.id]: { ...edit, status: event.target.value },
-                        }))
-                      }
-                    >
-                      <option value="pending">대기</option>
-                      <option value="open">체결</option>
-                      <option value="unfilled">미체결</option>
-                    </select>
-                  </label>
                   <div className={`holding-status ${holdingStatusClass(sellSignal)}`}>
-                    <span>보유 거래일</span>
+                    <span>보유 기간</span>
                     <div className="holding-status-badges">{holdingStatusBadges(sellSignal)}</div>
                   </div>
-                  <button type="button" onClick={() => handleSavePosition(position.id)} disabled={saving}>
-                    {position.status.toLowerCase() === "pending" ? "등록" : "수정"}
-                  </button>
+                  <div className="position-edit-controls">
+                    <label>
+                      수량
+                      <input
+                        type="number"
+                        step="1"
+                        min="0"
+                        value={edit.quantity}
+                        inputMode="numeric"
+                        onChange={(event) =>
+                          setPositionEdits((current) => ({
+                            ...current,
+                            [position.id]: { ...edit, quantity: normalizeShareInput(event.target.value) },
+                          }))
+                        }
+                      />
+                    </label>
+                    <label>
+                      체결가
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={edit.buy_price}
+                        inputMode="decimal"
+                        onChange={(event) =>
+                          setPositionEdits((current) => ({
+                            ...current,
+                            [position.id]: { ...edit, buy_price: event.target.value },
+                          }))
+                        }
+                      />
+                    </label>
+                    <label>
+                      상태
+                      <select
+                        value={edit.status}
+                        onChange={(event) =>
+                          setPositionEdits((current) => ({
+                            ...current,
+                            [position.id]: { ...edit, status: event.target.value },
+                          }))
+                        }
+                      >
+                        <option value="pending">대기</option>
+                        <option value="open">체결</option>
+                        <option value="unfilled">미체결</option>
+                      </select>
+                    </label>
+                    <button type="button" onClick={() => handleSavePosition(position.id)} disabled={saving}>
+                      {position.status.toLowerCase() === "pending" ? "등록" : "수정"}
+                    </button>
+                  </div>
                 </div>
               );
             })}
@@ -928,10 +931,14 @@ function isFilledCandidate(signal: SellSignalRow): boolean {
   return signal.should_sell === true && signal.reason === "profit_target";
 }
 
-function positionExitPolicyText(position: PositionRow, symbol: string | null | undefined): string {
+function positionSellLimitText(position: PositionRow, symbol: string | null | undefined): string {
   if (position.status.toLowerCase() === "pending") return "체결 후 확정";
-  const sellPrice = formatOptionalMoney(position.sell_limit_price, symbol);
-  return `${sellPrice} / ${sellTargetText(position.sell_threshold_percent)}`;
+  return formatOptionalMoney(position.sell_limit_price, symbol);
+}
+
+function positionSellTargetText(position: PositionRow): string {
+  if (position.status.toLowerCase() === "pending") return "체결가 확인 후 익절 기준을 고정합니다.";
+  return sellTargetText(position.sell_threshold_percent);
 }
 function sellOrderSummaryText(signal: SellSignalRow): string {
   return `${sellTargetText(signal.sell_threshold_percent)} · ${sellOrderDeadlineText(signal)}`;
