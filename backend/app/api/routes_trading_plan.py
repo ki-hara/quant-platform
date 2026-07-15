@@ -83,7 +83,7 @@ def get_daily_plan(
     try:
         return DailyPlanService(session).get_daily_plan(
             config_id,
-            today or date.today(),
+            today,
             position_sizing_policy=position_sizing_policy,
         )
     except ValueError as exc:

@@ -26,7 +26,7 @@ class DailyPlanService:
     def get_daily_plan(
         self,
         config_id: int,
-        today: date,
+        today: date | None = None,
         now: datetime | None = None,
         position_sizing_policy: str = "fixed_quantity",
     ) -> DailyPlanDto:
@@ -37,7 +37,7 @@ class DailyPlanService:
         state = self.mode_states.get_or_create_safe(config_id)
         portfolio = self.portfolios.get_by_config(config_id)
         open_positions = self.positions.list_open(config_id)
-        order_date = current_market_date(config.symbol, now) if now is not None else today
+        order_date = current_market_date(config.symbol, now) if now is not None else (today or current_market_date(config.symbol))
         basis_date = previous_exchange_trading_day(config.symbol, order_date)
         latest_price = self.market_prices.latest_price_on_or_before(
             settings.market_data_provider,

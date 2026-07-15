@@ -468,3 +468,22 @@ def test_daily_plan_reuses_confirmed_mode_and_keeps_recommendation_state() -> No
         assert plan.recommended_mode == StrategyMode.SAFE
         assert state is not None
         assert state.confirmed_mode == StrategyMode.AGGRESSIVE
+
+
+def test_daily_plan_defaults_to_the_market_timezone_for_order_and_loc_basis(monkeypatch) -> None:
+    with create_session() as session:
+        config = create_config(session)
+        seed_daily_prices(session, "TEST", date(2026, 7, 14), ["100", "200"])
+        from app.services import daily_plan_service
+
+        monkeypatch.setattr(
+            daily_plan_service,
+            "current_market_date",
+            lambda symbol, now=None: date(2026, 7, 15),
+        )
+
+        plan = DailyPlanService(session).get_daily_plan(config.id, today=None)
+
+    assert plan.plan_date == date(2026, 7, 15)
+    assert plan.loc_basis_date == date(2026, 7, 14)
+    assert plan.previous_close == Decimal("100.000000")
