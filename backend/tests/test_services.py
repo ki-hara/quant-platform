@@ -649,3 +649,25 @@ def test_dashboard_includes_trend_filter_for_default_symbols() -> None:
         assert [row.symbol for row in dashboard.trend_filter.symbols] == ["QQQ", "SOXL"]
         assert dashboard.trend_filter.symbols[0].label == "상승장 유지"
         assert dashboard.trend_filter.summary
+
+
+def test_manual_buy_snapshots_position_exit_policy() -> None:
+    with create_session() as session:
+        config = create_config(session)
+
+        ManualTradeService(session).record_manual_trade(
+            ManualTradeRequest(
+                config_id=config.id,
+                side=TradeSide.BUY,
+                trade_date=date(2026, 7, 16),
+                quantity=Decimal("1"),
+                price=Decimal("100"),
+                fee=Decimal("0"),
+                mode=StrategyMode.SAFE,
+            )
+        )
+
+        position = PositionRepository(session).list_open(config.id)[0]
+        assert position.sell_threshold_percent == Decimal("0.2")
+        assert position.sell_limit_price == Decimal("100.200000")
+        assert position.max_holding_days == 30

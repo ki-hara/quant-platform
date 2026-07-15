@@ -30,6 +30,7 @@ from app.infrastructure.repositories.portfolios import PositionRepository
 from app.infrastructure.repositories.strategies import StrategyConfigRepository
 from app.infrastructure.repositories.trades import TradeRepository
 from app.services.manual_trade_service import ManualTradeRequest, ManualTradeService
+from app.services.position_exit_policy import build_position_exit_policy, sell_limit_price_for
 from app.services.loc_order_service import LocOrderFillRequest, LocOrderService
 from app.services.signal_execution_service import (
     SignalExecutionRequest,
@@ -125,6 +126,18 @@ def update_position(
         saved = repo.save(position)
         session.commit()
         return saved
+    if config is not None and position.status == PositionStatus.OPEN:
+        if position.sell_threshold_percent is None or position.max_holding_days is None:
+            exit_policy = build_position_exit_policy(config.settings_json, position.mode, position.buy_price)
+            position.sell_threshold_percent = exit_policy.sell_threshold_percent
+            position.sell_limit_price = exit_policy.sell_limit_price
+            position.max_holding_days = exit_policy.max_holding_days
+        elif request.buy_price is not None:
+            position.sell_limit_price = sell_limit_price_for(
+                position.buy_price,
+                position.sell_threshold_percent,
+            )
+
     fee = _estimate_fee(config, position.buy_price, position.quantity)
     position.buy_fee = fee
     created_trade = False

@@ -122,6 +122,9 @@ export interface PositionRow {
   buy_fee: DecimalString;
   quantity: DecimalString;
   mode: string;
+  sell_threshold_percent: DecimalString | null;
+  sell_limit_price: DecimalString | null;
+  max_holding_days: number | null;
   status: string;
 }
 

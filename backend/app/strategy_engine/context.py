@@ -13,6 +13,8 @@ class StrategyPosition:
     quantity: int
     mode: StrategyMode
     holding_days: int | None = None
+    sell_threshold_percent: Decimal | None = None
+    max_holding_days: int | None = None
 
 
 @dataclass(frozen=True)

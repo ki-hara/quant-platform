@@ -16,6 +16,7 @@ from app.services.fear_greed_service import FearGreedService
 from app.services.market_session_service import current_market_date, is_korean_symbol
 from app.services.trend_filter_service import TrendFilterService
 from app.strategy_engine.context import StrategyContext, StrategyPosition
+from app.services.position_exit_policy import build_position_exit_policy
 from app.strategy_engine.loc import MONEY_QUANT
 from app.strategy_engine.registry import registry
 
@@ -123,6 +124,8 @@ class DashboardService:
                     quantity=int(position.quantity),
                     mode=position.mode,
                     holding_days=_trading_days_held(prices, position.buy_date, holding_basis_date),
+                    sell_threshold_percent=position.sell_threshold_percent,
+                    max_holding_days=position.max_holding_days,
                 )
                 for position in open_positions
             ],
@@ -142,15 +145,27 @@ class DashboardService:
                 quantity=int(position.quantity),
                 mode=position.mode,
                 holding_days=holding_days,
+                sell_threshold_percent=position.sell_threshold_percent,
+                max_holding_days=position.max_holding_days,
             )
             signal = strategy.should_sell(context, strategy_position)
-            mode_settings = config.settings_json[position.mode.value]
-            max_holding_days = int(mode_settings["max_holding_days"])
+            fallback_exit_policy = build_position_exit_policy(
+                config.settings_json,
+                position.mode,
+                position.buy_price,
+            )
+            sell_threshold_percent = (
+                position.sell_threshold_percent
+                if position.sell_threshold_percent is not None
+                else fallback_exit_policy.sell_threshold_percent
+            )
+            max_holding_days = (
+                position.max_holding_days
+                if position.max_holding_days is not None
+                else fallback_exit_policy.max_holding_days
+            )
             days_to_deadline = max_holding_days - holding_days
-            sell_limit_price = (
-                position.buy_price
-                * (Decimal("1") + Decimal(str(mode_settings["sell_threshold_percent"])) / Decimal("100"))
-            ).quantize(Decimal("0.000001"))
+            sell_limit_price = position.sell_limit_price or fallback_exit_policy.sell_limit_price
             sell_signals.append(
                 {
                     "position_id": position.id,
@@ -158,6 +173,7 @@ class DashboardService:
                     "reason": signal.reason,
                     "return_percent": signal.return_percent,
                     "sell_limit_price": sell_limit_price,
+                    "sell_threshold_percent": sell_threshold_percent,
                     "holding_days": holding_days,
                     "max_holding_days": max_holding_days,
                     "days_to_deadline": days_to_deadline,

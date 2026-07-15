@@ -11,6 +11,7 @@ from app.domain.models import LivePortfolio, LocOrder, PortfolioAdjustment, Posi
 from app.infrastructure.repositories.portfolios import PortfolioRepository, PositionRepository
 from app.infrastructure.repositories.strategies import StrategyConfigRepository
 from app.infrastructure.repositories.trades import TradeRepository
+from app.services.position_exit_policy import build_position_exit_policy
 
 
 MONEY_QUANT = Decimal("0.000001")
@@ -54,7 +55,8 @@ class ManualTradeService:
     ) -> ManualTradeResult:
         try:
             self._validate_request(request)
-            if self.configs.get(request.config_id) is None:
+            config = self.configs.get(request.config_id)
+            if config is None:
                 raise NotFoundError(
                     "strategy_config_not_found",
                     f"Strategy config not found: {request.config_id}",
@@ -66,7 +68,7 @@ class ManualTradeService:
                     f"Live portfolio not found for config: {request.config_id}",
                 )
             if request.side == TradeSide.BUY:
-                result = self._buy(request, portfolio)
+                result = self._buy(request, portfolio, config)
             elif request.side == TradeSide.SELL:
                 result = self._sell(request, portfolio)
             else:
@@ -134,12 +136,18 @@ class ManualTradeService:
                 "source must be manual or correction.",
             )
 
-    def _buy(self, request: ManualTradeRequest, portfolio: LivePortfolio) -> ManualTradeResult:
+    def _buy(
+        self,
+        request: ManualTradeRequest,
+        portfolio: LivePortfolio,
+        config: StrategyConfig,
+    ) -> ManualTradeResult:
         gross = request.price * request.quantity
         total_cost = gross + request.fee
         if total_cost > portfolio.cash:
             raise ValidationAppError("insufficient_cash", "Insufficient cash for manual buy.")
 
+        exit_policy = build_position_exit_policy(config.settings_json, request.mode, request.price)
         self.positions.create_open(
             strategy_config_id=request.config_id,
             buy_date=request.trade_date,
@@ -148,6 +156,9 @@ class ManualTradeService:
             mode=request.mode,
             buy_fee=request.fee,
             limit_price=request.limit_price,
+            sell_threshold_percent=exit_policy.sell_threshold_percent,
+            sell_limit_price=exit_policy.sell_limit_price,
+            max_holding_days=exit_policy.max_holding_days,
         )
         portfolio.cash -= total_cost
         portfolio.cumulative_fees += request.fee

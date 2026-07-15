@@ -180,3 +180,22 @@ def test_registry_lists_creates_and_rejects_unknown_strategy_types() -> None:
         assert str(exc) == "Unknown strategy type 'missing'. Available strategy types: dynamic_wave"
     else:
         raise AssertionError("Expected ValueError for unknown strategy type")
+
+
+def test_should_sell_uses_position_exit_policy_instead_of_current_settings() -> None:
+    strategy = DynamicWaveStrategy()
+    context = make_context(current_close=Decimal("100.50"))
+    context.settings["safe"]["sell_threshold_percent"] = 5
+    position = StrategyPosition(
+        date(2026, 1, 1),
+        Decimal("100"),
+        1,
+        StrategyMode.SAFE,
+        sell_threshold_percent=Decimal("0.2"),
+        max_holding_days=30,
+    )
+
+    signal = strategy.should_sell(context, position)
+
+    assert signal.should_sell is True
+    assert signal.reason == "profit_target"

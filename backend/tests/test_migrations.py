@@ -59,7 +59,7 @@ def test_legacy_database_receives_all_required_tables_and_columns() -> None:
     assert {"mode", "mode_rule_code"} <= {
         column["name"] for column in schema.get_columns("backtest_daily_snapshots")
     }
-    assert "limit_price" in {column["name"] for column in schema.get_columns("positions")}
+    assert {"limit_price", "sell_threshold_percent", "sell_limit_price", "max_holding_days"} <= {column["name"] for column in schema.get_columns("positions")}
     assert {"limit_price", "position_id", "entry_date", "entry_price"} <= {
         column["name"] for column in schema.get_columns("trades")
     }

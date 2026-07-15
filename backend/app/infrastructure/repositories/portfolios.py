@@ -65,6 +65,9 @@ class PositionRepository:
         mode: StrategyMode,
         buy_fee: Decimal = Decimal("0"),
         limit_price: Decimal | None = None,
+        sell_threshold_percent: Decimal | None = None,
+        sell_limit_price: Decimal | None = None,
+        max_holding_days: int | None = None,
     ) -> Position:
         position = Position(
             strategy_config_id=strategy_config_id,
@@ -74,6 +77,9 @@ class PositionRepository:
             buy_fee=buy_fee,
             quantity=quantity,
             mode=mode,
+            sell_threshold_percent=sell_threshold_percent,
+            sell_limit_price=sell_limit_price,
+            max_holding_days=max_holding_days,
             status=PositionStatus.OPEN,
         )
         self.session.add(position)

@@ -221,9 +221,64 @@ def _rebuild_loc_orders_trade_foreign_key(connection: Connection) -> None:
     connection.execute(text("CREATE INDEX ix_loc_orders_order_date ON loc_orders (order_date)"))
 
 
+def _snapshot_position_exit_policies(connection: Connection) -> None:
+    _add_column_if_missing(
+        connection,
+        "positions",
+        "sell_threshold_percent",
+        "sell_threshold_percent NUMERIC(18, 6)",
+    )
+    _add_column_if_missing(
+        connection,
+        "positions",
+        "sell_limit_price",
+        "sell_limit_price NUMERIC(18, 6)",
+    )
+    _add_column_if_missing(
+        connection,
+        "positions",
+        "max_holding_days",
+        "max_holding_days INTEGER",
+    )
+
+    required_position_columns = {
+        "strategy_config_id", "mode", "buy_price", "sell_threshold_percent",
+        "sell_limit_price", "max_holding_days",
+    }
+    required_config_columns = {"id", "settings_json"}
+    if not required_position_columns <= _column_names(connection, "positions"):
+        return
+    if not required_config_columns <= _column_names(connection, "strategy_configs"):
+        return
+
+    connection.execute(
+        text(
+            """
+            UPDATE positions
+            SET
+                sell_threshold_percent = CAST(json_extract(
+                    (SELECT settings_json FROM strategy_configs WHERE id = positions.strategy_config_id),
+                    '$.' || positions.mode || '.sell_threshold_percent'
+                ) AS NUMERIC),
+                sell_limit_price = positions.buy_price * (1 + CAST(json_extract(
+                    (SELECT settings_json FROM strategy_configs WHERE id = positions.strategy_config_id),
+                    '$.' || positions.mode || '.sell_threshold_percent'
+                ) AS NUMERIC) / 100),
+                max_holding_days = CAST(json_extract(
+                    (SELECT settings_json FROM strategy_configs WHERE id = positions.strategy_config_id),
+                    '$.' || positions.mode || '.max_holding_days'
+                ) AS INTEGER)
+            WHERE sell_threshold_percent IS NULL
+               OR sell_limit_price IS NULL
+               OR max_holding_days IS NULL
+            """
+        )
+    )
+
 MIGRATIONS: tuple[Migration, ...] = (
     (1, "legacy_schema", _upgrade_legacy_schema),
     (2, "loc_orders_trade_fk_set_null", _rebuild_loc_orders_trade_foreign_key),
+    (3, "snapshot_position_exit_policies", _snapshot_position_exit_policies),
 )
 LATEST_SCHEMA_VERSION = MIGRATIONS[-1][0]
 

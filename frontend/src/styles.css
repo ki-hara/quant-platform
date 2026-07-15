@@ -702,7 +702,7 @@ h2 {
 
 .position-edit-row {
   display: grid;
-  grid-template-columns: minmax(112px, 0.8fr) minmax(92px, 0.8fr) repeat(3, minmax(96px, 1fr)) minmax(118px, 1fr) auto;
+  grid-template-columns: minmax(112px, 0.8fr) minmax(92px, 0.8fr) minmax(146px, 1.15fr) repeat(3, minmax(96px, 1fr)) minmax(118px, 1fr) auto;
   gap: 8px;
   align-items: end;
   border: 1px solid #eef0eb;

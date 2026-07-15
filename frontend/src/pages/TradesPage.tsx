@@ -52,6 +52,7 @@ interface SellSignalRow {
   reason?: string | null;
   return_percent?: string | number | null;
   sell_limit_price?: string | number | null;
+  sell_threshold_percent?: string | number | null;
   holding_days?: number | null;
   max_holding_days?: number | null;
   days_to_deadline?: number | null;
@@ -435,7 +436,7 @@ export function TradesPage() {
                     <div className={`sell-order-row ${sellCardClass(signal)}`} key={signal.position?.id}>
                       <div>
                         <strong>{signal.position.buy_date}</strong>
-                        <small>{sellOrderDeadlineText(signal)}</small>
+                        <small>{sellOrderSummaryText(signal)}</small>
                       </div>
                       <span>{wholeShare(signal.position.quantity)}주</span>
                       <strong>{sellOrderPriceText(signal, dashboard?.config.symbol)}</strong>
@@ -499,6 +500,10 @@ export function TradesPage() {
                     <span>체결일</span>
                     <strong>{position.buy_date}</strong>
                     <em className={`state-badge ${positionStatusClass(edit.status)}`}>{positionStatusText(edit.status)}</em>
+                  </div>
+                  <div className="readonly-field">
+                    <span>매도 기준</span>
+                    <strong>{positionExitPolicyText(position, selectedSymbol)}</strong>
                   </div>
                   <div className="readonly-field">
                     <span>LOC가</span>
@@ -803,6 +808,10 @@ function toSellSignalRow(row: Record<string, unknown>): SellSignalRow {
       typeof row.sell_limit_price === "string" || typeof row.sell_limit_price === "number"
         ? row.sell_limit_price
         : null,
+    sell_threshold_percent:
+      typeof row.sell_threshold_percent === "string" || typeof row.sell_threshold_percent === "number"
+        ? row.sell_threshold_percent
+        : null,
     holding_days: typeof row.holding_days === "number" ? row.holding_days : null,
     max_holding_days: typeof row.max_holding_days === "number" ? row.max_holding_days : null,
     days_to_deadline: typeof row.days_to_deadline === "number" ? row.days_to_deadline : null,
@@ -919,6 +928,20 @@ function isFilledCandidate(signal: SellSignalRow): boolean {
   return signal.should_sell === true && signal.reason === "profit_target";
 }
 
+function positionExitPolicyText(position: PositionRow, symbol: string | null | undefined): string {
+  const sellPrice = formatOptionalMoney(position.sell_limit_price, symbol);
+  return `${sellPrice} · ${sellTargetText(position.sell_threshold_percent)}`;
+}
+
+function sellOrderSummaryText(signal: SellSignalRow): string {
+  return `${sellTargetText(signal.sell_threshold_percent)} · ${sellOrderDeadlineText(signal)}`;
+}
+
+function sellTargetText(value: string | number | null | undefined): string {
+  const percent = Number(value);
+  if (!Number.isFinite(percent)) return "익절 기준 -";
+  return `익절 +${percent.toFixed(2).replace(/\.?0+$/, "")}%`;
+}
 function sellOrderDeadlineText(signal: SellSignalRow): string {
   if (isCloseSellDue(signal)) return "보유기간 도달: 종가매도";
   return deadlineActionText(signal.days_to_deadline);

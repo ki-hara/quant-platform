@@ -10,6 +10,7 @@ from app.domain.models import LivePortfolio, Trade
 from app.infrastructure.repositories.portfolios import PortfolioRepository, PositionRepository
 from app.infrastructure.repositories.strategies import StrategyConfigRepository
 from app.infrastructure.repositories.trades import TradeRepository
+from app.services.position_exit_policy import build_position_exit_policy
 
 
 @dataclass(frozen=True)
@@ -48,7 +49,8 @@ class SignalExecutionService:
     ) -> SignalExecutionResult:
         try:
             self._validate_request(request)
-            if self.configs.get(config_id) is None:
+            config = self.configs.get(config_id)
+            if config is None:
                 raise NotFoundError(
                     "strategy_config_not_found",
                     f"Strategy config not found: {config_id}",
@@ -60,7 +62,7 @@ class SignalExecutionService:
                     f"Live portfolio not found for config: {config_id}",
                 )
             if request.side == TradeSide.BUY:
-                result = self._buy(config_id, request, portfolio)
+                result = self._buy(config_id, request, portfolio, config)
             elif request.side == TradeSide.SELL:
                 result = self._sell(config_id, request, portfolio)
             else:
@@ -95,6 +97,7 @@ class SignalExecutionService:
         config_id: int,
         request: SignalExecutionRequest,
         portfolio: LivePortfolio,
+        config,
     ) -> SignalExecutionResult:
         gross = request.price * request.quantity
         total_cost = gross + request.fee
@@ -103,6 +106,7 @@ class SignalExecutionService:
                 "insufficient_cash",
                 "Insufficient cash for buy signal.",
             )
+        exit_policy = build_position_exit_policy(config.settings_json, request.mode, request.price)
         self.positions.create_open(
             strategy_config_id=config_id,
             buy_date=request.trade_date,
@@ -111,6 +115,9 @@ class SignalExecutionService:
             mode=request.mode,
             buy_fee=request.fee,
             limit_price=request.limit_price,
+            sell_threshold_percent=exit_policy.sell_threshold_percent,
+            sell_limit_price=exit_policy.sell_limit_price,
+            max_holding_days=exit_policy.max_holding_days,
         )
         portfolio.cash -= total_cost
         portfolio.cumulative_fees += request.fee

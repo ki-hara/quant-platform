@@ -60,13 +60,23 @@ class DynamicWaveStrategy(Strategy):
 
     def should_sell(self, context: StrategyContext, position: StrategyPosition) -> SellSignal:
         mode_settings = context.settings[position.mode.value]
+        sell_threshold_percent = (
+            position.sell_threshold_percent
+            if position.sell_threshold_percent is not None
+            else Decimal(str(mode_settings["sell_threshold_percent"]))
+        )
+        max_holding_days = (
+            position.max_holding_days
+            if position.max_holding_days is not None
+            else int(mode_settings["max_holding_days"])
+        )
         return_pct = (context.current_close - position.buy_price) / position.buy_price * Decimal("100")
-        if return_pct >= Decimal(str(mode_settings["sell_threshold_percent"])):
+        if return_pct >= sell_threshold_percent:
             return SellSignal(True, "profit_target", return_pct.quantize(MONEY_QUANT))
         holding_days = position.holding_days
         if holding_days is None:
             holding_days = max((context.current_date - position.buy_date).days, 0)
-        if holding_days >= int(mode_settings["max_holding_days"]):
+        if holding_days >= max_holding_days:
             return SellSignal(True, "max_holding_period", return_pct.quantize(MONEY_QUANT))
         return SellSignal(False, None, return_pct.quantize(MONEY_QUANT))
 

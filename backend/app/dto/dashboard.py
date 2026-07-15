@@ -27,6 +27,9 @@ class PositionDto(BaseModel):
     buy_fee: Decimal
     quantity: Decimal
     mode: str
+    sell_threshold_percent: Decimal | None = None
+    sell_limit_price: Decimal | None = None
+    max_holding_days: int | None = None
     status: str
 
 
