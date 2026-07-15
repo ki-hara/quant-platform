@@ -494,6 +494,7 @@ export function TradesPage() {
                 status: position.status.toLowerCase() === "pending" ? "pending" : "open",
               };
               const sellSignal = sellSignalByPosition.get(position.id);
+              const sellTargetText = positionSellTargetText(position);
               return (
                 <div className="position-edit-row" key={position.id}>
                   <div className="position-summary">
@@ -504,7 +505,7 @@ export function TradesPage() {
                   <div className="position-exit-policy">
                     <span>매도 LOC</span>
                     <strong>{positionSellLimitText(position, selectedSymbol)}</strong>
-                    <small>{positionSellTargetText(position)}</small>
+                    {sellTargetText ? <small>{sellTargetText}</small> : null}
                   </div>
                   <div className="readonly-field">
                     <span>매수 LOC</span>
@@ -936,8 +937,8 @@ function positionSellLimitText(position: PositionRow, symbol: string | null | un
   return formatOptionalMoney(position.sell_limit_price, symbol);
 }
 
-function positionSellTargetText(position: PositionRow): string {
-  if (position.status.toLowerCase() === "pending") return "체결가 확인 후 익절 기준을 고정합니다.";
+function positionSellTargetText(position: PositionRow): string | null {
+  if (position.status.toLowerCase() === "pending") return null;
   return sellTargetText(position.sell_threshold_percent);
 }
 function sellOrderSummaryText(signal: SellSignalRow): string {
