@@ -54,20 +54,21 @@ class ChartService:
         self.positions = PositionRepository(session)
         self.trades = TradeRepository(session)
 
-    def get_chart(self, config_id: int, range_key: str, today: date) -> ChartResponseDto:
+    def get_chart(self, config_id: int, range_key: str, today: date | None = None) -> ChartResponseDto:
         config = self.configs.get(config_id)
         if config is None:
             raise ValueError(f"Strategy config not found: {config_id}")
+        as_of = today or latest_confirmed_market_date(config.symbol)
         days = RANGE_DAYS.get(range_key)
         if days is None:
             raise ValueError(f"Unsupported chart range: {range_key}")
 
-        start_date = today - timedelta(days=days - 1)
+        start_date = as_of - timedelta(days=days - 1)
         prices = self.market_prices.list_prices_in_range(
             settings.market_data_provider,
             config.symbol,
             start_date,
-            today,
+            as_of,
         )
         candles = [
             ChartCandleDto(
@@ -80,14 +81,14 @@ class ChartService:
             )
             for price in prices
         ]
-        loc = self._loc_line(config_id, config.symbol, config.settings_json, today)
+        loc = self._loc_line(config_id, config.symbol, config.settings_json, as_of)
         return ChartResponseDto(
             candles=candles,
             LOC=loc,
-            trade_markers=self._trade_markers(config_id, start_date, today),
-            rsi=self._rsi_series(config.settings_json, start_date, today),
-            mode_markers=self._mode_markers(config_id, start_date, today),
-            cci=self._cci_series(config.symbol, config.settings_json, start_date, today),
+            trade_markers=self._trade_markers(config_id, start_date, as_of),
+            rsi=self._rsi_series(config.settings_json, start_date, as_of),
+            mode_markers=self._mode_markers(config_id, start_date, as_of),
+            cci=self._cci_series(config.symbol, config.settings_json, start_date, as_of),
         )
 
     def _loc_line(self, config_id: int, symbol: str, config_settings: dict, today: date) -> ChartLineDto:

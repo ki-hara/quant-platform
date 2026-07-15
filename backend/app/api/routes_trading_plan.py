@@ -100,7 +100,7 @@ def get_chart(
 ) -> object:
     ensure_config_owner(config_id, owner, session)
     try:
-        return ChartService(session).get_chart(config_id, range, today or date.today())
+        return ChartService(session).get_chart(config_id, range, today)
     except ValueError as exc:
         raise HTTPException(status_code=_status_code_for_error(str(exc)), detail=str(exc)) from exc
 
@@ -115,7 +115,7 @@ def refresh_market_data(
 ) -> object:
     ensure_config_owner(config_id, owner, session)
     try:
-        return MarketRefreshService(session, provider).refresh(config_id, today or date.today())
+        return MarketRefreshService(session, provider).refresh(config_id, today)
     except ValueError as exc:
         raise HTTPException(status_code=_status_code_for_error(str(exc)), detail=str(exc)) from exc
 

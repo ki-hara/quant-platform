@@ -307,3 +307,20 @@ def test_chart_missing_config_raises_value_error() -> None:
     with create_session() as session:
         with pytest.raises(ValueError, match="Strategy config not found"):
             ChartService(session).get_chart(999, range_key="6m", today=date(2026, 6, 20))
+
+
+def test_chart_defaults_to_confirmed_market_date(monkeypatch) -> None:
+    with create_session() as session:
+        config = create_config(session)
+        seed_prices(session, "TEST", date(2026, 7, 13), 3)
+        from app.services import chart_service
+
+        monkeypatch.setattr(
+            chart_service,
+            "latest_confirmed_market_date",
+            lambda symbol, now=None: date(2026, 7, 14),
+        )
+
+        chart = ChartService(session).get_chart(config.id, range_key="1m", today=None)
+
+    assert [candle.date for candle in chart.candles] == [date(2026, 7, 13), date(2026, 7, 14)]

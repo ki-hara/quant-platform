@@ -411,3 +411,63 @@ def test_post_refresh_fetches_both_symbols_and_preserves_confirmed_mode(api_clie
     assert body["confirmed_mode"] == "aggressive"
     assert body["investment_data_as_of"]
     assert body["rsi_data_as_of"]
+
+
+def test_post_refresh_excludes_unconfirmed_intraday_prices(
+    api_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_id = create_config(api_client)
+
+    class IntradayProvider:
+        def get_ohlcv(self, symbol: str, start_date: date, end_date: date) -> list[OhlcvDto]:
+            confirmed_prices = [
+                OhlcvDto(
+                    symbol=symbol,
+                    date=start_date + timedelta(days=index),
+                    open=Decimal(str(100 + index)),
+                    high=Decimal(str(101 + index)),
+                    low=Decimal(str(99 + index)),
+                    close=Decimal(str(100 + index)),
+                    volume=1000 + index,
+                )
+                for index in range((date(2026, 7, 14) - start_date).days + 1)
+            ]
+            return confirmed_prices + [
+                OhlcvDto(
+                    symbol=symbol,
+                    date=date(2026, 7, 15),
+                    open=Decimal("200"),
+                    high=Decimal("201"),
+                    low=Decimal("199"),
+                    close=Decimal("200"),
+                    volume=2000,
+                )
+            ]
+
+    from app.services import market_refresh_service
+
+    monkeypatch.setattr(
+        market_refresh_service,
+        "latest_confirmed_market_date",
+        lambda symbol: date(2026, 7, 14),
+        raising=False,
+    )
+    api_client.app.dependency_overrides[get_market_data_provider] = IntradayProvider
+
+    try:
+        response = api_client.post(f"/api/strategy-configs/{config_id}/market-data/refresh")
+    finally:
+        api_client.app.dependency_overrides.pop(get_market_data_provider, None)
+
+    assert response.status_code == 200
+    assert response.json()["investment_data_as_of"] == "2026-07-14"
+    with Session(api_client.app.state.test_engine) as session:
+        prices = MarketPriceRepository(session).list_prices(
+            "finance_data_reader",
+            "TEST",
+            date(2026, 7, 1),
+            date(2026, 7, 15),
+        )
+    assert max(price.date for price in prices) == date(2026, 7, 14)
+    assert date(2026, 7, 15) not in {price.date for price in prices}

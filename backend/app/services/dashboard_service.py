@@ -13,7 +13,7 @@ from app.infrastructure.repositories.strategies import StrategyConfigRepository
 from app.infrastructure.repositories.trades import TradeRepository
 from app.services.exchange_calendar_service import add_exchange_trading_days, count_exchange_trading_days, is_exchange_trading_day
 from app.services.fear_greed_service import FearGreedService
-from app.services.market_session_service import current_market_date, is_korean_symbol
+from app.services.market_session_service import current_market_date, is_korean_symbol, latest_confirmed_market_date
 from app.services.trend_filter_service import TrendFilterService
 from app.strategy_engine.context import StrategyContext, StrategyPosition
 from app.services.position_exit_policy import build_position_exit_policy
@@ -58,11 +58,12 @@ class DashboardService:
         config = self._get_config(config_id)
         portfolio = self.portfolios.get_by_config(config_id)
         open_positions = self.positions.list_open(config_id)
+        confirmed_market_date = latest_confirmed_market_date(config.symbol)
         latest_prices = self.market_prices.list_prices(
             self.market_data_provider,
             config.symbol,
             date.min,
-            date.today(),
+            confirmed_market_date,
         )
         latest_price = latest_prices[-1] if latest_prices else None
         capital_update = None
@@ -91,7 +92,7 @@ class DashboardService:
             trend_filter=TrendFilterService(self.market_prices, self.market_data_provider).get_summary(
                 config.symbol,
                 config.settings_json,
-                date.today(),
+                confirmed_market_date,
             ),
             market_status=build_market_status(config.symbol, current_market_date(config.symbol)),
         )
