@@ -1815,16 +1815,28 @@ button:disabled,
 
 @media (max-width: 900px) {
   .app-shell {
-    grid-template-columns: 1fr;
+    display: block;
   }
 
   .sidebar {
     border-right: 0;
     border-bottom: 1px solid var(--border);
+    padding: 12px 14px;
+  }
+
+  .brand {
+    padding-bottom: 10px;
   }
 
   .tab-nav {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin-top: 10px;
+  }
+
+  .tab-button {
+    min-height: 36px;
+    padding: 0 8px;
+    font-size: 13px;
   }
 
   .content {
@@ -1859,6 +1871,24 @@ button:disabled,
 
   .panel-header {
     display: grid;
+  }
+
+  .panel-header .status-pill {
+    justify-self: start;
+  }
+
+  .position-edit-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: end;
+  }
+
+  .position-edit-row .holding-status {
+    grid-column: 1 / -1;
+  }
+
+  .position-edit-row > button {
+    grid-column: 2;
+    justify-self: end;
   }
 }
 
@@ -1903,6 +1933,16 @@ button:disabled,
 
   .position-edit-row {
     grid-template-columns: 1fr;
+  }
+
+  .position-edit-row .holding-status,
+  .position-edit-row > button {
+    grid-column: auto;
+  }
+
+  .position-edit-row > button {
+    width: 100%;
+    justify-self: stretch;
   }
 
   .position-pick-list button,

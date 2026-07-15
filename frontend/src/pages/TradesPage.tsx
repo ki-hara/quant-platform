@@ -929,15 +929,16 @@ function isFilledCandidate(signal: SellSignalRow): boolean {
 }
 
 function positionExitPolicyText(position: PositionRow, symbol: string | null | undefined): string {
+  if (position.status.toLowerCase() === "pending") return "체결 후 확정";
   const sellPrice = formatOptionalMoney(position.sell_limit_price, symbol);
-  return `${sellPrice} · ${sellTargetText(position.sell_threshold_percent)}`;
+  return `${sellPrice} / ${sellTargetText(position.sell_threshold_percent)}`;
 }
-
 function sellOrderSummaryText(signal: SellSignalRow): string {
   return `${sellTargetText(signal.sell_threshold_percent)} · ${sellOrderDeadlineText(signal)}`;
 }
 
 function sellTargetText(value: string | number | null | undefined): string {
+  if (value === null || value === undefined || value === "") return "익절 기준 -";
   const percent = Number(value);
   if (!Number.isFinite(percent)) return "익절 기준 -";
   return `익절 +${percent.toFixed(2).replace(/\.?0+$/, "")}%`;
