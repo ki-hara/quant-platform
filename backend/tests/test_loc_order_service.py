@@ -1,5 +1,6 @@
 from datetime import date
 from decimal import Decimal
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -11,6 +12,7 @@ from app.db.seed import seed_default_owner
 from app.domain.enums import LocOrderStatus, StrategyMode, TradeSide, TradeSource
 from app.domain.models import LocOrder, Position, Trade
 from app.infrastructure.repositories.portfolios import PortfolioRepository
+from app.services.daily_plan_service import DailyPlanService
 from app.services.loc_order_service import LocOrderFillRequest, LocOrderService
 from app.services.manual_trade_service import ManualTradeRequest, ManualTradeService
 from app.services.strategy_config_service import StrategyConfigCreateRequest, StrategyConfigService
@@ -172,3 +174,18 @@ def test_delete_filled_trade_preserves_order_without_orphaned_trade_reference() 
         session.refresh(order)
         assert order.trade_id is None
         assert session.get(LocOrder, order.id) is not None
+
+
+def test_create_from_daily_plan_rejects_a_blocked_buy_plan() -> None:
+    with create_session() as session:
+        config = create_config(session)
+        blocked_plan = SimpleNamespace(
+            LOC=SimpleNamespace(quantity=1, blocking_reason="split_limit_reached", limit_price=Decimal("100")),
+            confirmed_mode=StrategyMode.SAFE,
+        )
+
+        with patch.object(DailyPlanService, "get_daily_plan", return_value=blocked_plan):
+            with pytest.raises(ValueError, match="split_limit_reached"):
+                LocOrderService(session).create_from_daily_plan(config.id)
+
+        assert session.scalars(select(LocOrder)).all() == []

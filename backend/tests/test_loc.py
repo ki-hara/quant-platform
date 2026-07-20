@@ -24,22 +24,8 @@ def test_calculate_loc_plan_returns_expected_values_for_exact_case() -> None:
         required_cash=Decimal("110.250000"),
         available=Decimal("5.000000"),
         blocking_reason="insufficient_cash",
-        orders=[
-            LocOrder(
-                step=1,
-                limit_price=Decimal("105.000000"),
-                quantity=1,
-                cumulative_quantity=1,
-                cumulative_amount=Decimal("105.000000"),
-            ),
-            LocOrder(
-                step=2,
-                limit_price=Decimal("100.000000"),
-                quantity=1,
-                cumulative_quantity=2,
-                cumulative_amount=Decimal("200.000000"),
-            ),
-        ],
+        orders=[],
+
     )
 
 
@@ -55,6 +41,7 @@ def test_calculate_loc_plan_blocks_when_split_limit_is_reached() -> None:
     )
 
     assert plan.blocking_reason == "split_limit_reached"
+    assert plan.orders == []
 
 
 def test_calculate_loc_plan_blocks_when_quantity_is_zero() -> None:

@@ -72,9 +72,11 @@ def calculate_loc_plan(
         blocking_reason = "insufficient_cash"
     else:
         blocking_reason = None
-    orders = _ladder_orders(limit_price, allocation, quantity)
-    if position_sizing_policy == "fixed_quantity":
-        orders = orders[:1]
+    orders = []
+    if blocking_reason is None:
+        orders = _ladder_orders(limit_price, allocation, quantity)
+        if position_sizing_policy == "fixed_quantity":
+            orders = orders[:1]
 
     return LocPlan(
         limit_price=limit_price,

@@ -38,6 +38,8 @@ class LocOrderService:
     def create_from_daily_plan(self, config_id: int, memo: str | None = None) -> LocOrder:
         config = self._get_config(config_id)
         plan = DailyPlanService(self.session).get_daily_plan(config_id, current_market_date(config.symbol))
+        if plan.LOC.blocking_reason is not None:
+            raise ValueError(f"LOC buy order unavailable: {plan.LOC.blocking_reason}")
         if plan.LOC.quantity <= 0:
             raise ValueError("LOC quantity must be greater than zero.")
         order = LocOrder(

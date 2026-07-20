@@ -27,6 +27,7 @@ import {
   translateReason,
 } from "../utils/format";
 import { hasCrossedLocOrders, netLocOrders, tickSizeForSymbol, type LocOrderInput } from "../utils/locNetting";
+import { executableLocBuyOrders, locBuyBlockMessage } from "../utils/executableLocOrders";
 import { isAbortError, LatestRequest } from "../utils/latestRequest";
 import { recommendedBuyPrice, recommendedSellPrice } from "../utils/orderPrices";
 import { rememberStrategyConfigId, resolveRememberedStrategyConfigId } from "../utils/strategySelection";
@@ -81,6 +82,7 @@ export function TradesPage() {
   if (rowRequestsRef.current === null) rowRequestsRef.current = new LatestRequest();
   const rowRequests = rowRequestsRef.current;
   const selectedSymbol = dashboard?.config.symbol ?? plan?.symbol ?? configs.find((config) => config.id === selectedId)?.symbol;
+  const executableBuyOrders = useMemo(() => executableLocBuyOrders(plan), [plan]);
 
   const sortedPositions = useMemo(
     () => [...positions].sort(comparePositionByDate),
@@ -116,7 +118,7 @@ export function TradesPage() {
   );
 
   const locNettingPreview = useMemo(() => {
-    const orders = buildLocNettingInputs(plan, sellOrderRows);
+    const orders = buildLocNettingInputs(executableBuyOrders, sellOrderRows);
     const tickSize = tickSizeForSymbol(selectedSymbol);
     return {
       needed: hasCrossedLocOrders(orders),
@@ -124,7 +126,7 @@ export function TradesPage() {
       nettedOrders: sortLocOrdersByPriceDesc(netLocOrders(orders, tickSize)),
       tickSize,
     };
-  }, [plan, sellOrderRows, selectedSymbol]);
+  }, [executableBuyOrders, sellOrderRows, selectedSymbol]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -381,7 +383,7 @@ export function TradesPage() {
             <div className="order-board-header">
               <div>
                 <span className="signal-label">오늘의 LOC 매수 주문표</span>
-                <strong>{plan?.LOC.orders?.length ? `${Math.min(plan.LOC.orders.length, 5)}건` : "주문 없음"}</strong>
+                <strong>{executableBuyOrders.length ? `${Math.min(executableBuyOrders.length, 5)}건` : "주문 없음"}</strong>
               </div>
               <div className="order-policy-switch" role="group" aria-label="매수 수량 계산">
                 <button
@@ -401,18 +403,18 @@ export function TradesPage() {
               </div>
             </div>
             <div className="order-board-body">
-              {plan?.LOC.orders?.length ? (
+              {executableBuyOrders.length ? (
                 <div className="loc-order-list">
-                  {plan.LOC.orders.slice(0, 5).map((order) => (
+                  {executableBuyOrders.slice(0, 5).map((order) => (
                     <div className="loc-order-row" key={order.step}>
                       <span>{order.step}차 LOC</span>
-                      <strong>LOC {formatMoney(order.limit_price, plan.symbol)}</strong>
+                      <strong>LOC {formatMoney(order.limit_price, selectedSymbol)}</strong>
                       <small>주문 {order.quantity}주 / 누적 {order.cumulative_quantity}주</small>
                     </div>
                   ))}
                 </div>
               ) : (
-                <small>{translateReason(plan?.LOC.blocking_reason) || "오늘 입력할 LOC 매수 주문이 없습니다."}</small>
+                <small>{locBuyBlockMessage(plan) || translateReason(plan?.LOC.blocking_reason) || "오늘 입력할 LOC 매수 주문이 없습니다."}</small>
               )}
             </div>
             <div className="order-board-actions">
@@ -760,24 +762,15 @@ function buildPositionHistoryColumns(symbol: string | null | undefined): TableCo
   ];
 }
 
-function buildLocNettingInputs(plan: DailyPlan | null, sellOrderRows: SellOrderRow[]): LocOrderInput[] {
-  const buyOrders =
-    plan?.LOC.orders?.length
-      ? plan.LOC.orders.map((order) => ({
-          side: "buy" as const,
-          limitPrice: Number(order.limit_price),
-          quantity: Number(order.quantity),
-        }))
-      : plan?.LOC.quantity
-        ? [
-            {
-              side: "buy" as const,
-              limitPrice: Number(plan.LOC.limit_price),
-              quantity: Number(plan.LOC.quantity),
-            },
-          ]
-        : [];
-
+function buildLocNettingInputs(
+  buyPlanOrders: DailyPlan["LOC"]["orders"],
+  sellOrderRows: SellOrderRow[],
+): LocOrderInput[] {
+  const buyOrders = buyPlanOrders.map((order) => ({
+    side: "buy" as const,
+    limitPrice: Number(order.limit_price),
+    quantity: Number(order.quantity),
+  }));
   const sellOrders = sellOrderRows
     .map((signal) => ({
       side: "sell" as const,
