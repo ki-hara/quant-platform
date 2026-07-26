@@ -13,7 +13,12 @@ from app.dto.market_data import OhlcvDto
 from app.domain.enums import BacktestModePolicy, BacktestPositionSizingPolicy, StrategyMode
 from app.strategy_engine.base import Strategy
 from app.strategy_engine.context import StrategyContext, StrategyPosition
-from app.strategy_engine.weekly_rsi import DailyClose, WeeklyRsiTransition, aggregate_daily_closes_to_weekly_closes, resolve_weekly_rsi_transition
+from app.strategy_engine.weekly_rsi import (
+    DailyClose,
+    WeeklyRsiTransition,
+    aggregate_daily_closes_to_weekly_closes,
+    resolve_weekly_rsi_transition,
+)
 
 
 MONEY_QUANT = Decimal("0.000001")
@@ -29,7 +34,9 @@ class _OpenPosition:
     buy_fee: Decimal
     buy_trading_day_index: int
 
-    def as_strategy_position(self, current_trading_day_index: int | None = None) -> StrategyPosition:
+    def as_strategy_position(
+        self, current_trading_day_index: int | None = None
+    ) -> StrategyPosition:
         holding_days = None
         if current_trading_day_index is not None:
             holding_days = max(current_trading_day_index - self.buy_trading_day_index, 0)
@@ -126,7 +133,9 @@ class BacktestEngine:
                         mode = strategy.get_mode(context)
                         size = strategy.calculate_position_size(context)
                         buy_price = self._apply_buy_slippage(price.close, slippage_rate)
-                        quantity = self._buy_quantity(size.amount, buy_price, size.quantity, position_sizing_policy)
+                        quantity = self._buy_quantity(
+                            size.amount, buy_price, size.quantity, position_sizing_policy
+                        )
                         if quantity > 0:
                             transaction_amount = buy_price * Decimal(quantity)
                             fee = self._fee(transaction_amount, fee_rate)
@@ -232,8 +241,7 @@ class BacktestEngine:
             capital=capital,
             cash=cash,
             open_positions=[
-                position.as_strategy_position(trading_day_index)
-                for position in open_positions
+                position.as_strategy_position(trading_day_index) for position in open_positions
             ],
             settings=settings,
             trading_day_index=trading_day_index,

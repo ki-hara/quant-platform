@@ -29,9 +29,8 @@ class _ScheduledReplacementStrategy(Strategy):
         return BuySignal(context.current_date <= self.sell_buy_date, "scheduled_buy")
 
     def should_sell(self, context: StrategyContext, position: StrategyPosition) -> SellSignal:
-        should_sell = (
-            context.current_date == self.sell_date
-            and position.buy_date == date(2026, 1, 2)
+        should_sell = context.current_date == self.sell_date and position.buy_date == date(
+            2026, 1, 2
         )
         return SellSignal(should_sell, "scheduled_sell" if should_sell else None)
 
@@ -62,12 +61,8 @@ def test_full_ladder_sell_does_not_fund_same_day_replacement_buy() -> None:
         },
     )
 
-    trades_on_sell_date = [
-        trade for trade in result.trades if trade.date == date(2026, 1, 9)
-    ]
-    trades_on_next_date = [
-        trade for trade in result.trades if trade.date == date(2026, 1, 10)
-    ]
+    trades_on_sell_date = [trade for trade in result.trades if trade.date == date(2026, 1, 9)]
+    trades_on_next_date = [trade for trade in result.trades if trade.date == date(2026, 1, 10)]
 
     assert [trade.side for trade in trades_on_sell_date] == ["SELL"]
     assert trades_on_sell_date[0].open_position_count == 6
@@ -92,9 +87,7 @@ def test_below_limit_start_preserves_same_day_sell_then_buy_behavior() -> None:
         },
     )
 
-    trades_on_sell_date = [
-        trade for trade in result.trades if trade.date == date(2026, 1, 8)
-    ]
+    trades_on_sell_date = [trade for trade in result.trades if trade.date == date(2026, 1, 8)]
 
     assert [trade.side for trade in trades_on_sell_date] == ["SELL", "BUY"]
     assert [trade.open_position_count for trade in trades_on_sell_date] == [5, 6]
@@ -240,12 +233,15 @@ def test_calendar_yearly_update_requires_lookahead_in_next_year() -> None:
     prices = [_price(date(2026, 12, 30)), _price(date(2026, 12, 31))]
     settings = {"capital_update": {"type": "calendar", "period": "yearly"}}
 
-    assert BacktestEngine()._is_capital_update_due(
-        settings,
-        1,
-        prices,
-        date(2027, 1, 4),
-    ) is True
+    assert (
+        BacktestEngine()._is_capital_update_due(
+            settings,
+            1,
+            prices,
+            date(2027, 1, 4),
+        )
+        is True
+    )
 
 
 def test_fixed_aggressive_policy_sets_snapshot_and_position_modes() -> None:
@@ -430,36 +426,51 @@ def test_start_of_day_split_limit_uses_effective_mode_configuration() -> None:
     }
     engine = BacktestEngine()
 
-    assert engine._is_start_of_day_split_limit_reached(
-        settings,
-        StrategyMode.SAFE,
-        starting_open_position_count=6,
-    ) is False
-    assert engine._is_start_of_day_split_limit_reached(
-        settings,
-        StrategyMode.SAFE,
-        starting_open_position_count=7,
-    ) is True
-    assert engine._is_start_of_day_split_limit_reached(
-        settings,
-        StrategyMode.AGGRESSIVE,
-        starting_open_position_count=5,
-    ) is True
+    assert (
+        engine._is_start_of_day_split_limit_reached(
+            settings,
+            StrategyMode.SAFE,
+            starting_open_position_count=6,
+        )
+        is False
+    )
+    assert (
+        engine._is_start_of_day_split_limit_reached(
+            settings,
+            StrategyMode.SAFE,
+            starting_open_position_count=7,
+        )
+        is True
+    )
+    assert (
+        engine._is_start_of_day_split_limit_reached(
+            settings,
+            StrategyMode.AGGRESSIVE,
+            starting_open_position_count=5,
+        )
+        is True
+    )
 
 
 def test_start_of_day_split_limit_is_disabled_without_a_positive_limit() -> None:
     engine = BacktestEngine()
 
-    assert engine._is_start_of_day_split_limit_reached(
-        {},
-        StrategyMode.SAFE,
-        starting_open_position_count=7,
-    ) is False
-    assert engine._is_start_of_day_split_limit_reached(
-        {"safe": {"split_count": 0}},
-        StrategyMode.SAFE,
-        starting_open_position_count=7,
-    ) is False
+    assert (
+        engine._is_start_of_day_split_limit_reached(
+            {},
+            StrategyMode.SAFE,
+            starting_open_position_count=7,
+        )
+        is False
+    )
+    assert (
+        engine._is_start_of_day_split_limit_reached(
+            {"safe": {"split_count": 0}},
+            StrategyMode.SAFE,
+            starting_open_position_count=7,
+        )
+        is False
+    )
 
 
 def _price(day: date, close: str = "100") -> OhlcvDto:
