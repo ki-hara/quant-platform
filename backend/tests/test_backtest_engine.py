@@ -335,6 +335,45 @@ def test_max_holding_period_uses_trading_days_not_calendar_days() -> None:
     assert [trade.side for trade in result.trades] == ["BUY", "BUY"]
 
 
+def test_start_of_day_split_limit_uses_effective_mode_configuration() -> None:
+    settings = {
+        "safe": {"split_count": 7},
+        "aggressive": {"split_count": 5},
+    }
+    engine = BacktestEngine()
+
+    assert engine._is_start_of_day_split_limit_reached(
+        settings,
+        StrategyMode.SAFE,
+        starting_open_position_count=6,
+    ) is False
+    assert engine._is_start_of_day_split_limit_reached(
+        settings,
+        StrategyMode.SAFE,
+        starting_open_position_count=7,
+    ) is True
+    assert engine._is_start_of_day_split_limit_reached(
+        settings,
+        StrategyMode.AGGRESSIVE,
+        starting_open_position_count=5,
+    ) is True
+
+
+def test_start_of_day_split_limit_is_disabled_without_a_positive_limit() -> None:
+    engine = BacktestEngine()
+
+    assert engine._is_start_of_day_split_limit_reached(
+        {},
+        StrategyMode.SAFE,
+        starting_open_position_count=7,
+    ) is False
+    assert engine._is_start_of_day_split_limit_reached(
+        {"safe": {"split_count": 0}},
+        StrategyMode.SAFE,
+        starting_open_position_count=7,
+    ) is False
+
+
 def _price(day: date, close: str = "100") -> OhlcvDto:
     return OhlcvDto(
         symbol="TEST",

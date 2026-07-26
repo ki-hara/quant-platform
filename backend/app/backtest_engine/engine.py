@@ -277,6 +277,18 @@ class BacktestEngine:
             return StrategyMode.SAFE, None
         return active_transition.recommended_mode, active_transition.rule_code
 
+    def _is_start_of_day_split_limit_reached(
+        self,
+        settings: dict,
+        effective_mode: StrategyMode,
+        starting_open_position_count: int,
+    ) -> bool:
+        mode_settings = settings.get(effective_mode.value)
+        if not isinstance(mode_settings, dict):
+            return False
+        split_count = int(mode_settings.get("split_count", 0))
+        return split_count > 0 and starting_open_position_count >= split_count
+
     def _sell_positions(
         self,
         strategy: Strategy,
