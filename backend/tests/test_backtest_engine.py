@@ -1,6 +1,8 @@
 from datetime import date
 from decimal import Decimal
 
+import pytest
+
 from app.backtest_engine.engine import BacktestEngine
 from app.domain.enums import BacktestModePolicy, BacktestPositionSizingPolicy, StrategyMode
 from app.dto.market_data import OhlcvDto
@@ -449,6 +451,83 @@ def test_start_of_day_split_limit_uses_effective_mode_configuration() -> None:
             starting_open_position_count=5,
         )
         is True
+    )
+
+
+def test_weekly_rsi_mode_transition_uses_current_mode_split_count_for_buy_gate() -> None:
+    prices = [
+        _price(date(2026, 6, 15), "10"),
+        _price(date(2026, 6, 16), "10"),
+        _price(date(2026, 6, 17), "10"),
+        _price(date(2026, 6, 18), "10"),
+        _price(date(2026, 6, 19), "10"),
+        _price(date(2026, 6, 22), "10"),
+    ]
+    rsi_prices = _weekly_prices(
+        [
+            "100",
+            "99",
+            "100",
+            "99",
+            "100",
+            "99",
+            "100",
+            "99",
+            "100",
+            "99",
+            "100",
+            "99",
+            "100",
+            "99",
+            "100",
+            "100",
+        ],
+        first_week_ending=date(2026, 3, 6),
+    )
+
+    result = BacktestEngine().run(
+        strategy=_ScheduledReplacementStrategy(
+            sell_date=date(2026, 7, 1),
+            sell_buy_date=date(2026, 6, 22),
+        ),
+        prices=prices,
+        initial_capital=Decimal("100"),
+        fee_rate=Decimal("0"),
+        slippage_rate=Decimal("0"),
+        settings={
+            "safe": {"split_count": 7},
+            "aggressive": {"split_count": 4},
+            "capital_update": {"type": "trading_days", "interval": 0},
+        },
+        mode_policy=BacktestModePolicy.WEEKLY_RSI,
+        rsi_prices=rsi_prices,
+    )
+
+    assert [trade.date for trade in result.trades if trade.side == "BUY"] == [
+        date(2026, 6, 16),
+        date(2026, 6, 17),
+        date(2026, 6, 18),
+        date(2026, 6, 19),
+    ]
+    transition_snapshot = next(
+        snapshot for snapshot in result.daily_snapshots if snapshot.date == date(2026, 6, 22)
+    )
+    assert transition_snapshot.mode == StrategyMode.AGGRESSIVE
+    assert transition_snapshot.mode_rule_code == "A1"
+
+
+@pytest.mark.parametrize(
+    "split_count",
+    [None, "", "invalid", Decimal("Infinity"), float("inf")],
+)
+def test_start_of_day_split_limit_is_disabled_for_unusable_values(split_count: object) -> None:
+    assert (
+        BacktestEngine()._is_start_of_day_split_limit_reached(
+            {"safe": {"split_count": split_count}},
+            StrategyMode.SAFE,
+            starting_open_position_count=7,
+        )
+        is False
     )
 
 

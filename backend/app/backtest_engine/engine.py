@@ -301,7 +301,10 @@ class BacktestEngine:
         mode_settings = settings.get(effective_mode.value)
         if not isinstance(mode_settings, dict):
             return False
-        split_count = int(mode_settings.get("split_count", 0))
+        try:
+            split_count = int(mode_settings.get("split_count", 0))
+        except (TypeError, ValueError, OverflowError):
+            return False
         return split_count > 0 and starting_open_position_count >= split_count
 
     def _sell_positions(
