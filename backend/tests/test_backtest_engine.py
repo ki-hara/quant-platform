@@ -4,12 +4,100 @@ from decimal import Decimal
 from app.backtest_engine.engine import BacktestEngine
 from app.domain.enums import BacktestModePolicy, BacktestPositionSizingPolicy, StrategyMode
 from app.dto.market_data import OhlcvDto
+from app.strategy_engine.base import BuySignal, CapitalUpdate, PositionSize, SellSignal, Strategy
+from app.strategy_engine.context import StrategyContext, StrategyPosition
 from app.strategy_engine.dynamic_wave import DynamicWaveStrategy
 from tests.fixtures import simple_prices
 
 
 def assert_money(actual: Decimal, expected: str) -> None:
     assert actual == Decimal(expected)
+
+
+class _ScheduledReplacementStrategy(Strategy):
+    strategy_type = "scheduled_replacement"
+    display_name = "Scheduled Replacement Strategy"
+
+    def __init__(self, sell_date: date, sell_buy_date: date) -> None:
+        self.sell_date = sell_date
+        self.sell_buy_date = sell_buy_date
+
+    def get_mode(self, context: StrategyContext) -> StrategyMode:
+        return context.effective_mode
+
+    def should_buy(self, context: StrategyContext) -> BuySignal:
+        return BuySignal(context.current_date <= self.sell_buy_date, "scheduled_buy")
+
+    def should_sell(self, context: StrategyContext, position: StrategyPosition) -> SellSignal:
+        should_sell = (
+            context.current_date == self.sell_date
+            and position.buy_date == date(2026, 1, 2)
+        )
+        return SellSignal(should_sell, "scheduled_sell" if should_sell else None)
+
+    def calculate_position_size(self, context: StrategyContext) -> PositionSize:
+        return PositionSize(amount=Decimal("1"), quantity=1)
+
+    def update_capital(self, context: StrategyContext, realized_pnl: Decimal) -> CapitalUpdate:
+        return CapitalUpdate(context.capital)
+
+    def get_settings_schema(self) -> dict:
+        return {"type": "object", "fields": {}}
+
+
+def test_full_ladder_sell_does_not_fund_same_day_replacement_buy() -> None:
+    prices = [_price(date(2026, 1, day), "10") for day in range(1, 11)]
+    result = BacktestEngine().run(
+        strategy=_ScheduledReplacementStrategy(
+            sell_date=date(2026, 1, 9),
+            sell_buy_date=date(2026, 1, 10),
+        ),
+        prices=prices,
+        initial_capital=Decimal("100"),
+        fee_rate=Decimal("0"),
+        slippage_rate=Decimal("0"),
+        settings={
+            "safe": {"split_count": 7},
+            "capital_update": {"type": "trading_days", "interval": 0},
+        },
+    )
+
+    trades_on_sell_date = [
+        trade for trade in result.trades if trade.date == date(2026, 1, 9)
+    ]
+    trades_on_next_date = [
+        trade for trade in result.trades if trade.date == date(2026, 1, 10)
+    ]
+
+    assert [trade.side for trade in trades_on_sell_date] == ["SELL"]
+    assert trades_on_sell_date[0].open_position_count == 6
+    assert [trade.side for trade in trades_on_next_date] == ["BUY"]
+    assert trades_on_next_date[0].open_position_count == 7
+
+
+def test_below_limit_start_preserves_same_day_sell_then_buy_behavior() -> None:
+    prices = [_price(date(2026, 1, day), "10") for day in range(1, 9)]
+    result = BacktestEngine().run(
+        strategy=_ScheduledReplacementStrategy(
+            sell_date=date(2026, 1, 8),
+            sell_buy_date=date(2026, 1, 8),
+        ),
+        prices=prices,
+        initial_capital=Decimal("100"),
+        fee_rate=Decimal("0"),
+        slippage_rate=Decimal("0"),
+        settings={
+            "safe": {"split_count": 7},
+            "capital_update": {"type": "trading_days", "interval": 0},
+        },
+    )
+
+    trades_on_sell_date = [
+        trade for trade in result.trades if trade.date == date(2026, 1, 8)
+    ]
+
+    assert [trade.side for trade in trades_on_sell_date] == ["SELL", "BUY"]
+    assert [trade.open_position_count for trade in trades_on_sell_date] == [5, 6]
 
 
 def test_backtest_engine_generates_snapshots_and_trades() -> None:

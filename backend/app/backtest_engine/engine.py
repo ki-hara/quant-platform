@@ -90,6 +90,12 @@ class BacktestEngine:
             )
 
             if index > 0:
+                starting_open_position_count = len(open_positions)
+                buy_blocked_at_start = self._is_start_of_day_split_limit_reached(
+                    settings,
+                    effective_mode,
+                    starting_open_position_count,
+                )
                 cash, cumulative_fees, realized_today, sell_trades = self._sell_positions(
                     strategy=strategy,
                     context=context,
@@ -104,54 +110,55 @@ class BacktestEngine:
                 trades.extend(sell_trades)
                 interval_realized_pnl += realized_today
 
-                context = self._build_context(
-                    price=price,
-                    previous_close=previous_close,
-                    capital=capital,
-                    cash=cash,
-                    open_positions=open_positions,
-                    settings=settings,
-                    trading_day_index=index,
-                    effective_mode=effective_mode,
-                )
-                buy_signal = strategy.should_buy(context)
-                if buy_signal.should_buy:
-                    mode = strategy.get_mode(context)
-                    size = strategy.calculate_position_size(context)
-                    buy_price = self._apply_buy_slippage(price.close, slippage_rate)
-                    quantity = self._buy_quantity(size.amount, buy_price, size.quantity, position_sizing_policy)
-                    if quantity > 0:
-                        transaction_amount = buy_price * Decimal(quantity)
-                        fee = self._fee(transaction_amount, fee_rate)
-                        total_cost = transaction_amount + fee
-                        if total_cost <= cash:
-                            cash -= total_cost
-                            cumulative_fees += fee
-                            position = _OpenPosition(
-                                position_id=next_position_id,
-                                buy_date=price.date,
-                                buy_price=buy_price,
-                                quantity=quantity,
-                                mode=mode,
-                                buy_fee=fee,
-                                buy_trading_day_index=index,
-                            )
-                            open_positions.append(position)
-                            trades.append(
-                                SimulatedTrade(
-                                    date=price.date,
-                                    side="BUY",
-                                    quantity=quantity,
-                                    price=buy_price.quantize(MONEY_QUANT),
-                                    fee=fee.quantize(MONEY_QUANT),
-                                    realized_pnl=Decimal("0"),
+                if not buy_blocked_at_start:
+                    context = self._build_context(
+                        price=price,
+                        previous_close=previous_close,
+                        capital=capital,
+                        cash=cash,
+                        open_positions=open_positions,
+                        settings=settings,
+                        trading_day_index=index,
+                        effective_mode=effective_mode,
+                    )
+                    buy_signal = strategy.should_buy(context)
+                    if buy_signal.should_buy:
+                        mode = strategy.get_mode(context)
+                        size = strategy.calculate_position_size(context)
+                        buy_price = self._apply_buy_slippage(price.close, slippage_rate)
+                        quantity = self._buy_quantity(size.amount, buy_price, size.quantity, position_sizing_policy)
+                        if quantity > 0:
+                            transaction_amount = buy_price * Decimal(quantity)
+                            fee = self._fee(transaction_amount, fee_rate)
+                            total_cost = transaction_amount + fee
+                            if total_cost <= cash:
+                                cash -= total_cost
+                                cumulative_fees += fee
+                                position = _OpenPosition(
                                     position_id=next_position_id,
-                                    open_position_count=len(open_positions),
-                                    cash_after=cash.quantize(MONEY_QUANT),
-                                    capital_after=capital.quantize(MONEY_QUANT),
+                                    buy_date=price.date,
+                                    buy_price=buy_price,
+                                    quantity=quantity,
+                                    mode=mode,
+                                    buy_fee=fee,
+                                    buy_trading_day_index=index,
                                 )
-                            )
-                            next_position_id += 1
+                                open_positions.append(position)
+                                trades.append(
+                                    SimulatedTrade(
+                                        date=price.date,
+                                        side="BUY",
+                                        quantity=quantity,
+                                        price=buy_price.quantize(MONEY_QUANT),
+                                        fee=fee.quantize(MONEY_QUANT),
+                                        realized_pnl=Decimal("0"),
+                                        position_id=next_position_id,
+                                        open_position_count=len(open_positions),
+                                        cash_after=cash.quantize(MONEY_QUANT),
+                                        capital_after=capital.quantize(MONEY_QUANT),
+                                    )
+                                )
+                                next_position_id += 1
 
                 if (
                     self._is_capital_update_due(
