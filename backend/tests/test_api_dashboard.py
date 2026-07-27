@@ -13,6 +13,7 @@ from app.db.seed import seed_default_owner
 from app.db.session import get_session
 from app.dto.market_data import OhlcvDto
 from app.domain.enums import TradeSide, TradeSource
+from app.domain.models import StrategyConfigSnapshot
 from app.infrastructure.repositories.market_data import MarketPriceRepository
 from app.infrastructure.repositories.trades import TradeRepository
 from app.main import create_app
@@ -143,6 +144,47 @@ def test_put_strategy_config_updates_existing_config(api_client: TestClient) -> 
     assert body["symbol"] == "QQQ"
     assert body["settings_json"]["capital_update"] == {"type": "calendar", "period": "monthly"}
 
+
+def test_apply_strategy_snapshot_maps_validation_to_400_and_missing_to_404(
+    api_client: TestClient,
+) -> None:
+    create_response = api_client.post(
+        "/api/strategy-configs",
+        json={
+            "name": "Snapshot API",
+            "strategy_type": "dynamic_wave",
+            "symbol": "TEST",
+            "initial_capital": "1000",
+            "fee_rate": "0.001",
+            "slippage_rate": "0",
+            "settings_json": DynamicWaveStrategy.default_settings(),
+        },
+    )
+    config_id = create_response.json()["id"]
+    snapshot_response = api_client.post(
+        f"/api/strategy-configs/{config_id}/snapshots",
+        json={"name": "Invalid Radar snapshot"},
+    )
+    snapshot_id = snapshot_response.json()["id"]
+    with Session(api_client.app.state.test_engine) as session:
+        snapshot = session.get(StrategyConfigSnapshot, snapshot_id)
+        assert snapshot is not None
+        snapshot.strategy_type = "radar0458_pro"
+        snapshot.symbol = "TQQQ"
+        snapshot.settings_json = {"pro_profile": "pro1"}
+        session.commit()
+
+    invalid_response = api_client.post(
+        f"/api/strategy-configs/{config_id}/snapshots/{snapshot_id}/apply"
+    )
+    missing_response = api_client.post(
+        f"/api/strategy-configs/{config_id}/snapshots/999999/apply"
+    )
+
+    assert invalid_response.status_code == 400
+    assert "SOXL" in invalid_response.json()["detail"]
+    assert missing_response.status_code == 404
+    assert "not found" in missing_response.json()["detail"].lower()
 
 def test_delete_strategy_config_archives_and_hides_from_list(api_client: TestClient) -> None:
     create_response = api_client.post(
