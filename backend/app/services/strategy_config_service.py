@@ -124,6 +124,12 @@ class StrategyConfigService:
         try:
             config = self.get_config(config_id)
             snapshot = self._get_snapshot(config_id, snapshot_id)
+            registry.create(snapshot.strategy_type)
+            self._validate_strategy_config(
+                snapshot.strategy_type, snapshot.symbol, snapshot.settings_json
+            )
+            config.strategy_type = snapshot.strategy_type
+            config.symbol = snapshot.symbol
             config.fee_rate = snapshot.fee_rate
             config.slippage_rate = snapshot.slippage_rate
             config.settings_json = deepcopy(snapshot.settings_json)

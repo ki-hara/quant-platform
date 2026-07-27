@@ -537,6 +537,64 @@ def test_strategy_config_snapshot_preserves_live_portfolio_when_applied() -> Non
         assert portfolio_after.capital == Decimal("10000")
 
 
+def test_strategy_config_snapshot_restores_cross_strategy_identity_and_settings() -> None:
+    with create_session() as session:
+        service = StrategyConfigService(session)
+        config = service.create_config(
+            "default",
+            StrategyConfigCreateRequest(
+                name="Switchable",
+                strategy_type="dynamic_wave",
+                symbol="TQQQ",
+                initial_capital=Decimal("10000"),
+                fee_rate=Decimal("0.001"),
+                slippage_rate=Decimal("0"),
+                settings_json=DynamicWaveStrategy.default_settings(),
+            ),
+        )
+        snapshot = service.create_snapshot(
+            config.id,
+            StrategyConfigSnapshotCreateRequest(name="Dynamic baseline"),
+        )
+        service.update_config(
+            config.id,
+            StrategyConfigUpdateRequest(
+                strategy_type="radar0458_pro",
+                symbol="SOXL",
+                settings_json={"pro_profile": "pro3"},
+            ),
+        )
+
+        applied = service.apply_snapshot(config.id, snapshot.id)
+
+        assert applied.strategy_type == "dynamic_wave"
+        assert applied.symbol == "TQQQ"
+        assert applied.settings_json == DynamicWaveStrategy.default_settings()
+
+
+def test_strategy_config_snapshot_rejects_invalid_snapshot_atomically() -> None:
+    with create_session() as session:
+        service = StrategyConfigService(session)
+        config = create_config(session)
+        snapshot = service.create_snapshot(
+            config.id,
+            StrategyConfigSnapshotCreateRequest(name="Invalid Radar snapshot"),
+        )
+        snapshot.strategy_type = "radar0458_pro"
+        snapshot.symbol = "TQQQ"
+        snapshot.fee_rate = Decimal("0.009")
+        snapshot.settings_json = {"pro_profile": "pro1"}
+        session.commit()
+
+        with pytest.raises(ValueError, match="SOXL"):
+            service.apply_snapshot(config.id, snapshot.id)
+
+        unchanged = service.get_config(config.id)
+        assert unchanged.strategy_type == "dynamic_wave"
+        assert unchanged.symbol == "TEST"
+        assert unchanged.fee_rate == Decimal("0.100000")
+        assert unchanged.settings_json == DynamicWaveStrategy.default_settings()
+
 def test_strategy_config_snapshots_list_newest_first_and_delete_removes_snapshot() -> None:
     with create_session() as session:
         service = StrategyConfigService(session)
