@@ -10,6 +10,7 @@ from app.domain.models import StrategyConfig, StrategyConfigSnapshot
 from app.infrastructure.repositories.modes import ModeStateRepository
 from app.infrastructure.repositories.portfolios import PortfolioRepository
 from app.infrastructure.repositories.strategies import StrategyConfigRepository
+from app.strategy_engine.radar0458_pro import VALID_RADAR_PROFILES
 from app.strategy_engine.registry import registry
 
 
@@ -58,6 +59,9 @@ class StrategyConfigService:
     ) -> StrategyConfig:
         try:
             registry.create(request.strategy_type)
+            self._validate_strategy_config(
+                request.strategy_type, request.symbol, request.settings_json
+            )
             config = self.configs.create(
                 owner_id=owner_id,
                 name=request.name,
@@ -173,6 +177,14 @@ class StrategyConfigService:
                 )
             if request.strategy_type is not None:
                 registry.create(request.strategy_type)
+            effective_strategy_type = request.strategy_type or config.strategy_type
+            effective_symbol = request.symbol or config.symbol
+            effective_settings = (
+                request.settings_json if request.settings_json is not None else config.settings_json
+            )
+            self._validate_strategy_config(
+                effective_strategy_type, effective_symbol, effective_settings
+            )
             for field in (
                 "name",
                 "strategy_type",
@@ -191,3 +203,16 @@ class StrategyConfigService:
         except Exception:
             self.session.rollback()
             raise
+
+    @staticmethod
+    def _validate_strategy_config(
+        strategy_type: str,
+        symbol: str,
+        settings_json: dict[str, Any],
+    ) -> None:
+        if strategy_type != "radar0458_pro":
+            return
+        if symbol.upper() != "SOXL":
+            raise ValueError("Radar0458 Pro supports SOXL only.")
+        if settings_json.get("pro_profile") not in VALID_RADAR_PROFILES:
+            raise ValueError("Radar0458 Pro pro_profile must be pro1, pro2, or pro3.")

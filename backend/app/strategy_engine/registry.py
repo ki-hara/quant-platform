@@ -1,5 +1,6 @@
 from app.strategy_engine.base import Strategy
 from app.strategy_engine.dynamic_wave import DynamicWaveStrategy
+from app.strategy_engine.radar0458_pro import Radar0458ProStrategy
 
 
 class StrategyRegistry:
@@ -27,3 +28,4 @@ class StrategyRegistry:
 
 registry = StrategyRegistry()
 registry.register(DynamicWaveStrategy)
+registry.register(Radar0458ProStrategy)

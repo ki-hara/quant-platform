@@ -571,6 +571,74 @@ def test_strategy_config_update_rejects_unknown_strategy_type() -> None:
             )
 
 
+def test_strategy_config_service_accepts_valid_radar_config() -> None:
+    with create_session() as session:
+        config = StrategyConfigService(session).create_config(
+            "default",
+            StrategyConfigCreateRequest(
+                name="Radar Pro",
+                strategy_type="radar0458_pro",
+                symbol="soxl",
+                initial_capital=Decimal("10000"),
+                fee_rate=Decimal("0.1"),
+                slippage_rate=Decimal("0"),
+                settings_json={"pro_profile": "pro2"},
+            ),
+        )
+        assert config.symbol == "soxl"
+        assert config.settings_json == {"pro_profile": "pro2"}
+
+
+@pytest.mark.parametrize(
+    ("symbol", "settings_json", "message"),
+    [
+        ("TQQQ", {"pro_profile": "pro1"}, "SOXL"),
+        ("SOXL", {"pro_profile": "pro4"}, "pro_profile"),
+        ("SOXL", {}, "pro_profile"),
+    ],
+)
+def test_strategy_config_service_rejects_invalid_radar_config(
+    symbol: str,
+    settings_json: dict,
+    message: str,
+) -> None:
+    with create_session() as session:
+        with pytest.raises(ValueError, match=message):
+            StrategyConfigService(session).create_config(
+                "default",
+                StrategyConfigCreateRequest(
+                    name="Radar Pro",
+                    strategy_type="radar0458_pro",
+                    symbol=symbol,
+                    initial_capital=Decimal("10000"),
+                    fee_rate=Decimal("0.1"),
+                    slippage_rate=Decimal("0"),
+                    settings_json=settings_json,
+                ),
+            )
+
+
+def test_strategy_config_service_validates_effective_radar_config_on_update() -> None:
+    with create_session() as session:
+        service = StrategyConfigService(session)
+        config = service.create_config(
+            "default",
+            StrategyConfigCreateRequest(
+                name="Radar Pro",
+                strategy_type="radar0458_pro",
+                symbol="SOXL",
+                initial_capital=Decimal("10000"),
+                fee_rate=Decimal("0.1"),
+                slippage_rate=Decimal("0"),
+                settings_json={"pro_profile": "pro1"},
+            ),
+        )
+        with pytest.raises(ValueError, match="pro_profile"):
+            service.update_config(
+                config.id,
+                StrategyConfigUpdateRequest(settings_json={"pro_profile": "invalid"}),
+            )
+
 @pytest.mark.parametrize(
     ("quantity", "price", "fee", "message"),
     [
