@@ -4,6 +4,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from app.db.base import Base
 from app.db.seed import seed_default_owner
+from app.db.session import create_database_engine
 from app.domain.enums import LocOrderStatus, StrategyMode, TradeSide
 from app.domain.models import LocOrder, MarketPrice, Owner
 from app.api.routes_trades import PositionUpdateDto, update_position
@@ -217,7 +218,7 @@ def test_radar_loc_fill_propagates_cycle_metadata_and_snapshots_fill_exit_price(
 
 
 def test_radar_ledger_rebuild_preserves_open_snapshots_and_realized_capital() -> None:
-    engine = create_engine("sqlite:///:memory:")
+    engine = create_database_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     with Session(engine) as session:
         seed_default_owner(session, "default")
@@ -355,3 +356,5 @@ def test_pending_to_open_radar_position_rounds_sell_limit_to_usd_cent() -> None:
         )
 
         assert updated.sell_limit_price == Decimal("40.73")
+        buy_trade = next(trade for trade in config.trades if trade.side == TradeSide.BUY)
+        assert buy_trade.position_id == updated.id

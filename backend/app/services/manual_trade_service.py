@@ -256,6 +256,12 @@ class ManualTradeService:
             }
             for position in existing_positions
         }
+        trades = self.trades.list_by_strategy_config(config.id)
+        trade_position_ids = {trade.id: trade.position_id for trade in trades}
+        for trade in trades:
+            trade.position_id = None
+            self.session.add(trade)
+        self.session.flush()
         pending_positions = [
             snapshots[position.id]
             for position in existing_positions
@@ -268,9 +274,11 @@ class ManualTradeService:
         portfolio.cumulative_fees = Decimal("0")
         self._replay_portfolio_adjustments(config.id, portfolio)
         open_positions: list[Position] = []
-        for trade in self.trades.list_by_strategy_config(config.id):
+        rebuilt_positions: dict[int, Position] = {}
+        for trade in trades:
             if trade.side == TradeSide.BUY:
-                snapshot = snapshots.get(trade.position_id)
+                old_position_id = trade_position_ids[trade.id]
+                snapshot = snapshots.get(old_position_id)
                 position = self.positions.create_open(
                     strategy_config_id=config.id,
                     buy_date=trade.date,
@@ -289,12 +297,17 @@ class ManualTradeService:
                     radar_cycle_id=snapshot["radar_cycle_id"] if snapshot else None,
                     radar_cycle_capital=snapshot["radar_cycle_capital"] if snapshot else None,
                 )
+                if old_position_id is not None:
+                    rebuilt_positions[old_position_id] = position
                 trade.position_id = position.id
                 self.session.add(trade)
                 open_positions.append(position)
                 portfolio.cash -= trade.price * trade.quantity + trade.fee
                 portfolio.cumulative_fees += trade.fee
             elif trade.side == TradeSide.SELL:
+                old_position_id = trade_position_ids[trade.id]
+                rebuilt_position = rebuilt_positions.get(old_position_id)
+                trade.position_id = rebuilt_position.id if rebuilt_position is not None else None
                 realized_pnl = self._replay_sell(trade, open_positions)
                 trade.realized_pnl = realized_pnl
                 portfolio.cash += trade.price * trade.quantity - trade.fee

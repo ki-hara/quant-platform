@@ -183,3 +183,51 @@ def test_create_app_has_no_deprecated_startup_handlers() -> None:
     app = create_app()
 
     assert app.router.on_startup == []
+
+
+def test_legacy_radar_loc_position_backfill_links_only_unique_matches() -> None:
+    migrations = migration_module()
+    engine = create_engine("sqlite:///:memory:")
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "CREATE TABLE strategy_configs (id INTEGER PRIMARY KEY, strategy_type VARCHAR(100))"
+            )
+        )
+        connection.execute(
+            text(
+                "CREATE TABLE positions ("
+                "id INTEGER PRIMARY KEY, strategy_config_id INTEGER, buy_date DATE, "
+                "limit_price NUMERIC, quantity NUMERIC, mode VARCHAR(10), status VARCHAR(10), "
+                "radar_profile VARCHAR(16))"
+            )
+        )
+        connection.execute(
+            text(
+                "CREATE TABLE loc_orders ("
+                "id INTEGER PRIMARY KEY, strategy_config_id INTEGER, order_date DATE, "
+                "limit_price NUMERIC, recommended_quantity NUMERIC, mode VARCHAR(10), "
+                "status VARCHAR(10), position_id INTEGER)"
+            )
+        )
+        connection.execute(text("INSERT INTO strategy_configs VALUES (1, 'radar0458_pro')"))
+        connection.execute(
+            text(
+                "INSERT INTO positions VALUES "
+                "(10, 1, '2026-07-10', 40, 2, 'safe', 'pending', 'pro1'), "
+                "(20, 1, '2026-07-11', 41, 3, 'safe', 'pending', 'pro1'), "
+                "(21, 1, '2026-07-11', 41, 3, 'safe', 'pending', 'pro1')"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO loc_orders VALUES "
+                "(100, 1, '2026-07-10', 40, 2, 'safe', 'pending', NULL), "
+                "(200, 1, '2026-07-11', 41, 3, 'safe', 'pending', NULL)"
+            )
+        )
+
+        migrations._backfill_legacy_radar_loc_order_positions(connection)
+
+        rows = connection.execute(text("SELECT id, position_id FROM loc_orders ORDER BY id")).all()
+    assert rows == [(100, 10), (200, None)]

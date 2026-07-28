@@ -287,6 +287,68 @@ def _link_loc_orders_to_positions(connection: Connection) -> None:
     )
 
 
+def _backfill_legacy_radar_loc_order_positions(connection: Connection) -> None:
+    required_loc_columns = {
+        "strategy_config_id",
+        "order_date",
+        "limit_price",
+        "recommended_quantity",
+        "mode",
+        "status",
+        "position_id",
+    }
+    required_position_columns = {
+        "id",
+        "strategy_config_id",
+        "buy_date",
+        "limit_price",
+        "quantity",
+        "mode",
+        "status",
+        "radar_profile",
+    }
+    if not required_loc_columns <= _column_names(connection, "loc_orders"):
+        return
+    if not required_position_columns <= _column_names(connection, "positions"):
+        return
+    connection.execute(
+        text(
+            """
+            UPDATE loc_orders AS orders
+            SET position_id = (
+                SELECT MIN(positions.id)
+                FROM positions
+                WHERE positions.strategy_config_id = orders.strategy_config_id
+                  AND positions.buy_date = orders.order_date
+                  AND positions.limit_price = orders.limit_price
+                  AND positions.quantity = orders.recommended_quantity
+                  AND positions.mode = orders.mode
+                  AND positions.status = 'pending'
+                  AND positions.radar_profile IS NOT NULL
+            )
+            WHERE orders.position_id IS NULL
+              AND orders.status = 'pending'
+              AND EXISTS (
+                  SELECT 1 FROM strategy_configs
+                  WHERE strategy_configs.id = orders.strategy_config_id
+                    AND strategy_configs.strategy_type = 'radar0458_pro'
+              )
+              AND 1 = (
+                  SELECT COUNT(*)
+                  FROM positions
+                  WHERE positions.strategy_config_id = orders.strategy_config_id
+                    AND positions.buy_date = orders.order_date
+                    AND positions.limit_price = orders.limit_price
+                    AND positions.quantity = orders.recommended_quantity
+                    AND positions.mode = orders.mode
+                    AND positions.status = 'pending'
+                    AND positions.radar_profile IS NOT NULL
+              )
+            """
+        )
+    )
+
+
 def _add_radar_position_snapshots(connection: Connection) -> None:
     _add_column_if_missing(connection, "positions", "radar_tier", "radar_tier INTEGER")
     _add_column_if_missing(connection, "positions", "radar_profile", "radar_profile VARCHAR(16)")
@@ -305,6 +367,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     (3, "snapshot_position_exit_policies", _snapshot_position_exit_policies),
     (4, "radar_position_snapshots", _add_radar_position_snapshots),
     (5, "link_loc_orders_to_positions", _link_loc_orders_to_positions),
+    (6, "backfill_legacy_radar_loc_positions", _backfill_legacy_radar_loc_order_positions),
 )
 LATEST_SCHEMA_VERSION = MIGRATIONS[-1][0]
 

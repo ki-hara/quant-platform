@@ -4,7 +4,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from app.domain.enums import LocOrderStatus, TradeSide, TradeSource
+from app.domain.enums import LocOrderStatus, PositionStatus, TradeSide, TradeSource
 from app.domain.models import LocOrder, Position
 from app.infrastructure.repositories.portfolios import PositionRepository
 from app.infrastructure.repositories.strategies import StrategyConfigRepository
@@ -161,14 +161,32 @@ class LocOrderService:
             LocOrder.order_date < today,
         )
         changed = False
+        config = self._get_config(config_id)
         for order in self.session.scalars(stmt):
             if order.position_id is not None:
                 self._delete_linked_pending_position(order)
+            elif config.strategy_type == "radar0458_pro":
+                legacy_position = self._uniquely_matching_legacy_pending_position(order)
+                if legacy_position is not None:
+                    self.session.delete(legacy_position)
             order.status = LocOrderStatus.UNFILLED
             self.session.add(order)
             changed = True
         if changed:
             self.session.commit()
+
+    def _uniquely_matching_legacy_pending_position(self, order: LocOrder) -> Position | None:
+        stmt = select(Position).where(
+            Position.strategy_config_id == order.strategy_config_id,
+            Position.status == PositionStatus.PENDING,
+            Position.buy_date == order.order_date,
+            Position.limit_price == order.limit_price,
+            Position.quantity == order.recommended_quantity,
+            Position.mode == order.mode,
+            Position.radar_profile.is_not(None),
+        )
+        matches = list(self.session.scalars(stmt))
+        return matches[0] if len(matches) == 1 else None
 
     def _linked_pending_position(self, order: LocOrder) -> Position | None:
         if order.position_id is None:

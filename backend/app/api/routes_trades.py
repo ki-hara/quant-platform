@@ -195,6 +195,7 @@ def update_position(
             realized_pnl=Decimal("0"),
             sell_reason=None,
             source=TradeSource.MANUAL,
+            position_id=position.id,
         )
         config.live_portfolio.cash -= (position.buy_price * position.quantity) + fee
         config.live_portfolio.cumulative_fees += fee

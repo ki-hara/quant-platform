@@ -338,3 +338,101 @@ def test_radar_ledger_rebuild_relinks_preserved_pending_loc_position() -> None:
         assert rebuilt.radar_cycle_id == "cycle-one"
         assert rebuilt.radar_cycle_capital == Decimal("1000")
         assert rebuilt.sell_limit_price == Decimal("40.00")
+
+
+def test_expiring_legacy_radar_order_removes_uniquely_matching_pending_position() -> None:
+    with create_session() as session:
+        config = StrategyConfigService(session).create_config(
+            "default",
+            StrategyConfigCreateRequest(
+                name="Legacy Radar LOC",
+                strategy_type="radar0458_pro",
+                symbol="SOXL",
+                initial_capital=Decimal("1000"),
+                fee_rate=Decimal("0"),
+                slippage_rate=Decimal("0"),
+                settings_json=Radar0458ProStrategy.default_settings(),
+            ),
+        )
+        pending = PositionRepository(session).create_pending(
+            strategy_config_id=config.id,
+            buy_date=date(2026, 7, 10),
+            limit_price=Decimal("40"),
+            quantity=Decimal("2"),
+            mode=StrategyMode.SAFE,
+            radar_tier=1,
+            radar_profile="pro1",
+            radar_cycle_id="cycle-one",
+            radar_cycle_capital=Decimal("1000"),
+            sell_threshold_percent=Decimal("0.01"),
+            sell_limit_price=Decimal("40.00"),
+            max_holding_days=10,
+        )
+        order = LocOrder(
+            strategy_config_id=config.id,
+            position_id=None,
+            order_date=pending.buy_date,
+            symbol="SOXL",
+            limit_price=pending.limit_price,
+            recommended_quantity=pending.quantity,
+            mode=pending.mode,
+            status=LocOrderStatus.PENDING,
+        )
+        session.add(order)
+        session.commit()
+
+        LocOrderService(session)._expire_old_pending(config.id, date(2026, 7, 11))
+
+        assert session.get(Position, pending.id) is None
+        assert order.status == LocOrderStatus.UNFILLED
+
+
+def test_expiring_legacy_radar_order_keeps_ambiguous_pending_positions() -> None:
+    with create_session() as session:
+        config = StrategyConfigService(session).create_config(
+            "default",
+            StrategyConfigCreateRequest(
+                name="Legacy Radar LOC",
+                strategy_type="radar0458_pro",
+                symbol="SOXL",
+                initial_capital=Decimal("1000"),
+                fee_rate=Decimal("0"),
+                slippage_rate=Decimal("0"),
+                settings_json=Radar0458ProStrategy.default_settings(),
+            ),
+        )
+        positions = PositionRepository(session)
+        matches = [
+            positions.create_pending(
+                strategy_config_id=config.id,
+                buy_date=date(2026, 7, 10),
+                limit_price=Decimal("40"),
+                quantity=Decimal("2"),
+                mode=StrategyMode.SAFE,
+                radar_tier=tier,
+                radar_profile="pro1",
+                radar_cycle_id="cycle-one",
+                radar_cycle_capital=Decimal("1000"),
+                sell_threshold_percent=Decimal("0.01"),
+                sell_limit_price=Decimal("40.00"),
+                max_holding_days=10,
+            )
+            for tier in (1, 2)
+        ]
+        order = LocOrder(
+            strategy_config_id=config.id,
+            position_id=None,
+            order_date=date(2026, 7, 10),
+            symbol="SOXL",
+            limit_price=Decimal("40"),
+            recommended_quantity=Decimal("2"),
+            mode=StrategyMode.SAFE,
+            status=LocOrderStatus.PENDING,
+        )
+        session.add(order)
+        session.commit()
+
+        LocOrderService(session)._expire_old_pending(config.id, date(2026, 7, 11))
+
+        assert all(session.get(Position, position.id) is not None for position in matches)
+        assert order.status == LocOrderStatus.UNFILLED
