@@ -1,15 +1,17 @@
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.domain.enums import LocOrderStatus, TradeSide, TradeSource
 from app.domain.models import LocOrder
+from app.infrastructure.repositories.portfolios import PositionRepository
 from app.infrastructure.repositories.strategies import StrategyConfigRepository
 from app.services.daily_plan_service import DailyPlanService
 from app.services.manual_trade_service import ManualTradeRequest, ManualTradeService
 from app.services.market_session_service import current_market_date
+from app.strategy_engine.radar0458_pro import get_radar_preset
 
 
 @dataclass(frozen=True)
@@ -37,7 +39,9 @@ class LocOrderService:
 
     def create_from_daily_plan(self, config_id: int, memo: str | None = None) -> LocOrder:
         config = self._get_config(config_id)
-        plan = DailyPlanService(self.session).get_daily_plan(config_id, current_market_date(config.symbol))
+        plan = DailyPlanService(self.session).get_daily_plan(
+            config_id, current_market_date(config.symbol)
+        )
         if plan.LOC.blocking_reason is not None:
             raise ValueError(f"LOC buy order unavailable: {plan.LOC.blocking_reason}")
         if plan.LOC.quantity <= 0:
@@ -53,6 +57,26 @@ class LocOrderService:
             memo=memo,
         )
         self.session.add(order)
+        if config.strategy_type == "radar0458_pro":
+            preset = get_radar_preset(plan.radar_profile)
+            sell_limit = (
+                plan.LOC.limit_price
+                * (Decimal("1") + preset.sell_threshold_percent / Decimal("100"))
+            ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            PositionRepository(self.session).create_pending(
+                strategy_config_id=config_id,
+                buy_date=order.order_date,
+                limit_price=order.limit_price,
+                quantity=order.recommended_quantity,
+                mode=order.mode,
+                radar_tier=plan.radar_tier,
+                radar_profile=plan.radar_profile,
+                radar_cycle_id=plan.radar_cycle_id,
+                radar_cycle_capital=plan.radar_cycle_capital,
+                sell_threshold_percent=preset.sell_threshold_percent,
+                sell_limit_price=sell_limit,
+                max_holding_days=preset.max_holding_days,
+            )
         self.session.commit()
         self.session.refresh(order)
         return order
@@ -62,6 +86,23 @@ class LocOrderService:
             order = self._get_order(order_id)
             if order.status != LocOrderStatus.PENDING:
                 raise ValueError("Only pending LOC orders can be filled.")
+            radar_position = None
+            if self._get_config(order.strategy_config_id).strategy_type == "radar0458_pro":
+                radar_position = next(
+                    (
+                        position
+                        for position in PositionRepository(self.session).list_open(
+                            order.strategy_config_id
+                        )
+                        if position.status.value == "pending"
+                        and position.buy_date == order.order_date
+                        and position.limit_price == order.limit_price
+                    ),
+                    None,
+                )
+                if radar_position is None:
+                    raise ValueError("radar_position_snapshot_missing")
+                self.session.delete(radar_position)
             result = ManualTradeService(self.session).record_manual_trade(
                 ManualTradeRequest(
                     config_id=order.strategy_config_id,
@@ -73,6 +114,17 @@ class LocOrderService:
                     limit_price=order.limit_price,
                     source=TradeSource.MANUAL,
                     mode=order.mode,
+                    radar_tier=radar_position.radar_tier if radar_position else None,
+                    radar_profile=radar_position.radar_profile if radar_position else None,
+                    radar_cycle_id=radar_position.radar_cycle_id if radar_position else None,
+                    radar_cycle_capital=radar_position.radar_cycle_capital
+                    if radar_position
+                    else None,
+                    sell_threshold_percent=radar_position.sell_threshold_percent
+                    if radar_position
+                    else None,
+                    sell_limit_price=radar_position.sell_limit_price if radar_position else None,
+                    max_holding_days=radar_position.max_holding_days if radar_position else None,
                 ),
                 commit=False,
             )
@@ -104,6 +156,22 @@ class LocOrderService:
             raise ValueError("Only pending LOC orders can be marked unfilled.")
         order.status = LocOrderStatus.UNFILLED
         self.session.add(order)
+        config = self._get_config(order.strategy_config_id)
+        if config.strategy_type == "radar0458_pro":
+            pending = next(
+                (
+                    position
+                    for position in PositionRepository(self.session).list_open(
+                        order.strategy_config_id
+                    )
+                    if position.status.value == "pending"
+                    and position.buy_date == order.order_date
+                    and position.limit_price == order.limit_price
+                ),
+                None,
+            )
+            if pending is not None:
+                self.session.delete(pending)
         self.session.commit()
         self.session.refresh(order)
         return order

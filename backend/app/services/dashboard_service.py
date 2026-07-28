@@ -6,16 +6,31 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.domain.enums import PositionStatus, TradeSide
-from app.domain.models import LivePortfolio, MarketPrice, PortfolioAdjustment, Position, StrategyConfig
+from app.domain.models import (
+    LivePortfolio,
+    MarketPrice,
+    PortfolioAdjustment,
+    Position,
+    StrategyConfig,
+)
 from app.infrastructure.repositories.market_data import MarketPriceRepository
 from app.infrastructure.repositories.portfolios import PortfolioRepository, PositionRepository
 from app.infrastructure.repositories.strategies import StrategyConfigRepository
 from app.infrastructure.repositories.trades import TradeRepository
-from app.services.exchange_calendar_service import add_exchange_trading_days, count_exchange_trading_days, is_exchange_trading_day
+from app.services.exchange_calendar_service import (
+    add_exchange_trading_days,
+    count_exchange_trading_days,
+    is_exchange_trading_day,
+)
 from app.services.fear_greed_service import FearGreedService
-from app.services.market_session_service import current_market_date, is_korean_symbol, latest_confirmed_market_date
+from app.services.market_session_service import (
+    current_market_date,
+    is_korean_symbol,
+    latest_confirmed_market_date,
+)
 from app.services.trend_filter_service import TrendFilterService
 from app.strategy_engine.context import StrategyContext, StrategyPosition
+from app.services.daily_plan_service import DailyPlanService
 from app.services.position_exit_policy import build_position_exit_policy
 from app.strategy_engine.loc import MONEY_QUANT
 from app.strategy_engine.registry import registry
@@ -67,7 +82,7 @@ class DashboardService:
         )
         latest_price = latest_prices[-1] if latest_prices else None
         capital_update = None
-        if portfolio is not None:
+        if portfolio is not None and config.strategy_type != "radar0458_pro":
             capital_update = self._auto_apply_capital_update(config, portfolio, latest_prices)
             portfolio = self.portfolios.get_by_config(config_id) or portfolio
 
@@ -89,7 +104,9 @@ class DashboardService:
             signals=signals,
             capital_update=capital_update,
             market_sentiment=FearGreedService().get_current(),
-            trend_filter=TrendFilterService(self.market_prices, self.market_data_provider).get_summary(
+            trend_filter=TrendFilterService(
+                self.market_prices, self.market_data_provider
+            ).get_summary(
                 config.symbol,
                 config.settings_json,
                 confirmed_market_date,
@@ -111,6 +128,56 @@ class DashboardService:
 
         current_price = prices[-1]
         previous_price = prices[-2]
+        if config.strategy_type == "radar0458_pro":
+            plan = DailyPlanService(self.session).get_daily_plan(
+                config.id, today=current_price.date
+            )
+            sell_signals = []
+            holding_basis_date = current_market_date(config.symbol)
+            for position in open_positions:
+                if position.status != PositionStatus.OPEN:
+                    continue
+                holding_days = _trading_days_held(prices, position.buy_date, holding_basis_date)
+                price_hit = (
+                    position.sell_limit_price is not None
+                    and current_price.close >= position.sell_limit_price
+                )
+                deadline_hit = (
+                    position.max_holding_days is not None
+                    and holding_days >= position.max_holding_days
+                )
+                reason = (
+                    "target_return" if price_hit else ("max_holding_days" if deadline_hit else None)
+                )
+                sell_signals.append(
+                    {
+                        "position_id": position.id,
+                        "should_sell": reason is not None,
+                        "reason": reason,
+                        "sell_limit_price": position.sell_limit_price,
+                        "sell_threshold_percent": position.sell_threshold_percent,
+                        "holding_days": holding_days,
+                        "max_holding_days": position.max_holding_days,
+                        "days_to_deadline": (position.max_holding_days - holding_days)
+                        if position.max_holding_days is not None
+                        else None,
+                        "urgency": _sell_urgency(
+                            reason,
+                            (position.max_holding_days - holding_days)
+                            if position.max_holding_days is not None
+                            else 0,
+                        ),
+                        "radar_tier": position.radar_tier,
+                        "radar_profile": position.radar_profile,
+                    }
+                )
+            return DashboardSignalDto(
+                available=plan.LOC.blocking_reason != "market_data_unavailable",
+                should_buy=plan.buy_available,
+                buy_reason=plan.LOC.blocking_reason,
+                sell_signals=sell_signals,
+            )
+
         holding_basis_date = current_market_date(config.symbol)
         context = StrategyContext(
             current_date=current_price.date,
@@ -241,7 +308,9 @@ class DashboardService:
                 next_update_date=period_end_date,
                 period_start_date=period_start_date,
                 period_end_date=period_end_date,
-                realized_pnl=self._period_realized_pnl(config.id, period_start_date, latest_date, include_start=last_update is None),
+                realized_pnl=self._period_realized_pnl(
+                    config.id, period_start_date, latest_date, include_start=last_update is None
+                ),
                 capital_delta=Decimal("0"),
                 projected_capital=portfolio.capital,
                 message="갱신 대기",
@@ -269,7 +338,9 @@ class DashboardService:
                 message="갱신 대상 실현손익 없음",
             )
 
-        existing = self._strategy_capital_update_for_period(config.id, period_start_date, period_end_date)
+        existing = self._strategy_capital_update_for_period(
+            config.id, period_start_date, period_end_date
+        )
         if existing is not None:
             return _capital_update_status(
                 status="applied",
@@ -427,7 +498,9 @@ def _capital_update_status(
         "period_end_date": period_end_date,
         "realized_pnl": realized_pnl.quantize(MONEY_QUANT),
         "capital_delta": capital_delta.quantize(MONEY_QUANT),
-        "projected_capital": projected_capital.quantize(MONEY_QUANT) if projected_capital is not None else None,
+        "projected_capital": projected_capital.quantize(MONEY_QUANT)
+        if projected_capital is not None
+        else None,
         "applied": applied,
         "message": message,
     }
@@ -436,7 +509,9 @@ def _capital_update_status(
 def _trading_days_held(prices: list[MarketPrice], buy_date: date, basis_date: date) -> int:
     if basis_date <= buy_date:
         return 0
-    available_dates = sorted({price.date for price in prices if buy_date < price.date <= basis_date})
+    available_dates = sorted(
+        {price.date for price in prices if buy_date < price.date <= basis_date}
+    )
     if not available_dates:
         return _weekday_count(buy_date, basis_date)
     latest_available_date = available_dates[-1]

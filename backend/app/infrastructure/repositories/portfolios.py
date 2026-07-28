@@ -68,6 +68,10 @@ class PositionRepository:
         sell_threshold_percent: Decimal | None = None,
         sell_limit_price: Decimal | None = None,
         max_holding_days: int | None = None,
+        radar_tier: int | None = None,
+        radar_profile: str | None = None,
+        radar_cycle_id: str | None = None,
+        radar_cycle_capital: Decimal | None = None,
     ) -> Position:
         position = Position(
             strategy_config_id=strategy_config_id,
@@ -80,6 +84,10 @@ class PositionRepository:
             sell_threshold_percent=sell_threshold_percent,
             sell_limit_price=sell_limit_price,
             max_holding_days=max_holding_days,
+            radar_tier=radar_tier,
+            radar_profile=radar_profile,
+            radar_cycle_id=radar_cycle_id,
+            radar_cycle_capital=radar_cycle_capital,
             status=PositionStatus.OPEN,
         )
         self.session.add(position)
@@ -94,6 +102,14 @@ class PositionRepository:
         limit_price: Decimal,
         quantity: Decimal,
         mode: StrategyMode,
+        *,
+        radar_tier: int | None = None,
+        radar_profile: str | None = None,
+        radar_cycle_id: str | None = None,
+        radar_cycle_capital: Decimal | None = None,
+        sell_threshold_percent: Decimal | None = None,
+        sell_limit_price: Decimal | None = None,
+        max_holding_days: int | None = None,
     ) -> Position:
         position = Position(
             strategy_config_id=strategy_config_id,
@@ -103,6 +119,13 @@ class PositionRepository:
             buy_fee=Decimal("0"),
             quantity=quantity,
             mode=mode,
+            radar_tier=radar_tier,
+            radar_profile=radar_profile,
+            radar_cycle_id=radar_cycle_id,
+            radar_cycle_capital=radar_cycle_capital,
+            sell_threshold_percent=sell_threshold_percent,
+            sell_limit_price=sell_limit_price,
+            max_holding_days=max_holding_days,
             status=PositionStatus.PENDING,
         )
         self.session.add(position)

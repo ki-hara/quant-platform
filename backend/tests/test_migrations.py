@@ -59,7 +59,20 @@ def test_legacy_database_receives_all_required_tables_and_columns() -> None:
     assert {"mode", "mode_rule_code"} <= {
         column["name"] for column in schema.get_columns("backtest_daily_snapshots")
     }
-    assert {"limit_price", "sell_threshold_percent", "sell_limit_price", "max_holding_days"} <= {column["name"] for column in schema.get_columns("positions")}
+    assert {"limit_price", "sell_threshold_percent", "sell_limit_price", "max_holding_days"} <= {
+        column["name"] for column in schema.get_columns("positions")
+    }
+    position_columns = {column["name"]: column for column in schema.get_columns("positions")}
+    assert {
+        "radar_tier",
+        "radar_profile",
+        "radar_cycle_id",
+        "radar_cycle_capital",
+    } <= position_columns.keys()
+    assert all(
+        position_columns[name]["nullable"]
+        for name in ("radar_tier", "radar_profile", "radar_cycle_id", "radar_cycle_capital")
+    )
     assert {"limit_price", "position_id", "entry_date", "entry_price"} <= {
         column["name"] for column in schema.get_columns("trades")
     }
@@ -97,6 +110,7 @@ def test_create_app_uses_injected_database_for_lifespan_startup() -> None:
         assert client.get("/api/health").status_code == 200
 
     assert "schema_migrations" in inspect(engine).get_table_names()
+
 
 def test_create_app_uses_injected_session_factory_for_requests() -> None:
     engine = create_engine(
@@ -162,6 +176,7 @@ def test_migration_rebuilds_existing_loc_orders_foreign_key() -> None:
     with engine.connect() as connection:
         foreign_keys = connection.execute(text("PRAGMA foreign_key_list(loc_orders)")).all()
     assert any(key[2] == "trades" and key[6] == "SET NULL" for key in foreign_keys)
+
 
 def test_create_app_has_no_deprecated_startup_handlers() -> None:
     app = create_app()

@@ -44,6 +44,21 @@ def create_config(session: Session):
     )
 
 
+def create_radar_config(session: Session):
+    return StrategyConfigService(session).create_config(
+        "default",
+        StrategyConfigCreateRequest(
+            name="Radar Live Strategy",
+            strategy_type="radar0458_pro",
+            symbol="SOXL",
+            initial_capital=Decimal("10000"),
+            fee_rate=Decimal("0.1"),
+            slippage_rate=Decimal("0"),
+            settings_json={"pro_profile": "pro1"},
+        ),
+    )
+
+
 def seed_daily_prices(
     session: Session,
     symbol: str,
@@ -427,6 +442,79 @@ def test_daily_plan_missing_previous_close_is_unavailable() -> None:
 
         assert plan.buy_available is False
         assert plan.LOC.blocking_reason == "market_data_unavailable"
+
+
+def test_radar_daily_plan_uses_active_cycle_snapshot_and_lowest_empty_tier() -> None:
+    with create_session() as session:
+        config = create_radar_config(session)
+        portfolio = PortfolioRepository(session).get_by_config(config.id)
+        assert portfolio is not None
+        positions = PositionRepository(session)
+        for tier in (1, 3):
+            positions.create_open(
+                strategy_config_id=config.id,
+                buy_date=date(2026, 7, 20),
+                buy_price=Decimal("40"),
+                quantity=Decimal("1"),
+                mode=StrategyMode.SAFE,
+                radar_tier=tier,
+                radar_profile="pro2",
+                radar_cycle_id="cycle-existing",
+                radar_cycle_capital=Decimal("6000"),
+                sell_threshold_percent=Decimal("1.50"),
+                sell_limit_price=Decimal("40.60"),
+                max_holding_days=10,
+            )
+        positions.create_pending(
+            strategy_config_id=config.id,
+            buy_date=date(2026, 7, 27),
+            limit_price=Decimal("49.99"),
+            quantity=Decimal("1"),
+            mode=StrategyMode.SAFE,
+            radar_tier=4,
+            radar_profile="pro2",
+            radar_cycle_id="cycle-existing",
+            radar_cycle_capital=Decimal("6000"),
+            sell_threshold_percent=Decimal("1.50"),
+            sell_limit_price=Decimal("50.74"),
+            max_holding_days=10,
+        )
+        config.settings_json = {"pro_profile": "pro3"}
+        portfolio.capital = Decimal("12000")
+        session.commit()
+        seed_daily_prices(session, "SOXL", date(2026, 7, 24), ["50"])
+
+        plan = DailyPlanService(session).get_daily_plan(config.id, today=date(2026, 7, 27))
+
+        assert plan.strategy_type == "radar0458_pro"
+        assert plan.radar_profile == "pro2"
+        assert plan.radar_tier == 2
+        assert plan.radar_cycle_capital == Decimal("6000")
+        assert plan.open_position_count == 3
+        assert plan.LOC.limit_price == Decimal("49.99")
+        assert plan.LOC.allocation == Decimal("900.00")
+        assert plan.LOC.quantity == 18
+
+
+def test_radar_daily_plan_starts_new_cycle_from_current_settings_and_capital() -> None:
+    with create_session() as session:
+        config = create_radar_config(session)
+        portfolio = PortfolioRepository(session).get_by_config(config.id)
+        assert portfolio is not None
+        config.settings_json = {"pro_profile": "pro3"}
+        portfolio.capital = Decimal("12000")
+        portfolio.cash = Decimal("12000")
+        session.commit()
+        seed_daily_prices(session, "SOXL", date(2026, 7, 24), ["60"])
+
+        plan = DailyPlanService(session).get_daily_plan(config.id, today=date(2026, 7, 27))
+
+        assert plan.radar_profile == "pro3"
+        assert plan.radar_tier == 1
+        assert plan.radar_cycle_capital == Decimal("12000")
+        assert plan.radar_cycle_id
+        assert plan.LOC.limit_price == Decimal("59.94")
+        assert plan.LOC.quantity == 33
 
 
 def test_daily_plan_reuses_confirmed_mode_and_keeps_recommendation_state() -> None:

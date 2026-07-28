@@ -30,6 +30,10 @@ class PositionDto(BaseModel):
     sell_threshold_percent: Decimal | None = None
     sell_limit_price: Decimal | None = None
     max_holding_days: int | None = None
+    radar_tier: int | None = None
+    radar_profile: str | None = None
+    radar_cycle_id: str | None = None
+    radar_cycle_capital: Decimal | None = None
     status: str
 
 

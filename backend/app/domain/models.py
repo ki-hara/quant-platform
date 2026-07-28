@@ -64,7 +64,9 @@ class StrategyConfig(Base):
     live_portfolio: Mapped["LivePortfolio"] = relationship(back_populates="strategy_config")
     positions: Mapped[list["Position"]] = relationship(back_populates="strategy_config")
     trades: Mapped[list["Trade"]] = relationship(back_populates="strategy_config")
-    portfolio_adjustments: Mapped[list["PortfolioAdjustment"]] = relationship(back_populates="strategy_config")
+    portfolio_adjustments: Mapped[list["PortfolioAdjustment"]] = relationship(
+        back_populates="strategy_config"
+    )
     loc_orders: Mapped[list["LocOrder"]] = relationship(back_populates="strategy_config")
     mode_state: Mapped["StrategyModeState | None"] = relationship(
         back_populates="strategy_config",
@@ -73,7 +75,9 @@ class StrategyConfig(Base):
     mode_recommendations: Mapped[list["ModeRecommendation"]] = relationship(
         back_populates="strategy_config",
     )
-    snapshots: Mapped[list["StrategyConfigSnapshot"]] = relationship(back_populates="strategy_config")
+    snapshots: Mapped[list["StrategyConfigSnapshot"]] = relationship(
+        back_populates="strategy_config"
+    )
 
 
 class StrategyConfigSnapshot(Base):
@@ -127,7 +131,9 @@ class StrategyModeState(Base):
         enum_column(ModeConfirmationSource),
         nullable=False,
     )
-    confirmed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    confirmed_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
     recommended_mode: Mapped[StrategyMode | None] = mapped_column(
         enum_column(StrategyMode),
     )
@@ -144,7 +150,9 @@ class StrategyModeState(Base):
 class ModeRecommendation(Base):
     __tablename__ = "mode_recommendations"
     __table_args__ = (
-        UniqueConstraint("strategy_config_id", "effective_week", name="uq_mode_recommendations_week"),
+        UniqueConstraint(
+            "strategy_config_id", "effective_week", name="uq_mode_recommendations_week"
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -157,9 +165,13 @@ class ModeRecommendation(Base):
     data_as_of: Mapped[date] = mapped_column(Date, nullable=False)
     previous_rsi: Mapped[Decimal] = mapped_column(Numeric(18, 10), nullable=False)
     current_rsi: Mapped[Decimal] = mapped_column(Numeric(18, 10), nullable=False)
-    recommended_mode: Mapped[StrategyMode] = mapped_column(enum_column(StrategyMode), nullable=False)
+    recommended_mode: Mapped[StrategyMode] = mapped_column(
+        enum_column(StrategyMode), nullable=False
+    )
     rule_code: Mapped[str | None] = mapped_column(String(16))
-    calculated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    calculated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
 
     strategy_config: Mapped[StrategyConfig] = relationship(back_populates="mode_recommendations")
 
@@ -225,6 +237,10 @@ class Position(Base):
     sell_threshold_percent: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))
     sell_limit_price: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))
     max_holding_days: Mapped[int | None] = mapped_column()
+    radar_tier: Mapped[int | None] = mapped_column()
+    radar_profile: Mapped[str | None] = mapped_column(String(16))
+    radar_cycle_id: Mapped[str | None] = mapped_column(String(64))
+    radar_cycle_capital: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))
     status: Mapped[PositionStatus] = mapped_column(enum_column(PositionStatus), nullable=False)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
@@ -274,7 +290,9 @@ class LocOrder(Base):
     __tablename__ = "loc_orders"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    strategy_config_id: Mapped[int] = mapped_column(ForeignKey("strategy_configs.id"), nullable=False, index=True)
+    strategy_config_id: Mapped[int] = mapped_column(
+        ForeignKey("strategy_configs.id"), nullable=False, index=True
+    )
     order_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     symbol: Mapped[str] = mapped_column(String(32), nullable=False)
     limit_price: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
@@ -284,7 +302,9 @@ class LocOrder(Base):
     trade_id: Mapped[int | None] = mapped_column(ForeignKey("trades.id", ondelete="SET NULL"))
     memo: Mapped[str | None] = mapped_column(String(500))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
 
     strategy_config: Mapped[StrategyConfig] = relationship(back_populates="loc_orders")
 

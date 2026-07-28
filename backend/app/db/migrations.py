@@ -8,10 +8,7 @@ Migration = tuple[int, str, Callable[[Connection], None]]
 
 
 def _column_names(connection: Connection, table_name: str) -> set[str]:
-    return {
-        row[1]
-        for row in connection.execute(text(f"PRAGMA table_info({table_name})"))
-    }
+    return {row[1] for row in connection.execute(text(f"PRAGMA table_info({table_name})"))}
 
 
 def _add_column_if_missing(
@@ -168,6 +165,7 @@ def _upgrade_legacy_schema(connection: Connection) -> None:
         )
     )
 
+
 def _has_loc_order_trade_set_null_foreign_key(connection: Connection) -> bool:
     foreign_keys = connection.execute(text("PRAGMA foreign_key_list(loc_orders)"))
     return any(row[2] == "trades" and row[6] == "SET NULL" for row in foreign_keys)
@@ -242,8 +240,12 @@ def _snapshot_position_exit_policies(connection: Connection) -> None:
     )
 
     required_position_columns = {
-        "strategy_config_id", "mode", "buy_price", "sell_threshold_percent",
-        "sell_limit_price", "max_holding_days",
+        "strategy_config_id",
+        "mode",
+        "buy_price",
+        "sell_threshold_percent",
+        "sell_limit_price",
+        "max_holding_days",
     }
     required_config_columns = {"id", "settings_json"}
     if not required_position_columns <= _column_names(connection, "positions"):
@@ -275,10 +277,24 @@ def _snapshot_position_exit_policies(connection: Connection) -> None:
         )
     )
 
+
+def _add_radar_position_snapshots(connection: Connection) -> None:
+    _add_column_if_missing(connection, "positions", "radar_tier", "radar_tier INTEGER")
+    _add_column_if_missing(connection, "positions", "radar_profile", "radar_profile VARCHAR(16)")
+    _add_column_if_missing(connection, "positions", "radar_cycle_id", "radar_cycle_id VARCHAR(64)")
+    _add_column_if_missing(
+        connection,
+        "positions",
+        "radar_cycle_capital",
+        "radar_cycle_capital NUMERIC(18, 6)",
+    )
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     (1, "legacy_schema", _upgrade_legacy_schema),
     (2, "loc_orders_trade_fk_set_null", _rebuild_loc_orders_trade_foreign_key),
     (3, "snapshot_position_exit_policies", _snapshot_position_exit_policies),
+    (4, "radar_position_snapshots", _add_radar_position_snapshots),
 )
 LATEST_SCHEMA_VERSION = MIGRATIONS[-1][0]
 

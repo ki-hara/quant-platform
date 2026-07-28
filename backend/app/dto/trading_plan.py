@@ -76,6 +76,11 @@ class DailyPlanDto(BaseModel):
     open_position_count: int
     buy_available: bool
     LOC: LocPlanDto
+    strategy_type: str | None = None
+    radar_profile: str | None = None
+    radar_tier: int | None = None
+    radar_cycle_id: str | None = None
+    radar_cycle_capital: Decimal | None = None
 
 
 class ChartCandleDto(BaseModel):

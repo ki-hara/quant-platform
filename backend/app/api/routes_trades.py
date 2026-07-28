@@ -18,7 +18,7 @@ from app.domain.enums import PositionStatus, StrategyMode, TradeSide, TradeSourc
 from app.domain.models import LocOrder
 from app.dto.dashboard import PositionDto
 from app.dto.trades import (
-    ManualTradeRequestDto,
+    ManualTradeRequestDto as BaseManualTradeRequestDto,
     ManualTradeResponseDto,
     PositionHistoryDto,
     SignalExecutionRequestDto,
@@ -44,6 +44,16 @@ router = APIRouter(prefix="/api", tags=["trades"])
 SessionDep = Annotated[Session, Depends(get_session)]
 
 
+class ManualTradeRequestDto(BaseManualTradeRequestDto):
+    radar_tier: int | None = None
+    radar_profile: str | None = None
+    radar_cycle_id: str | None = None
+    radar_cycle_capital: Decimal | None = None
+    sell_threshold_percent: Decimal | None = None
+    sell_limit_price: Decimal | None = None
+    max_holding_days: int | None = None
+
+
 class PositionUpdateDto(BaseModel):
     quantity: Decimal | None = None
     buy_price: Decimal | None = None
@@ -55,6 +65,13 @@ class BuyOrderPositionCreateDto(BaseModel):
     quantity: Decimal
     limit_price: Decimal
     mode: StrategyMode
+    radar_tier: int | None = None
+    radar_profile: str | None = None
+    radar_cycle_id: str | None = None
+    radar_cycle_capital: Decimal | None = None
+    sell_threshold_percent: Decimal | None = None
+    sell_limit_price: Decimal | None = None
+    max_holding_days: int | None = None
 
 
 @router.get("/strategy-configs/{config_id}/positions", response_model=list[PositionDto])
@@ -64,7 +81,9 @@ def list_positions(config_id: int, session: SessionDep, owner: CurrentOwnerDep) 
 
 
 @router.get("/positions/{config_id}", response_model=list[PositionDto])
-def list_positions_by_config(config_id: int, session: SessionDep, owner: CurrentOwnerDep) -> list[object]:
+def list_positions_by_config(
+    config_id: int, session: SessionDep, owner: CurrentOwnerDep
+) -> list[object]:
     return list_positions(config_id, session, owner)
 
 
@@ -81,13 +100,23 @@ def create_buy_order_position(
 ) -> object:
     ensure_config_owner(config_id, owner, session)
     if request.quantity <= 0 or request.limit_price <= 0:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Quantity and LOC price must be positive.")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Quantity and LOC price must be positive.",
+        )
     position = PositionRepository(session).create_pending(
         strategy_config_id=config_id,
         buy_date=request.order_date,
         limit_price=request.limit_price,
         quantity=request.quantity,
         mode=request.mode,
+        radar_tier=request.radar_tier,
+        radar_profile=request.radar_profile,
+        radar_cycle_id=request.radar_cycle_id,
+        radar_cycle_capital=request.radar_cycle_capital,
+        sell_threshold_percent=request.sell_threshold_percent,
+        sell_limit_price=request.sell_limit_price,
+        max_holding_days=request.max_holding_days,
     )
     session.commit()
     return position
@@ -128,7 +157,9 @@ def update_position(
         return saved
     if config is not None and position.status == PositionStatus.OPEN:
         if position.sell_threshold_percent is None or position.max_holding_days is None:
-            exit_policy = build_position_exit_policy(config.settings_json, position.mode, position.buy_price)
+            exit_policy = build_position_exit_policy(
+                config.settings_json, position.mode, position.buy_price
+            )
             position.sell_threshold_percent = exit_policy.sell_threshold_percent
             position.sell_limit_price = exit_policy.sell_limit_price
             position.max_holding_days = exit_policy.max_holding_days
@@ -143,7 +174,9 @@ def update_position(
     created_trade = False
     if matching_trade is None:
         if config is None or config.live_portfolio is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Live portfolio not found.")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Live portfolio not found."
+            )
         trade_repo = TradeRepository(session)
         trade_repo.create(
             strategy_config_id=position.strategy_config_id,
@@ -197,14 +230,20 @@ def list_trades(config_id: int, session: SessionDep, owner: CurrentOwnerDep) -> 
     return TradeRepository(session).list_by_strategy_config(config_id)
 
 
-@router.get("/strategy-configs/{config_id}/position-history", response_model=list[PositionHistoryDto])
-def list_position_history(config_id: int, session: SessionDep, owner: CurrentOwnerDep) -> list[object]:
+@router.get(
+    "/strategy-configs/{config_id}/position-history", response_model=list[PositionHistoryDto]
+)
+def list_position_history(
+    config_id: int, session: SessionDep, owner: CurrentOwnerDep
+) -> list[object]:
     ensure_config_owner(config_id, owner, session)
     return TradeRepository(session).list_position_history(config_id)
 
 
 @router.get("/trades/{config_id}", response_model=list[TradeResponseDto])
-def list_trades_by_config(config_id: int, session: SessionDep, owner: CurrentOwnerDep) -> list[object]:
+def list_trades_by_config(
+    config_id: int, session: SessionDep, owner: CurrentOwnerDep
+) -> list[object]:
     return list_trades(config_id, session, owner)
 
 
@@ -244,7 +283,9 @@ def fill_loc_order(
 ) -> object:
     order = session.get(LocOrder, order_id)
     if order is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"LOC order not found: {order_id}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"LOC order not found: {order_id}"
+        )
     ensure_config_owner(order.strategy_config_id, owner, session)
     try:
         return LocOrderService(session).fill_order(
@@ -264,7 +305,9 @@ def fill_loc_order(
 def mark_loc_order_unfilled(order_id: int, session: SessionDep, owner: CurrentOwnerDep) -> object:
     order = session.get(LocOrder, order_id)
     if order is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"LOC order not found: {order_id}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"LOC order not found: {order_id}"
+        )
     ensure_config_owner(order.strategy_config_id, owner, session)
     try:
         return LocOrderService(session).mark_unfilled(order_id)
@@ -295,6 +338,13 @@ def record_manual_trade(
         source=request.source,
         mode=request.mode,
         position_id=request.position_id,
+        radar_tier=request.radar_tier,
+        radar_profile=request.radar_profile,
+        radar_cycle_id=request.radar_cycle_id,
+        radar_cycle_capital=request.radar_cycle_capital,
+        sell_threshold_percent=request.sell_threshold_percent,
+        sell_limit_price=request.sell_limit_price,
+        max_holding_days=request.max_holding_days,
     )
     try:
         return ManualTradeService(session).record_manual_trade(service_request)

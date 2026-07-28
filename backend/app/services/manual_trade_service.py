@@ -1,17 +1,25 @@
 from dataclasses import dataclass
 from datetime import date
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.errors import NotFoundError, ValidationAppError
 from app.domain.enums import PositionStatus, StrategyMode, TradeSide, TradeSource
-from app.domain.models import LivePortfolio, LocOrder, PortfolioAdjustment, Position, StrategyConfig, Trade
+from app.domain.models import (
+    LivePortfolio,
+    LocOrder,
+    PortfolioAdjustment,
+    Position,
+    StrategyConfig,
+    Trade,
+)
 from app.infrastructure.repositories.portfolios import PortfolioRepository, PositionRepository
 from app.infrastructure.repositories.strategies import StrategyConfigRepository
 from app.infrastructure.repositories.trades import TradeRepository
 from app.services.position_exit_policy import build_position_exit_policy
+from app.strategy_engine.radar0458_pro import get_radar_preset
 
 
 MONEY_QUANT = Decimal("0.000001")
@@ -30,6 +38,13 @@ class ManualTradeRequest:
     mode: StrategyMode = StrategyMode.SAFE
     position_id: int | None = None
     limit_price: Decimal | None = None
+    radar_tier: int | None = None
+    radar_profile: str | None = None
+    radar_cycle_id: str | None = None
+    radar_cycle_capital: Decimal | None = None
+    sell_threshold_percent: Decimal | None = None
+    sell_limit_price: Decimal | None = None
+    max_holding_days: int | None = None
 
 
 @dataclass(frozen=True)
@@ -70,7 +85,7 @@ class ManualTradeService:
             if request.side == TradeSide.BUY:
                 result = self._buy(request, portfolio, config)
             elif request.side == TradeSide.SELL:
-                result = self._sell(request, portfolio)
+                result = self._sell(request, portfolio, config)
             else:
                 raise ValidationAppError(
                     "unsupported_trade_side",
@@ -124,7 +139,9 @@ class ManualTradeService:
         if request.price <= 0:
             raise ValidationAppError("invalid_manual_trade", "price must be greater than zero.")
         if request.limit_price is not None and request.limit_price <= 0:
-            raise ValidationAppError("invalid_manual_trade", "limit_price must be greater than zero.")
+            raise ValidationAppError(
+                "invalid_manual_trade", "limit_price must be greater than zero."
+            )
         if request.fee < 0:
             raise ValidationAppError(
                 "invalid_manual_trade",
@@ -147,7 +164,31 @@ class ManualTradeService:
         if total_cost > portfolio.cash:
             raise ValidationAppError("insufficient_cash", "Insufficient cash for manual buy.")
 
-        exit_policy = build_position_exit_policy(config.settings_json, request.mode, request.price)
+        if config.strategy_type == "radar0458_pro":
+            required = (
+                request.radar_tier,
+                request.radar_profile,
+                request.radar_cycle_id,
+                request.radar_cycle_capital,
+            )
+            if any(value is None for value in required):
+                raise ValidationAppError(
+                    "radar_position_snapshot_missing",
+                    "Radar position snapshot metadata is required.",
+                )
+            preset = get_radar_preset(request.radar_profile)
+            sell_threshold_percent = preset.sell_threshold_percent
+            sell_limit_price = (
+                request.price * (Decimal("1") + sell_threshold_percent / Decimal("100"))
+            ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            max_holding_days = preset.max_holding_days
+        else:
+            exit_policy = build_position_exit_policy(
+                config.settings_json, request.mode, request.price
+            )
+            sell_threshold_percent = exit_policy.sell_threshold_percent
+            sell_limit_price = exit_policy.sell_limit_price
+            max_holding_days = exit_policy.max_holding_days
         self.positions.create_open(
             strategy_config_id=request.config_id,
             buy_date=request.trade_date,
@@ -156,9 +197,13 @@ class ManualTradeService:
             mode=request.mode,
             buy_fee=request.fee,
             limit_price=request.limit_price,
-            sell_threshold_percent=exit_policy.sell_threshold_percent,
-            sell_limit_price=exit_policy.sell_limit_price,
-            max_holding_days=exit_policy.max_holding_days,
+            sell_threshold_percent=sell_threshold_percent,
+            sell_limit_price=sell_limit_price,
+            max_holding_days=max_holding_days,
+            radar_tier=request.radar_tier,
+            radar_profile=request.radar_profile,
+            radar_cycle_id=request.radar_cycle_id,
+            radar_cycle_capital=request.radar_cycle_capital,
         )
         portfolio.cash -= total_cost
         portfolio.cumulative_fees += request.fee
@@ -255,9 +300,13 @@ class ManualTradeService:
             if remaining_quantity <= 0:
                 break
             sell_quantity = min(remaining_quantity, position.quantity)
-            allocated_buy_fee = (position.buy_fee * sell_quantity / position.quantity).quantize(MONEY_QUANT)
+            allocated_buy_fee = (position.buy_fee * sell_quantity / position.quantity).quantize(
+                MONEY_QUANT
+            )
             cost_basis = position.buy_price * sell_quantity + allocated_buy_fee
-            proceeds = trade.price * sell_quantity - (trade.fee * sell_quantity / trade.quantity).quantize(MONEY_QUANT)
+            proceeds = trade.price * sell_quantity - (
+                trade.fee * sell_quantity / trade.quantity
+            ).quantize(MONEY_QUANT)
             realized_pnl += proceeds - cost_basis
             remaining_quantity -= sell_quantity
             if sell_quantity == position.quantity:
@@ -271,7 +320,9 @@ class ManualTradeService:
             realized_pnl += trade.price * remaining_quantity
         return realized_pnl.quantize(MONEY_QUANT)
 
-    def _sell(self, request: ManualTradeRequest, portfolio: LivePortfolio) -> ManualTradeResult:
+    def _sell(
+        self, request: ManualTradeRequest, portfolio: LivePortfolio, config: StrategyConfig
+    ) -> ManualTradeResult:
         if request.position_id is None:
             raise ValidationAppError(
                 "position_required",
@@ -304,9 +355,9 @@ class ManualTradeService:
             )
 
         original_quantity = position.quantity
-        allocated_buy_fee = (
-            position.buy_fee * request.quantity / original_quantity
-        ).quantize(MONEY_QUANT)
+        allocated_buy_fee = (position.buy_fee * request.quantity / original_quantity).quantize(
+            MONEY_QUANT
+        )
         cost_basis = position.buy_price * request.quantity + allocated_buy_fee
         realized_pnl = (net_proceeds - cost_basis).quantize(MONEY_QUANT)
         if request.quantity == original_quantity:
@@ -318,6 +369,8 @@ class ManualTradeService:
 
         portfolio.cash += net_proceeds
         portfolio.realized_pnl += realized_pnl
+        if config.strategy_type == "radar0458_pro":
+            portfolio.capital = (portfolio.capital + realized_pnl).quantize(MONEY_QUANT)
         portfolio.cumulative_fees += request.fee
         self.portfolios.save(portfolio)
         trade = self.trades.create(
