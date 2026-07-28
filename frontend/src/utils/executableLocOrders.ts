@@ -1,10 +1,15 @@
 export interface LocBuyOrderPlan<T> {
   buy_available: boolean;
-  LOC: { orders: T[] };
+  strategy_type?: string | null;
+  radar_tier?: number | null;
+  LOC: { orders: T[]; limit_price?: string; quantity?: number };
 }
 
 export function executableLocBuyOrders<T>(plan: LocBuyOrderPlan<T> | null): T[] {
-  return plan?.buy_available ? plan.LOC.orders : [];
+  if (!plan?.buy_available) return [];
+  if (plan.LOC.orders.length > 0) return plan.LOC.orders;
+  if (plan.strategy_type !== "radar0458_pro" || plan.radar_tier == null || !plan.LOC.limit_price || !plan.LOC.quantity) return [];
+  return [{ step: plan.radar_tier, limit_price: plan.LOC.limit_price, quantity: plan.LOC.quantity, cumulative_quantity: plan.LOC.quantity, cumulative_amount: String(Number(plan.LOC.limit_price) * plan.LOC.quantity), compressed: false } as T];
 }
 export interface LocBuyBlockInfo {
   open_position_count: number;

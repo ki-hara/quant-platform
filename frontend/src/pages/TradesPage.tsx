@@ -18,6 +18,7 @@ import type {
   PositionHistoryRow,
   PositionRow,
   StrategyConfig,
+  StrategyMode,
 } from "../types/api";
 import {
   formatMoney, formatRadarProfile,
@@ -29,6 +30,7 @@ import {
 import { hasCrossedLocOrders, netLocOrders, tickSizeForSymbol, type LocOrderInput } from "../utils/locNetting";
 import { executableLocBuyOrders, locBuyBlockMessage } from "../utils/executableLocOrders";
 import { isAbortError, LatestRequest } from "../utils/latestRequest";
+import { buildBuyOrderPositionRequest } from "../utils/strategyOperations";
 import { recommendedBuyPrice, recommendedSellPrice } from "../utils/orderPrices";
 import { rememberStrategyConfigId, resolveRememberedStrategyConfigId } from "../utils/strategySelection";
 
@@ -243,12 +245,13 @@ export function TradesPage() {
       setError("");
       setMessage("");
       if (manualForm.side === "buy") {
-        await createBuyOrderPosition(selectedId, {
-          order_date: manualForm.trade_date,
+        await createBuyOrderPosition(selectedId, buildBuyOrderPositionRequest({
+          orderDate: manualForm.trade_date,
           quantity: manualForm.quantity,
-          limit_price: manualForm.limit_price,
-          mode: manualForm.mode,
-        });
+          limitPrice: manualForm.limit_price,
+          mode: manualForm.mode as StrategyMode,
+          plan: plan ?? { strategy_type: dashboard?.config.strategy_type },
+        }));
         setMessage("매수 주문이 보유 포지션에 대기 상태로 등록되었습니다.");
         setManualForm(initialManualForm(selectedSymbol));
         await loadRows(selectedId);

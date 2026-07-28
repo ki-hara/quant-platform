@@ -515,6 +515,9 @@ def test_radar_daily_plan_starts_new_cycle_from_current_settings_and_capital() -
         assert plan.radar_cycle_id
         assert plan.LOC.limit_price == Decimal("59.94")
         assert plan.LOC.quantity == 33
+        assert plan.radar_sell_threshold_percent == Decimal("2.00")
+        assert plan.radar_sell_limit_price == Decimal("61.14")
+        assert plan.radar_max_holding_days == 12
 
 
 def test_daily_plan_reuses_confirmed_mode_and_keeps_recommendation_state() -> None:

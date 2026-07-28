@@ -39,6 +39,7 @@ import {
 } from "../utils/format";
 import { rememberStrategyConfigId, resolveRememberedStrategyConfigId } from "../utils/strategySelection";
 import { isAbortError, LatestRequest } from "../utils/latestRequest";
+import { shouldLoadModeRecommendation } from "../utils/strategyOperations";
 
 export function DashboardPage() {
   const [configs, setConfigs] = useState<StrategyConfig[]>([]);
@@ -91,10 +92,13 @@ export function DashboardPage() {
     try {
       setLoading(true);
       setError("");
+      const config = configs.find((candidate) => candidate.id === configId);
       const [dashboardData, planData, modeData, chartData, trades] = await Promise.all([
         getDashboard(configId, controller.signal),
         getDailyPlan(configId, "fixed_quantity", controller.signal),
-        getModeRecommendation(configId, controller.signal),
+        shouldLoadModeRecommendation(config?.strategy_type)
+          ? getModeRecommendation(configId, controller.signal)
+          : Promise.resolve(null),
         getChart(configId, chartRange, controller.signal),
         listPositionHistory(configId, controller.signal),
       ]);

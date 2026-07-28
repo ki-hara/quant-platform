@@ -302,12 +302,27 @@ export interface BacktestRun {
   updated_at: ISODateTime;
 }
 
+export interface BuyOrderPositionCreateRequest {
+  order_date: ISODate;
+  quantity: DecimalString;
+  limit_price: DecimalString;
+  mode: StrategyMode;
+  radar_tier?: number | null;
+  radar_profile?: RadarProfile | null;
+  radar_cycle_id?: string | null;
+  radar_cycle_capital?: DecimalString | null;
+  sell_threshold_percent?: DecimalString | null;
+  sell_limit_price?: DecimalString | null;
+  max_holding_days?: number | null;
+}
+
 export interface BacktestCreateRequest {
   config_id: number;
   start_date: ISODate;
   end_date: ISODate;
   mode_policy?: "weekly_rsi" | "fixed_safe" | "fixed_aggressive";
   position_sizing_policy?: "fixed_quantity" | "full_allocation";
+  pro_profile?: RadarProfile;
 }
 
 export interface BacktestDailySnapshot {
@@ -412,6 +427,9 @@ export interface DailyPlan {
   radar_tier: number | null;
   radar_cycle_id: string | null;
   radar_cycle_capital: DecimalString | null;
+  radar_sell_threshold_percent: DecimalString | null;
+  radar_sell_limit_price: DecimalString | null;
+  radar_max_holding_days: number | null;
 }
 
 export interface PortfolioAdjustment {

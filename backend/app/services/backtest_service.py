@@ -18,6 +18,7 @@ class BacktestRunRequest:
     start_date: date
     end_date: date
     mode_policy: BacktestModePolicy = BacktestModePolicy.FIXED_SAFE
+    pro_profile: str | None = None
     position_sizing_policy: BacktestPositionSizingPolicy = (
         BacktestPositionSizingPolicy.FIXED_QUANTITY
     )
@@ -56,13 +57,16 @@ class BacktestService:
                 default=None,
             )
             strategy = registry.create(config.strategy_type)
+            run_settings = dict(config.settings_json)
+            if config.strategy_type == "radar0458_pro" and request.pro_profile is not None:
+                run_settings["pro_profile"] = request.pro_profile
             result = self.engine.run(
                 strategy=strategy,
                 prices=prices,
                 initial_capital=config.initial_capital,
                 fee_rate=config.fee_rate,
                 slippage_rate=config.slippage_rate,
-                settings=config.settings_json,
+                settings=run_settings,
                 lookahead_date=lookahead_price.date if lookahead_price else None,
                 mode_policy=request.mode_policy,
                 position_sizing_policy=request.position_sizing_policy,
@@ -74,6 +78,7 @@ class BacktestService:
                     config,
                     request.mode_policy,
                     request.position_sizing_policy,
+                    run_settings,
                 ),
                 start_date=request.start_date,
                 end_date=request.end_date,
@@ -116,6 +121,7 @@ class BacktestService:
         config: StrategyConfig,
         mode_policy: BacktestModePolicy,
         position_sizing_policy: BacktestPositionSizingPolicy,
+        run_settings: dict,
     ) -> dict:
         return {
             "id": config.id,
@@ -123,7 +129,7 @@ class BacktestService:
             "name": config.name,
             "strategy_type": config.strategy_type,
             "pro_profile": (
-                config.settings_json.get("pro_profile")
+                run_settings.get("pro_profile")
                 if config.strategy_type == "radar0458_pro"
                 else None
             ),
@@ -133,5 +139,5 @@ class BacktestService:
             "initial_capital": str(config.initial_capital),
             "fee_rate": str(config.fee_rate),
             "slippage_rate": str(config.slippage_rate),
-            "settings_json": config.settings_json,
+            "settings_json": run_settings,
         }

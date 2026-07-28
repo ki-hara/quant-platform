@@ -61,6 +61,7 @@ def create_backtest(
                 start_date=request.start_date,
                 end_date=request.end_date,
                 mode_policy=request.mode_policy,
+                pro_profile=request.pro_profile,
                 position_sizing_policy=request.position_sizing_policy,
             )
         )

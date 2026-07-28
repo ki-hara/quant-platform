@@ -278,3 +278,67 @@ def test_radar_backtest_persists_and_exports_trade_snapshots(api_client: TestCli
     csv_response = api_client.get(f"/api/backtests/{run['id']}/trades.csv")
     assert "radar_tier,radar_profile,radar_cycle_capital" in csv_response.text
     assert ",1,pro1,10000.000000" in csv_response.text
+
+
+def test_radar_backtest_profile_override_is_snapshotted_without_mutating_config(
+    api_client: TestClient,
+) -> None:
+    config_response = api_client.post(
+        "/api/strategy-configs",
+        json={
+            "name": "Radar Override",
+            "strategy_type": "radar0458_pro",
+            "symbol": "SOXL",
+            "initial_capital": "10000",
+            "fee_rate": "0",
+            "slippage_rate": "0",
+            "settings_json": {"pro_profile": "pro1"},
+        },
+    )
+    config_id = config_response.json()["id"]
+
+    run = api_client.post(
+        "/api/backtests",
+        json={
+            "config_id": config_id,
+            "start_date": "2026-01-01",
+            "end_date": "2026-01-06",
+            "pro_profile": "pro3",
+        },
+    )
+
+    assert run.status_code == 201, run.text
+    snapshot = run.json()["strategy_config_snapshot_json"]
+    assert snapshot["pro_profile"] == "pro3"
+    assert snapshot["settings_json"]["pro_profile"] == "pro3"
+    trades = api_client.get(f"/api/backtests/{run.json()['id']}/trades").json()
+    assert trades[0]["radar_profile"] == "pro3"
+    config = api_client.get(f"/api/strategy-configs/{config_id}").json()
+    assert config["settings_json"]["pro_profile"] == "pro1"
+
+
+def test_radar_backtest_rejects_unknown_profile_override(api_client: TestClient) -> None:
+    config_response = api_client.post(
+        "/api/strategy-configs",
+        json={
+            "name": "Radar Invalid Override",
+            "strategy_type": "radar0458_pro",
+            "symbol": "SOXL",
+            "initial_capital": "10000",
+            "fee_rate": "0",
+            "slippage_rate": "0",
+            "settings_json": {"pro_profile": "pro1"},
+        },
+    )
+
+    run = api_client.post(
+        "/api/backtests",
+        json={
+            "config_id": config_response.json()["id"],
+            "start_date": "2026-01-01",
+            "end_date": "2026-01-06",
+            "pro_profile": "pro9",
+        },
+    )
+
+    assert run.status_code == 422

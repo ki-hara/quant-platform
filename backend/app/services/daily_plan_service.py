@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from uuid import NAMESPACE_URL, uuid5
 
 from sqlalchemy.orm import Session
@@ -14,7 +14,7 @@ from app.infrastructure.repositories.strategies import StrategyConfigRepository
 from app.services.exchange_calendar_service import previous_exchange_trading_day
 from app.services.market_session_service import current_market_date
 from app.strategy_engine.loc import LocPlan, calculate_loc_plan
-from app.strategy_engine.radar0458_pro import build_radar_buy_plan
+from app.strategy_engine.radar0458_pro import build_radar_buy_plan, get_radar_preset
 
 
 class DailyPlanService:
@@ -184,6 +184,7 @@ class DailyPlanService:
                 orders=[],
             )
             radar_tier = radar_plan.tier
+            preset = get_radar_preset(profile)
         else:
             loc_plan = LocPlan(
                 limit_price=Decimal("0.000000"),
@@ -228,4 +229,19 @@ class DailyPlanService:
             radar_tier=radar_tier,
             radar_cycle_id=cycle_id,
             radar_cycle_capital=cycle_capital,
+            radar_sell_threshold_percent=(
+                preset.sell_threshold_percent if reason is None else None
+            ),
+            radar_sell_limit_price=(
+                (
+                    loc_plan.limit_price
+                    * (
+                        Decimal("1")
+                        + preset.sell_threshold_percent / Decimal("100")
+                    )
+                ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                if reason is None
+                else None
+            ),
+            radar_max_holding_days=(preset.max_holding_days if reason is None else None),
         )

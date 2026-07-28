@@ -30,6 +30,13 @@ describe("executable LOC buy orders", () => {
     expect(executableLocBuyOrders(plan)).toEqual([order]);
   });
 
+  it("creates one executable Radar tier order when the ladder is empty", () => {
+    expect(executableLocBuyOrders({
+      buy_available: true, strategy_type: "radar0458_pro", radar_tier: 3,
+      LOC: { orders: [], limit_price: "21.50", quantity: 12 },
+    })).toEqual([{ step: 3, limit_price: "21.50", quantity: 12, cumulative_quantity: 12, cumulative_amount: "258", compressed: false }]);
+  });
+
   it("describes the reached split limit with the current position count", () => {
     expect(
       locBuyBlockMessage({

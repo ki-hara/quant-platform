@@ -1,5 +1,6 @@
 import { apiDelete, apiGet, apiPost, apiPut } from "./client";
 import type {
+  BuyOrderPositionCreateRequest,
   ManualTradeRequest,
   ManualTradeResponse,
   LocOrderFillRequest,
@@ -24,7 +25,7 @@ export function updatePosition(
 
 export function createBuyOrderPosition(
   configId: number,
-  request: { order_date: string; quantity: string; limit_price: string; mode: string },
+  request: BuyOrderPositionCreateRequest,
 ): Promise<PositionRow> {
   return apiPost<PositionRow>(`/api/strategy-configs/${configId}/positions/buy-order`, request);
 }

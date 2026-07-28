@@ -13,8 +13,9 @@ import { apiDownload } from "../api/client";
 import { BacktestChart } from "../components/BacktestChart";
 import { MetricStrip } from "../components/MetricStrip";
 import { Table, type TableColumn } from "../components/Table";
-import type { BacktestDailySnapshot, BacktestRun, BacktestTrade, StrategyConfig } from "../types/api";
+import type { BacktestDailySnapshot, BacktestRun, BacktestTrade, RadarProfile, StrategyConfig } from "../types/api";
 import { formatMoney, formatPercent, formatRadarProfile, todayIso, translateMode, translateReason, translateSide } from "../utils/format";
+import { buildBacktestCreateRequest } from "../utils/strategyOperations";
 import { rememberStrategyConfigId, resolveRememberedStrategyConfigId } from "../utils/strategySelection";
 
 type BacktestModePolicy = "fixed_safe" | "fixed_aggressive" | "weekly_rsi";
@@ -32,6 +33,7 @@ export function BacktestPage() {
   const [endDate, setEndDate] = useState(preferences.endDate);
   const [modePolicy, setModePolicy] = useState<BacktestModePolicy>(preferences.modePolicy);
   const [positionSizingPolicy, setPositionSizingPolicy] = useState<BacktestPositionSizingPolicy>(preferences.positionSizingPolicy);
+  const [radarProfile, setRadarProfile] = useState<RadarProfile>("pro1");
   const [sideFilter, setSideFilter] = useState<TradeFilter>("all");
   const [reasonFilter, setReasonFilter] = useState<ReasonFilter>("all");
   const [run, setRun] = useState<BacktestRun | null>(null);
@@ -68,13 +70,10 @@ export function BacktestPage() {
     try {
       setLoading(true);
       setError("");
-      const created = await createBacktest({
-        config_id: configId,
-        start_date: startDate,
-        end_date: endDate,
-        mode_policy: isRadar ? undefined : modePolicy,
-        position_sizing_policy: isRadar ? undefined : positionSizingPolicy,
-      });
+      const created = await createBacktest(buildBacktestCreateRequest({
+        configId, startDate, endDate, strategyType: selectedConfig?.strategy_type ?? "dynamic_wave",
+        radarProfile, modePolicy, positionSizingPolicy,
+      }));
       setRun(created);
       const [daily, trades] = await Promise.all([
         getBacktestDailyCsv(created.id),
@@ -91,7 +90,10 @@ export function BacktestPage() {
 
   const selectedConfig = configs.find((config) => config.id === configId) ?? null;
   const isRadar = selectedConfig?.strategy_type === "radar0458_pro";
-  const selectedRadarProfile = selectedConfig?.settings_json.pro_profile as string | undefined;
+  useEffect(() => {
+    const profile = selectedConfig?.settings_json.pro_profile;
+    if (profile === "pro1" || profile === "pro2" || profile === "pro3") setRadarProfile(profile);
+  }, [selectedConfig]);
   const summary = useMemo(() => buildBacktestSummary(tradeRows, dailyRows), [dailyRows, tradeRows]);
   const filteredTrades = useMemo(
     () =>
@@ -156,7 +158,7 @@ export function BacktestPage() {
             종료일
             <input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} required />
           </label>
-          {isRadar ? <label>Pro 프리셋<select value={selectedRadarProfile ?? "pro1"} disabled><option value="pro1">Pro1</option><option value="pro2">Pro2</option><option value="pro3">Pro3</option></select><small className="form-status">선택한 전략 설정의 Pro를 적용합니다.</small></label> : <>
+          {isRadar ? <label>Pro 프리셋<select value={radarProfile} onChange={(event) => setRadarProfile(event.target.value as RadarProfile)}><option value="pro1">Pro1</option><option value="pro2">Pro2</option><option value="pro3">Pro3</option></select><small className="form-status">선택한 전략 설정의 Pro를 적용합니다.</small></label> : <>
           <label>
             모드 정책
             <select value={modePolicy} onChange={(event) => setModePolicy(event.target.value as BacktestModePolicy)}>

@@ -81,6 +81,9 @@ class DailyPlanDto(BaseModel):
     radar_tier: int | None = None
     radar_cycle_id: str | None = None
     radar_cycle_capital: Decimal | None = None
+    radar_sell_threshold_percent: Decimal | None = None
+    radar_sell_limit_price: Decimal | None = None
+    radar_max_holding_days: int | None = None
 
 
 class ChartCandleDto(BaseModel):

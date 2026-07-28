@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -12,6 +12,7 @@ class BacktestCreateDto(BaseModel):
     start_date: date
     end_date: date
     mode_policy: BacktestModePolicy = BacktestModePolicy.FIXED_SAFE
+    pro_profile: Literal["pro1", "pro2", "pro3"] | None = None
     position_sizing_policy: BacktestPositionSizingPolicy = (
         BacktestPositionSizingPolicy.FIXED_QUANTITY
     )
