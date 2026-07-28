@@ -2,6 +2,7 @@ export type DecimalString = string;
 export type ISODate = string;
 export type ISODateTime = string;
 export type StrategyMode = "safe" | "aggressive";
+export type RadarProfile = "pro1" | "pro2" | "pro3";
 export type LocOrderStatus = "pending" | "filled" | "unfilled";
 export type ModeConfirmationSource = "manual" | "recommendation_applied";
 export type ChartRange = "1m" | "3m" | "6m" | "1y";
@@ -125,6 +126,10 @@ export interface PositionRow {
   sell_threshold_percent: DecimalString | null;
   sell_limit_price: DecimalString | null;
   max_holding_days: number | null;
+  radar_tier: number | null;
+  radar_profile: RadarProfile | null;
+  radar_cycle_id: string | null;
+  radar_cycle_capital: DecimalString | null;
   status: string;
 }
 
@@ -402,6 +407,11 @@ export interface DailyPlan {
   open_position_count: number;
   buy_available: boolean;
   LOC: LocPlan;
+  strategy_type: string | null;
+  radar_profile: RadarProfile | null;
+  radar_tier: number | null;
+  radar_cycle_id: string | null;
+  radar_cycle_capital: DecimalString | null;
 }
 
 export interface PortfolioAdjustment {

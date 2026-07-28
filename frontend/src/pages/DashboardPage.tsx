@@ -32,6 +32,7 @@ import type {
 } from "../types/api";
 import {
   formatMoney,
+  formatRadarProfile,
   translateMode,
   translateReason,
   translateStatus,
@@ -180,6 +181,8 @@ export function DashboardPage() {
     ];
   }, [dashboard]);
 
+  const isRadar = dashboard?.config.strategy_type === "radar0458_pro";
+
   return (
     <div className="page-stack">
       <section className="dashboard-command-row">
@@ -219,17 +222,14 @@ export function DashboardPage() {
 
       <div className="dashboard-top-grid">
         <DailyPlanPanel plan={plan} />
-        <ModeControl
-          mode={mode}
-          loading={working}
-          onSetMode={handleSetMode}
-          onApplyRecommendation={handleApplyRecommendation}
-        />
-        <CapitalUpdatePanel status={dashboard?.capital_update ?? null} symbol={dashboard?.config.symbol} />
+        {isRadar ? <RadarOperationsPanel plan={plan} positions={dashboard?.open_positions ?? []} symbol={dashboard?.config.symbol} /> : <>
+          <ModeControl mode={mode} loading={working} onSetMode={handleSetMode} onApplyRecommendation={handleApplyRecommendation} />
+          <CapitalUpdatePanel status={dashboard?.capital_update ?? null} symbol={dashboard?.config.symbol} />
+        </>}
       </div>
 
       <MarketChart chart={chart} range={range} onRangeChange={setRange} />
-      <RsiChart chart={chart} />
+      {!isRadar ? <RsiChart chart={chart} /> : null}
       <CciChart chart={chart} trendFilter={dashboard?.trend_filter ?? null} />
 
       <div className="page-grid">
@@ -240,7 +240,7 @@ export function DashboardPage() {
               <span>현재 미청산 포지션</span>
             </div>
           </div>
-          <Table columns={positionColumns} rows={dashboard?.open_positions ?? []} getRowKey={(row) => row.id} />
+          <Table columns={positionColumns(isRadar)} rows={dashboard?.open_positions ?? []} getRowKey={(row) => row.id} />
         </section>
 
         <section className="panel position-history-panel position-history-panel-compact">
@@ -327,6 +327,11 @@ function FearGreedGauge({ sentiment }: { sentiment: MarketSentiment | null }) {
   );
 }
 
+function RadarOperationsPanel({ plan, positions, symbol }: { plan: DailyPlan | null; positions: PositionRow[]; symbol?: string | null }) {
+  const occupied = Array.from(new Set(positions.map((position) => position.radar_tier).filter((tier): tier is number => tier !== null))).sort((a, b) => a - b);
+  return <section className="panel capital-update-panel"><div className="panel-header"><div><h2>Radar 사이클</h2><span>현재 사이클의 고정 운영 정보</span></div><span className="status-pill compact is-muted">{formatRadarProfile(plan?.radar_profile)}</span></div><dl className="detail-grid"><div><dt>현재 Pro</dt><dd>{formatRadarProfile(plan?.radar_profile)}</dd></div><div><dt>사이클 Capital</dt><dd>{formatMoney(plan?.radar_cycle_capital, symbol)}</dd></div><div><dt>점유 티어</dt><dd>{occupied.length ? occupied.join(", ") : "없음"}</dd></div><div><dt>다음 티어</dt><dd>{plan?.radar_tier ? String(plan.radar_tier) + "티어" : "-"}</dd></div></dl></section>;
+}
+
 function CapitalUpdatePanel({
   status,
   symbol,
@@ -387,14 +392,19 @@ function signedValueClass(value: string | number | null | undefined): string | u
   return undefined;
 }
 
-const positionColumns: TableColumn<PositionRow>[] = [
+function positionColumns(isRadar: boolean): TableColumn<PositionRow>[] {
+  const strategyColumn: TableColumn<PositionRow> = isRadar
+    ? { key: "radar", header: "티어 / Pro", render: (row) => String(row.radar_tier ?? "-") + "티어 / " + formatRadarProfile(row.radar_profile) }
+    : { key: "mode", header: "모드", render: (row) => translateMode(row.mode) };
+  return [
   { key: "id", header: "ID", render: (row) => row.id },
   { key: "buy_date", header: "매수일", render: (row) => row.buy_date },
   { key: "quantity", header: "수량", align: "right", render: (row) => formatMoney(row.quantity) },
   { key: "price", header: "매수가", align: "right", render: (row) => formatMoney(row.buy_price) },
-  { key: "mode", header: "모드", render: (row) => translateMode(row.mode) },
+  strategyColumn,
   { key: "status", header: "상태", render: (row) => translateStatus(row.status) },
 ];
+}
 
 const tradeColumns: TableColumn<PositionHistoryRow>[] = [
   { key: "buy_date", header: "매수일", render: (row) => row.buy_date },

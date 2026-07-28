@@ -14,7 +14,7 @@ import { BacktestChart } from "../components/BacktestChart";
 import { MetricStrip } from "../components/MetricStrip";
 import { Table, type TableColumn } from "../components/Table";
 import type { BacktestDailySnapshot, BacktestRun, BacktestTrade, StrategyConfig } from "../types/api";
-import { formatMoney, formatPercent, todayIso, translateMode, translateReason, translateSide } from "../utils/format";
+import { formatMoney, formatPercent, formatRadarProfile, todayIso, translateMode, translateReason, translateSide } from "../utils/format";
 import { rememberStrategyConfigId, resolveRememberedStrategyConfigId } from "../utils/strategySelection";
 
 type BacktestModePolicy = "fixed_safe" | "fixed_aggressive" | "weekly_rsi";
@@ -72,8 +72,8 @@ export function BacktestPage() {
         config_id: configId,
         start_date: startDate,
         end_date: endDate,
-        mode_policy: modePolicy,
-        position_sizing_policy: positionSizingPolicy,
+        mode_policy: isRadar ? undefined : modePolicy,
+        position_sizing_policy: isRadar ? undefined : positionSizingPolicy,
       });
       setRun(created);
       const [daily, trades] = await Promise.all([
@@ -90,6 +90,8 @@ export function BacktestPage() {
   }
 
   const selectedConfig = configs.find((config) => config.id === configId) ?? null;
+  const isRadar = selectedConfig?.strategy_type === "radar0458_pro";
+  const selectedRadarProfile = selectedConfig?.settings_json.pro_profile as string | undefined;
   const summary = useMemo(() => buildBacktestSummary(tradeRows, dailyRows), [dailyRows, tradeRows]);
   const filteredTrades = useMemo(
     () =>
@@ -102,6 +104,7 @@ export function BacktestPage() {
   );
   const snapshot = run?.strategy_config_snapshot_json;
   const snapshotSettings = snapshot?.settings_json as Record<string, unknown> | undefined;
+  const snapshotIsRadar = snapshot?.strategy_type === "radar0458_pro";
 
   const metrics = [
     { label: "초기 자본", value: formatMoney(run?.initial_capital), helper: "시작" },
@@ -153,6 +156,7 @@ export function BacktestPage() {
             종료일
             <input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} required />
           </label>
+          {isRadar ? <label>Pro 프리셋<select value={selectedRadarProfile ?? "pro1"} disabled><option value="pro1">Pro1</option><option value="pro2">Pro2</option><option value="pro3">Pro3</option></select><small className="form-status">선택한 전략 설정의 Pro를 적용합니다.</small></label> : <>
           <label>
             모드 정책
             <select value={modePolicy} onChange={(event) => setModePolicy(event.target.value as BacktestModePolicy)}>
@@ -171,6 +175,7 @@ export function BacktestPage() {
               <option value="full_allocation">정액매수</option>
             </select>
           </label>
+          </>}
           <button type="submit" disabled={!configId || loading}>
             <Play aria-hidden="true" size={16} />
             {loading ? "실행 중" : "백테스트 실행"}
@@ -193,13 +198,12 @@ export function BacktestPage() {
                 ["전략", textValue(snapshot?.name)],
                 ["종목", textValue(snapshot?.symbol)],
                 ["기간", `${run.start_date} - ${run.end_date}`],
-                ["모드 정책", modePolicyLabel(textValue(snapshot?.mode_policy))],
-                ["매수 수량 계산", positionSizingPolicyLabel(textValue(snapshot?.position_sizing_policy))],
+                ...(snapshotIsRadar ? [["Pro 프리셋", formatRadarProfile(textValue(snapshotSettings?.pro_profile))] as [string, string]] : [["모드 정책", modePolicyLabel(textValue(snapshot?.mode_policy))] as [string, string], ["매수 수량 계산", positionSizingPolicyLabel(textValue(snapshot?.position_sizing_policy))] as [string, string]]),
                 ["초기 투자금", formatMoney(snapshot?.initial_capital as string | undefined, textValue(snapshot?.symbol))],
                 ["수수료율", `${textValue(snapshot?.fee_rate)}%`],
               ]}
             />
-            <SnapshotBlock title="안전모드" rows={modeSettingRows(snapshotSettings?.safe)} />
+            {!snapshotIsRadar ? <><SnapshotBlock title="안전모드" rows={modeSettingRows(snapshotSettings?.safe)} />
             <SnapshotBlock title="공세모드" rows={modeSettingRows(snapshotSettings?.aggressive)} />
             <SnapshotBlock
               title="투자금 갱신"
@@ -208,7 +212,7 @@ export function BacktestPage() {
                 ["이익복리율", `${textValue(snapshotSettings?.profit_compounding_rate)}%`],
                 ["손실복리율", `${textValue(snapshotSettings?.loss_compounding_rate)}%`],
               ]}
-            />
+            /></> : <SnapshotBlock title="Radar Pro" rows={[["적용 Pro", formatRadarProfile(textValue(snapshotSettings?.pro_profile))]]} />}
           </div>
         ) : (
           <div className="empty-state">실행된 백테스트가 없습니다.</div>

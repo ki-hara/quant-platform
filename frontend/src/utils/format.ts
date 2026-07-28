@@ -72,7 +72,12 @@ export function translateMode(mode: string | null | undefined): string {
 export function translateStrategyType(strategyType: string | null | undefined): string {
   return translateCode(strategyType, {
     dynamic_wave: "동파법",
+    radar0458_pro: "레이더0458 Pro",
   });
+}
+
+export function formatRadarProfile(profile: string | null | undefined): string {
+  return translateCode(profile, { pro1: "Pro1", pro2: "Pro2", pro3: "Pro3" });
 }
 
 export function translateReason(reason: string | null | undefined): string {
@@ -87,6 +92,7 @@ export function translateReason(reason: string | null | undefined): string {
     sell_condition_waiting: "매도 조건 대기",
     portfolio_unavailable: "포트폴리오 데이터 없음",
     market_data_unavailable: "시장 데이터 부족",
+    radar_position_snapshot_missing: "레이더 포지션 스냅샷 누락",
     manual_signal: "수동 신호",
   });
 }

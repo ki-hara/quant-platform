@@ -56,6 +56,12 @@ const investmentPresets: Array<{ label: string; summary: string; values: Record<
   },
 ];
 
+const radarPresetDetails = {
+  pro1: { allocation: "5% / 10% / 15% / 20% / 25% / 25%", buy: "-0.01%", sell: "+0.01%", holding: "10거래일" },
+  pro2: { allocation: "10% / 15% / 20% / 25% / 20% / 10%", buy: "-0.01%", sell: "+1.50%", holding: "10거래일" },
+  pro3: { allocation: "16.7% × 6", buy: "-0.10%", sell: "+2.00%", holding: "12거래일" },
+} as const;
+
 export function SettingsForm({
   strategies,
   schema,
@@ -85,11 +91,15 @@ export function SettingsForm({
   const mergedSettings = { ...defaults, ...settings };
   const visibleFields = fields.filter((field) => isFieldVisible(field, fields, mergedSettings));
   const activePreset = presetForSettings(mergedSettings);
+  const isRadar = selectedStrategyType === "radar0458_pro";
+  const radarProfile = String(mergedSettings.pro_profile ?? "pro1") as keyof typeof radarPresetDetails;
+  const radarPreset = radarPresetDetails[radarProfile] ?? radarPresetDetails.pro1;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await onSubmit({
       ...common,
+      symbol: isRadar ? "SOXL" : common.symbol,
       slippage_rate: common.slippage_rate || "0",
       strategy_type: selectedStrategyType,
       settings_json: buildNestedSettings(fields, settings),
@@ -188,7 +198,9 @@ export function SettingsForm({
             <select
               value={selectedStrategyType}
               onChange={(event) => {
-                onStrategyTypeChange(event.target.value);
+                const strategyType = event.target.value;
+                onStrategyTypeChange(strategyType);
+                if (strategyType === "radar0458_pro") setCommon((current) => ({ ...current, symbol: "SOXL" }));
                 setSettings({});
               }}
               required
@@ -206,7 +218,8 @@ export function SettingsForm({
           </label>
           <label>
             종목 코드
-            <input value={common.symbol} onChange={(event) => setCommon((current) => ({ ...current, symbol: event.target.value.toUpperCase() }))} placeholder="SOXL 또는 005930.KS" required />
+            <input value={isRadar ? "SOXL" : common.symbol} onChange={(event) => setCommon((current) => ({ ...current, symbol: event.target.value.toUpperCase() }))} placeholder="SOXL 또는 005930.KS" readOnly={isRadar} required />
+            {isRadar ? <small className="form-status">레이더0458 Pro는 SOXL 전용입니다.</small> : null}
           </label>
           <label>
             초기 투자금
@@ -222,7 +235,7 @@ export function SettingsForm({
 
       <div className="form-section">
         <h2>전략별 설정</h2>
-        <div className="preset-row" role="group" aria-label="투자 성향">
+        {!isRadar ? <div className="preset-row" role="group" aria-label="투자 성향">
           {investmentPresets.map((preset) => (
             <button
               className={activePreset === preset.label ? "is-active" : undefined}
@@ -234,16 +247,18 @@ export function SettingsForm({
               <span>{preset.summary}</span>
             </button>
           ))}
-        </div>
+        </div> : null}
         {fields.length === 0 ? (
           <div className="empty-state">설정 스키마가 없습니다.</div>
-        ) : (
+        ) : isRadar ? (
+          <div className="setting-sections"><section className="setting-section"><h3>Pro 프리셋</h3><div className="form-grid"><label>적용 Pro<select value={radarProfile} onChange={(event) => setSettings((current) => ({ ...current, pro_profile: event.target.value }))}><option value="pro1">Pro1</option><option value="pro2">Pro2</option><option value="pro3">Pro3</option></select></label></div><dl className="detail-grid radar-preset-details"><div><dt>티어 배정</dt><dd>{radarPreset.allocation}</dd></div><div><dt>매수 기준</dt><dd>{radarPreset.buy}</dd></div><div><dt>매도 기준</dt><dd>{radarPreset.sell}</dd></div><div><dt>최대 보유</dt><dd>{radarPreset.holding}</dd></div></dl><small className="form-status">고정 전략 규칙이며 Pro 변경은 다음 사이클부터 적용됩니다.</small></section></div>
+          ) : (
           <div className="setting-sections">
             <SettingSection title="RSI / 투자금 갱신" fields={visibleFields.filter((field) => sectionForField(field.key) === "rsi")} renderField={renderField} />
             <SettingSection title="안전모드" fields={visibleFields.filter((field) => sectionForField(field.key) === "safe")} renderField={renderField} />
             <SettingSection title="공세모드" fields={visibleFields.filter((field) => sectionForField(field.key) === "aggressive")} renderField={renderField} />
           </div>
-        )}
+          )}
       </div>
 
       <div className="form-actions">

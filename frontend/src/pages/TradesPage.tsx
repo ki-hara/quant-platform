@@ -20,7 +20,7 @@ import type {
   StrategyConfig,
 } from "../types/api";
 import {
-  formatMoney,
+  formatMoney, formatRadarProfile,
   marketDateIso,
   translateCode,
   translateMode,
@@ -82,6 +82,7 @@ export function TradesPage() {
   if (rowRequestsRef.current === null) rowRequestsRef.current = new LatestRequest();
   const rowRequests = rowRequestsRef.current;
   const selectedSymbol = dashboard?.config.symbol ?? plan?.symbol ?? configs.find((config) => config.id === selectedId)?.symbol;
+  const isRadar = dashboard?.config.strategy_type === "radar0458_pro" || plan?.strategy_type === "radar0458_pro";
   const executableBuyOrders = useMemo(() => executableLocBuyOrders(plan), [plan]);
 
   const sortedPositions = useMemo(
@@ -385,7 +386,7 @@ export function TradesPage() {
                 <span className="signal-label">오늘의 LOC 매수 주문표</span>
                 <strong>{executableBuyOrders.length ? `${Math.min(executableBuyOrders.length, 5)}건` : "주문 없음"}</strong>
               </div>
-              <div className="order-policy-switch" role="group" aria-label="매수 수량 계산">
+              {!isRadar ? <div className="order-policy-switch" role="group" aria-label="매수 수량 계산">
                 <button
                   type="button"
                   className={livePositionSizingPolicy === "fixed_quantity" ? "is-active" : undefined}
@@ -400,14 +401,14 @@ export function TradesPage() {
                 >
                   정액매수
                 </button>
-              </div>
+              </div> : <span className="status-pill compact is-muted">{formatRadarProfile(plan?.radar_profile)}</span>}
             </div>
             <div className="order-board-body">
               {executableBuyOrders.length ? (
                 <div className="loc-order-list">
                   {executableBuyOrders.slice(0, 5).map((order) => (
                     <div className="loc-order-row" key={order.step}>
-                      <span>{order.step}차 LOC</span>
+                      <span>{isRadar && plan?.radar_tier ? String(plan.radar_tier) + "티어 LOC" : String(order.step) + "차 LOC"}</span>
                       <strong>LOC {formatMoney(order.limit_price, selectedSymbol)}</strong>
                       <small>주문 {order.quantity}주 / 누적 {order.cumulative_quantity}주</small>
                     </div>
@@ -500,6 +501,7 @@ export function TradesPage() {
               return (
                 <div className="position-edit-row" key={position.id}>
                   <div className="position-summary">
+                    {isRadar ? <small>{position.radar_tier ?? "-"}티어 / {formatRadarProfile(position.radar_profile)}</small> : null}
                     <span>체결일</span>
                     <strong>{position.buy_date}</strong>
                     <em className={`state-badge ${positionStatusClass(edit.status)}`}>{positionStatusText(edit.status)}</em>
@@ -638,7 +640,7 @@ export function TradesPage() {
                   </button>
                 ))}
               </div>
-            ) : (
+            ) : !isRadar ? (
               <label>
                 모드
                 <select
@@ -649,7 +651,7 @@ export function TradesPage() {
                   <option value="aggressive">공세</option>
                 </select>
               </label>
-            )}
+            ) : null}
             {manualForm.side === "buy" ? (
               <label>
                 LOC 주문가

@@ -1,6 +1,6 @@
 import { AlertCircle, CheckCircle2 } from "lucide-react";
 import type { DailyPlan } from "../types/api";
-import { formatMoney, translateMode, translateReason } from "../utils/format";
+import { formatMoney, formatRadarProfile, translateMode, translateReason } from "../utils/format";
 
 interface DailyPlanPanelProps {
   plan: DailyPlan | null;
@@ -8,12 +8,13 @@ interface DailyPlanPanelProps {
 
 export function DailyPlanPanel({ plan }: DailyPlanPanelProps) {
   const available = plan?.buy_available === true;
+  const isRadar = plan?.strategy_type === "radar0458_pro";
 
   return (
     <section className="panel daily-plan-panel">
       <div className="panel-header">
         <div>
-          <h2>오늘의 LOC 매수</h2>
+          <h2>{isRadar && plan?.radar_tier ? `${plan.radar_tier}티어 LOC 매수` : "오늘의 LOC 매수"}</h2>
           <span>{plan?.market_data_as_of ? `${plan.market_data_as_of} 종가 기준` : "시장 데이터 대기"}</span>
         </div>
         <span className={`status-pill compact ${available ? "is-ok" : "is-blocked"}`}>
@@ -38,10 +39,12 @@ export function DailyPlanPanel({ plan }: DailyPlanPanelProps) {
           <dt>종목</dt>
           <dd>{plan?.symbol ?? "-"}</dd>
         </div>
-        <div>
+        {!isRadar ? <div>
           <dt>확정 모드</dt>
           <dd>{translateMode(plan?.confirmed_mode)}</dd>
-        </div>
+        </div> : null}
+        {isRadar ? <div><dt>적용 Pro</dt><dd>{formatRadarProfile(plan?.radar_profile)}</dd></div> : null}
+        {isRadar ? <div><dt>다음 티어</dt><dd>{plan?.radar_tier ? `${plan.radar_tier}티어` : "-"}</dd></div> : null}
         <div>
           <dt>전일 종가</dt>
           <dd>{formatMoney(plan?.previous_close, plan?.symbol)}</dd>
@@ -58,18 +61,19 @@ export function DailyPlanPanel({ plan }: DailyPlanPanelProps) {
           <dt>매수조건</dt>
           <dd>{plan?.mode_buy_threshold_percent ? `${plan.mode_buy_threshold_percent}%` : "-"}</dd>
         </div>
-        <div>
+        {!isRadar ? <div>
           <dt>Capital</dt>
           <dd>{formatMoney(plan?.capital, plan?.symbol)}</dd>
-        </div>
+        </div> : null}
+        {isRadar ? <div><dt>사이클 Capital</dt><dd>{formatMoney(plan?.radar_cycle_capital, plan?.symbol)}</dd></div> : null}
         <div>
           <dt>Cash</dt>
           <dd>{formatMoney(plan?.cash, plan?.symbol)}</dd>
         </div>
-        <div>
+        {!isRadar ? <div>
           <dt>분할수</dt>
           <dd>{plan?.mode_split_count ?? "-"}</dd>
-        </div>
+        </div> : null}
         <div>
           <dt>보유 포지션</dt>
           <dd>{plan?.open_position_count ?? "-"}</dd>

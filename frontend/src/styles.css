@@ -2014,3 +2014,6 @@ button:disabled,
     white-space: normal;
   }
 }
+
+.radar-preset-details { margin-top: 14px; }
+.radar-preset-details dd { font-variant-numeric: tabular-nums; }
