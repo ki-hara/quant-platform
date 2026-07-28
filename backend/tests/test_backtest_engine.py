@@ -4,6 +4,7 @@ from decimal import Decimal
 import pytest
 
 from app.backtest_engine.engine import BacktestEngine
+from app.backtest_engine.radar import run_radar_backtest
 from app.domain.enums import BacktestModePolicy, BacktestPositionSizingPolicy, StrategyMode
 from app.dto.market_data import OhlcvDto
 from app.strategy_engine.base import BuySignal, CapitalUpdate, PositionSize, SellSignal, Strategy
@@ -582,14 +583,31 @@ def _weekly_prices(closes: list[str], first_week_ending: date) -> list[OhlcvDto]
     ]
 
 
-def _run_radar(closes: list[str], settings: dict | None = None):
-    return BacktestEngine().run(
+def _run_radar(
+    closes: list[str],
+    settings: dict | None = None,
+    profile_for_date=None,
+):
+    engine = BacktestEngine()
+    prices = [_price(date(2026, 1, i + 1), close) for i, close in enumerate(closes)]
+    run_settings = settings or {"pro_profile": "pro1"}
+    if profile_for_date is not None:
+        return run_radar_backtest(
+            engine,
+            prices,
+            Decimal("10000"),
+            Decimal("0"),
+            Decimal("0"),
+            run_settings,
+            profile_for_date=profile_for_date,
+        )
+    return engine.run(
         strategy=Radar0458ProStrategy(),
-        prices=[_price(date(2026, 1, i + 1), close) for i, close in enumerate(closes)],
+        prices=prices,
         initial_capital=Decimal("10000"),
         fee_rate=Decimal("0"),
         slippage_rate=Decimal("0"),
-        settings=settings or {"pro_profile": "pro1"},
+        settings=run_settings,
     )
 
 
@@ -639,10 +657,8 @@ def _profile_change_prices() -> list[str]:
 def test_radar_same_day_final_sell_and_preplanned_buy_keep_active_cycle() -> None:
     result = _run_radar(
         _profile_change_prices(),
-        {
-            "pro_profile": "pro1",
-            "pro_profile_schedule": {"2026-01-12": "pro2"},
-        },
+        {"pro_profile": "pro1"},
+        profile_for_date=lambda day: "pro2" if day >= date(2026, 1, 12) else None,
     )
 
     final_sell_day = [trade for trade in result.trades if trade.date == date(2026, 1, 12)]
@@ -656,10 +672,8 @@ def test_radar_same_day_final_sell_and_preplanned_buy_keep_active_cycle() -> Non
 def test_radar_profile_change_applies_after_a_truly_empty_end_of_day() -> None:
     result = _run_radar(
         _profile_change_prices(),
-        {
-            "pro_profile": "pro1",
-            "pro_profile_schedule": {"2026-01-12": "pro2"},
-        },
+        {"pro_profile": "pro1"},
+        profile_for_date=lambda day: "pro2" if day >= date(2026, 1, 12) else None,
     )
 
     buys = [trade for trade in result.trades if trade.side == "BUY"]
@@ -669,3 +683,13 @@ def test_radar_profile_change_applies_after_a_truly_empty_end_of_day() -> None:
         (date(2026, 1, 14), 1, "pro2"),
     ]
     assert buys[-1].radar_cycle_capital == Decimal("10060")
+
+
+def test_radar_ignores_undocumented_profile_schedule_in_runtime_settings() -> None:
+    result = _run_radar(
+        ["100", "90", "80"],
+        {"pro_profile": "pro1", "pro_profile_schedule": []},
+    )
+
+    buys = [trade for trade in result.trades if trade.side == "BUY"]
+    assert [trade.radar_profile for trade in buys] == ["pro1", "pro1"]

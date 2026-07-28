@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
@@ -38,6 +39,7 @@ def run_radar_backtest(
     fee_rate: Decimal,
     slippage_rate: Decimal,
     settings: dict,
+    profile_for_date: Callable[[date], str | None] | None = None,
 ) -> BacktestResult:
     cash = capital = initial_capital
     fees = Decimal("0")
@@ -47,9 +49,8 @@ def run_radar_backtest(
     trades: list[SimulatedTrade] = []
     snapshots: list[DailySnapshot] = []
     configured_profile = str(settings.get("pro_profile", "pro1"))
-    profile_schedule = settings.get("pro_profile_schedule", {})
     for index, price in enumerate(prices):
-        scheduled_profile = profile_schedule.get(price.date.isoformat())
+        scheduled_profile = profile_for_date(price.date) if profile_for_date else None
         if scheduled_profile is not None:
             configured_profile = str(scheduled_profile)
         previous_close = prices[index - 1].close if index else price.close
