@@ -20,6 +20,10 @@ class SimulatedTrade:
     cash_after: Decimal | None = None
     capital_after: Decimal | None = None
 
+    radar_tier: int | None = None
+    radar_profile: str | None = None
+    radar_cycle_capital: Decimal | None = None
+
 
 @dataclass(frozen=True)
 class DailySnapshot:

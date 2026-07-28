@@ -18,7 +18,9 @@ class BacktestRunRequest:
     start_date: date
     end_date: date
     mode_policy: BacktestModePolicy = BacktestModePolicy.FIXED_SAFE
-    position_sizing_policy: BacktestPositionSizingPolicy = BacktestPositionSizingPolicy.FIXED_QUANTITY
+    position_sizing_policy: BacktestPositionSizingPolicy = (
+        BacktestPositionSizingPolicy.FIXED_QUANTITY
+    )
 
 
 class BacktestService:
@@ -98,6 +100,8 @@ class BacktestService:
         return config
 
     def _get_rsi_prices(self, config: StrategyConfig, request: BacktestRunRequest) -> list:
+        if config.strategy_type == "radar0458_pro":
+            return []
         if request.mode_policy is not BacktestModePolicy.WEEKLY_RSI:
             return []
         symbol = str(config.settings_json.get("mode_rsi_symbol", "QQQ"))
@@ -118,6 +122,11 @@ class BacktestService:
             "owner_id": config.owner_id,
             "name": config.name,
             "strategy_type": config.strategy_type,
+            "pro_profile": (
+                config.settings_json.get("pro_profile")
+                if config.strategy_type == "radar0458_pro"
+                else None
+            ),
             "symbol": config.symbol,
             "mode_policy": mode_policy.value,
             "position_sizing_policy": position_sizing_policy.value,

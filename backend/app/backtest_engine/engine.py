@@ -3,6 +3,7 @@ from datetime import date
 from decimal import Decimal, ROUND_DOWN
 
 from app.backtest_engine import metrics
+from app.backtest_engine.radar import run_radar_backtest
 from app.backtest_engine.simulator import (
     BacktestResult,
     BacktestSummary,
@@ -66,6 +67,10 @@ class BacktestEngine:
         sorted_prices = sorted(prices, key=lambda price: price.date)
         if len(sorted_prices) < 2:
             raise ValueError("Backtest requires at least two price rows.")
+        if strategy.strategy_type == "radar0458_pro":
+            return run_radar_backtest(
+                self, sorted_prices, initial_capital, fee_rate, slippage_rate, settings
+            )
         mode_schedule = self._build_mode_schedule(mode_policy, rsi_prices or [])
 
         cash = initial_capital

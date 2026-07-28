@@ -27,7 +27,7 @@ class FakeMarketDataService:
         prices = [
             price
             for price in simple_prices()
-            if price.symbol == symbol and start_date <= price.date <= end_date
+            if symbol in {"TEST", "SOXL"} and start_date <= price.date <= end_date
         ]
         lookahead = OhlcvDto(
             symbol="TEST",
@@ -146,7 +146,10 @@ def test_backtest_csv_endpoints_stream_attachments(api_client: TestClient) -> No
     assert daily.headers["content-disposition"] == (
         f'attachment; filename="backtest-{run["id"]}-daily.csv"'
     )
-    assert "date,capital,cash,position_value,total_asset,drawdown,cumulative_fees,mode,mode_rule_code" in daily.text
+    assert (
+        "date,capital,cash,position_value,total_asset,drawdown,cumulative_fees,mode,mode_rule_code"
+        in daily.text
+    )
 
     assert trades.status_code == 200
     assert trades.headers["content-type"].startswith("text/csv")
@@ -207,3 +210,36 @@ def test_post_backtest_persists_position_sizing_policy_in_snapshot(
     assert response.status_code == 201
     body = response.json()
     assert body["strategy_config_snapshot_json"]["position_sizing_policy"] == "full_allocation"
+
+
+def test_radar_backtest_skips_weekly_rsi_fetch_and_snapshots_profile(
+    api_client: TestClient,
+) -> None:
+    response = api_client.post(
+        "/api/strategy-configs",
+        json={
+            "name": "Radar Backtest",
+            "strategy_type": "radar0458_pro",
+            "symbol": "SOXL",
+            "initial_capital": "10000",
+            "fee_rate": "0",
+            "slippage_rate": "0",
+            "settings_json": {"pro_profile": "pro2"},
+        },
+    )
+    assert response.status_code == 201
+
+    run = api_client.post(
+        "/api/backtests",
+        json={
+            "config_id": response.json()["id"],
+            "start_date": "2026-01-01",
+            "end_date": "2026-01-06",
+            "mode_policy": "weekly_rsi",
+        },
+    )
+
+    assert run.status_code == 201, run.text
+    assert [call[0] for call in api_client.app.state.fake_market_data_service.calls] == ["SOXL"]
+    snapshot = run.json()["strategy_config_snapshot_json"]
+    assert snapshot["pro_profile"] == "pro2"

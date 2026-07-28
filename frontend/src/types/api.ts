@@ -333,6 +333,9 @@ export interface BacktestTrade {
   open_position_count: number | null;
   cash_after: DecimalString | null;
   capital_after: DecimalString | null;
+  radar_tier?: number | null;
+  radar_profile?: "pro1" | "pro2" | "pro3" | null;
+  radar_cycle_capital?: DecimalString | null;
   source: string;
   created_at: ISODateTime;
   updated_at: ISODateTime;

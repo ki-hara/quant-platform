@@ -9,6 +9,7 @@ from app.dto.market_data import OhlcvDto
 from app.strategy_engine.base import BuySignal, CapitalUpdate, PositionSize, SellSignal, Strategy
 from app.strategy_engine.context import StrategyContext, StrategyPosition
 from app.strategy_engine.dynamic_wave import DynamicWaveStrategy
+from app.strategy_engine.radar0458_pro import Radar0458ProStrategy
 from tests.fixtures import simple_prices
 
 
@@ -579,3 +580,53 @@ def _weekly_prices(closes: list[str], first_week_ending: date) -> list[OhlcvDto]
         )
         for index, close in enumerate(closes)
     ]
+
+
+def _run_radar(closes: list[str], settings: dict | None = None):
+    return BacktestEngine().run(
+        strategy=Radar0458ProStrategy(),
+        prices=[_price(date(2026, 1, i + 1), close) for i, close in enumerate(closes)],
+        initial_capital=Decimal("10000"),
+        fee_rate=Decimal("0"),
+        slippage_rate=Decimal("0"),
+        settings=settings or {"pro_profile": "pro1"},
+    )
+
+
+def test_radar_refills_the_lowest_empty_regular_tier_on_a_later_day() -> None:
+    result = _run_radar(["100", "90", "80", "70", "85", "84"])
+    buys = [trade for trade in result.trades if trade.side == "BUY"]
+    assert [trade.radar_tier for trade in buys] == [1, 2, 3, 2]
+
+
+def test_radar_start_of_day_occupancy_delays_same_day_tier_refill() -> None:
+    result = _run_radar(["100", "90"] + ["89"] * 10 + ["88"])
+    day_twelve = [trade for trade in result.trades if trade.date == date(2026, 1, 12)]
+    day_thirteen_buys = [
+        trade for trade in result.trades if trade.date == date(2026, 1, 13) and trade.side == "BUY"
+    ]
+    assert [trade.side for trade in day_twelve] == ["SELL"]
+    assert [trade.radar_tier for trade in day_thirteen_buys] == [1]
+
+
+def test_radar_run_uses_profile_and_cycle_capital_from_settings_snapshot() -> None:
+    settings = {"pro_profile": "pro1"}
+    result = _run_radar(["100", "90", "80", "70"], settings)
+    buys = [trade for trade in result.trades if trade.side == "BUY"]
+    assert [trade.radar_profile for trade in buys] == ["pro1", "pro1", "pro1"]
+    assert [trade.radar_cycle_capital for trade in buys] == [Decimal("10000")] * 3
+
+
+def test_radar_uses_reserve_tier_seven_only_after_regular_tiers_are_occupied() -> None:
+    result = _run_radar(["100", "90", "80", "70", "60", "50", "40", "30"])
+    buys = [trade for trade in result.trades if trade.side == "BUY"]
+    assert [trade.radar_tier for trade in buys] == [1, 2, 3, 4, 5, 6, 7]
+    assert buys[-1].quantity == 42
+
+
+def test_radar_applies_one_hundred_percent_realized_pnl_to_capital() -> None:
+    result = _run_radar(["100", "90", "91"])
+    sell = next(trade for trade in result.trades if trade.side == "SELL")
+    assert sell.realized_pnl == Decimal("5.000000")
+    assert sell.capital_after == Decimal("10005.000000")
+    assert result.daily_snapshots[-1].capital == Decimal("10005.000000")
