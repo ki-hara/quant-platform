@@ -151,16 +151,19 @@ class IntegratedOrderService:
                 ],
                 Decimal("0.01"),
             )
-            netted_rows.extend(
+            symbol_rows = [
                 IntegratedOrderDto(
                     symbol=symbol,
                     side=row.side,
                     limit_price=row.limit_price,
                     quantity=row.quantity,
-                    sources=list(symbol_sources),
+                    sources=[],
                 )
                 for row in netted
-            )
+            ]
+            symbol_rows.sort(key=lambda row: row.limit_price, reverse=True)
+            _allocate_netted_sources(symbol_rows, symbol_sources)
+            netted_rows.extend(symbol_rows)
         netted_rows.sort(key=lambda row: row.limit_price, reverse=True)
         return IntegratedOrdersResponseDto(
             preferences=preferences,
@@ -186,3 +189,39 @@ def aggregate_integrated_orders(
         for (symbol, side, price), items in grouped.items()
     ]
     return sorted(rows, key=lambda row: row.limit_price, reverse=True)
+
+
+def _allocate_netted_sources(
+    rows: list[IntegratedOrderDto],
+    sources: list[IntegratedOrderSourceDto],
+) -> None:
+    for side in ("buy", "sell"):
+        pool = sorted(
+            (source.model_copy() for source in sources if source.side == side),
+            key=lambda source: (
+                -source.limit_price,
+                source.strategy_config_id,
+                source.position_id or 0,
+                source.tier or 0,
+            ),
+        )
+        source_index = 0
+        source_remaining = pool[0].quantity if pool else 0
+        for row in (item for item in rows if item.side == side):
+            needed = row.quantity
+            allocated = []
+            while needed > 0:
+                if source_index >= len(pool):
+                    raise ValueError(f"Insufficient {side} sources for netted order.")
+                amount = min(needed, source_remaining)
+                allocated.append(pool[source_index].model_copy(update={"quantity": amount}))
+                needed -= amount
+                source_remaining -= amount
+                if source_remaining == 0:
+                    source_index += 1
+                    source_remaining = (
+                        pool[source_index].quantity if source_index < len(pool) else 0
+                    )
+            row.sources = allocated
+        if source_index < len(pool) or source_remaining:
+            raise ValueError(f"Unallocated {side} sources remain after netting.")
