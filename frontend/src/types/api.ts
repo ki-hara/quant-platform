@@ -1,4 +1,4 @@
-export type DecimalString = string;
+﻿export type DecimalString = string;
 export type ISODate = string;
 export type ISODateTime = string;
 export type StrategyMode = "safe" | "aggressive";
@@ -547,4 +547,43 @@ export interface MarketRefreshResponse {
   differs: boolean;
   investment_data_as_of: ISODate | null;
   rsi_data_as_of: ISODate | null;
+}
+
+export interface IntegratedOrderPreference {
+  strategy_config_id: number;
+  strategy_name: string;
+  strategy_type: string;
+  symbol: string;
+  included: boolean;
+}
+
+export interface IntegratedOrderPreferenceUpdate {
+  included: boolean;
+}
+
+export interface IntegratedOrderSource {
+  strategy_config_id: number;
+  strategy_name: string;
+  strategy_type: string;
+  symbol: string;
+  side: "buy" | "sell";
+  limit_price: DecimalString;
+  quantity: number;
+  tier: number | null;
+  radar_profile: RadarProfile | null;
+  position_id: number | null;
+}
+
+export interface IntegratedOrder {
+  symbol: string;
+  side: "buy" | "sell";
+  limit_price: DecimalString;
+  quantity: number;
+  sources: IntegratedOrderSource[];
+}
+
+export interface IntegratedOrdersResponse {
+  preferences: IntegratedOrderPreference[];
+  original_orders: IntegratedOrder[];
+  netted_orders: IntegratedOrder[];
 }

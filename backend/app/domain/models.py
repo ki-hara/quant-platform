@@ -80,6 +80,18 @@ class StrategyConfig(Base):
     )
 
 
+class IntegratedOrderPreference(Base):
+    __tablename__ = "integrated_order_preferences"
+
+    strategy_config_id: Mapped[int] = mapped_column(
+        ForeignKey("strategy_configs.id"), primary_key=True
+    )
+    included: Mapped[bool] = mapped_column(default=False, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+
 class StrategyConfigSnapshot(Base):
     __tablename__ = "strategy_config_snapshots"
 

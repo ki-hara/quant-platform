@@ -1,4 +1,4 @@
-import { Activity, BarChart3, BriefcaseBusiness, KeyRound, LogOut, Settings2, ShieldCheck, WalletCards } from "lucide-react";
+import { Activity, BarChart3, BriefcaseBusiness, KeyRound, LogOut, Settings2, ShieldCheck, WalletCards, Layers3 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { changeMyPin, getMe } from "./api/auth";
 import { setAuthToken } from "./api/client";
@@ -7,11 +7,12 @@ import { BacktestPage } from "./pages/BacktestPage";
 import { CapitalAdjustmentPage } from "./pages/CapitalAdjustmentPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { LoginPage } from "./pages/LoginPage";
+import { IntegratedOrdersPage } from "./pages/IntegratedOrdersPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { TradesPage } from "./pages/TradesPage";
 import type { AuthOwner } from "./types/api";
 
-type TabKey = "dashboard" | "backtest" | "settings" | "trades" | "capital" | "admin";
+type TabKey = "dashboard" | "backtest" | "settings" | "trades" | "integrated-orders" | "capital" | "admin";
 
 interface TabItem {
   key: TabKey;
@@ -21,6 +22,7 @@ interface TabItem {
 
 const baseTabs: TabItem[] = [
   { key: "dashboard", label: "대시보드", icon: Activity },
+  { key: "integrated-orders", label: "전략 통합 주문", icon: Layers3 },
   { key: "trades", label: "거래/포지션", icon: BriefcaseBusiness },
   { key: "settings", label: "전략 설정", icon: Settings2 },
   { key: "backtest", label: "백테스트", icon: BarChart3 },
@@ -158,6 +160,7 @@ function App() {
         {activeTab === "capital" && <CapitalAdjustmentPage />}
         {activeTab === "settings" && <SettingsPage />}
         {activeTab === "trades" && <TradesPage />}
+        {activeTab === "integrated-orders" && <IntegratedOrdersPage />}
         {activeTab === "admin" && owner.is_admin && <AdminPage />}
       </main>
       {pinModalOpen ? (

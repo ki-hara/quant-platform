@@ -377,6 +377,21 @@ def _add_radar_backtest_trade_snapshots(connection: Connection) -> None:
     )
 
 
+def _add_integrated_order_preferences(connection: Connection) -> None:
+    connection.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS integrated_order_preferences (
+                strategy_config_id INTEGER PRIMARY KEY,
+                included BOOLEAN NOT NULL DEFAULT 0,
+                updated_at DATETIME NOT NULL,
+                FOREIGN KEY(strategy_config_id) REFERENCES strategy_configs (id)
+            )
+            """
+        )
+    )
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     (1, "legacy_schema", _upgrade_legacy_schema),
     (2, "loc_orders_trade_fk_set_null", _rebuild_loc_orders_trade_foreign_key),
@@ -385,6 +400,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     (5, "link_loc_orders_to_positions", _link_loc_orders_to_positions),
     (6, "backfill_legacy_radar_loc_positions", _backfill_legacy_radar_loc_order_positions),
     (7, "radar_backtest_trade_snapshots", _add_radar_backtest_trade_snapshots),
+    (8, "integrated_order_preferences", _add_integrated_order_preferences),
 )
 LATEST_SCHEMA_VERSION = MIGRATIONS[-1][0]
 
