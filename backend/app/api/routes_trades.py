@@ -156,7 +156,15 @@ def update_position(
         session.commit()
         return saved
     if config is not None and position.status == PositionStatus.OPEN:
-        if position.sell_threshold_percent is None or position.max_holding_days is None:
+        if (
+            config.strategy_type == "radar0458_pro"
+            and position.sell_threshold_percent is not None
+        ):
+            position.sell_limit_price = (
+                position.buy_price
+                * (Decimal("1") + position.sell_threshold_percent / Decimal("100"))
+            ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        elif position.sell_threshold_percent is None or position.max_holding_days is None:
             exit_policy = build_position_exit_policy(
                 config.settings_json, position.mode, position.buy_price
             )
@@ -164,16 +172,10 @@ def update_position(
             position.sell_limit_price = exit_policy.sell_limit_price
             position.max_holding_days = exit_policy.max_holding_days
         elif request.buy_price is not None:
-            if config.strategy_type == "radar0458_pro":
-                position.sell_limit_price = (
-                    position.buy_price
-                    * (Decimal("1") + position.sell_threshold_percent / Decimal("100"))
-                ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-            else:
-                position.sell_limit_price = sell_limit_price_for(
-                    position.buy_price,
-                    position.sell_threshold_percent,
-                )
+            position.sell_limit_price = sell_limit_price_for(
+                position.buy_price,
+                position.sell_threshold_percent,
+            )
 
     fee = _estimate_fee(config, position.buy_price, position.quantity)
     position.buy_fee = fee

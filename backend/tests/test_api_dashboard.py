@@ -712,3 +712,49 @@ def test_put_strategy_config_rejects_initial_capital_change(api_client: TestClie
 
     assert response.status_code == 400
     assert "initial_capital" in response.json()["detail"]
+
+
+def test_radar_open_recomputes_sell_limit_after_pending_buy_price_edit(
+    api_client: TestClient,
+) -> None:
+    config_response = api_client.post(
+        "/api/strategy-configs",
+        json={
+            "name": "Radar Confirmed Fill",
+            "strategy_type": "radar0458_pro",
+            "symbol": "SOXL",
+            "initial_capital": "1000",
+            "fee_rate": "0",
+            "slippage_rate": "0",
+            "settings_json": {"pro_profile": "pro2"},
+        },
+    )
+    config_id = config_response.json()["id"]
+    pending = api_client.post(
+        f"/api/strategy-configs/{config_id}/positions/buy-order",
+        json={
+            "order_date": "2026-07-24",
+            "quantity": "1",
+            "limit_price": "40",
+            "mode": "safe",
+            "radar_tier": 1,
+            "radar_profile": "pro2",
+            "radar_cycle_id": "cycle-one",
+            "radar_cycle_capital": "1000",
+            "sell_threshold_percent": "1.50",
+            "sell_limit_price": "40.60",
+            "max_holding_days": 10,
+        },
+    ).json()
+
+    edited = api_client.put(
+        f"/api/positions/{pending['id']}", json={"buy_price": "40.126"}
+    )
+    assert edited.status_code == 200, edited.text
+    opened = api_client.put(
+        f"/api/positions/{pending['id']}", json={"status": "open"}
+    )
+
+    assert opened.status_code == 200, opened.text
+    assert opened.json()["buy_price"] == "40.126000"
+    assert opened.json()["sell_limit_price"] == "40.730000"
