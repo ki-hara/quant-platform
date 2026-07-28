@@ -5,6 +5,7 @@ from uuid import NAMESPACE_URL, uuid5
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.domain.enums import ModeConfirmationSource, StrategyMode
 from app.dto.trading_plan import DailyPlanDto, LocPlanDto
 from app.infrastructure.repositories.market_data import MarketPriceRepository
 from app.infrastructure.repositories.modes import ModeStateRepository
@@ -36,7 +37,6 @@ class DailyPlanService:
         if config is None:
             raise ValueError(f"Strategy config not found: {config_id}")
 
-        state = self.mode_states.get_or_create_safe(config_id)
         portfolio = self.portfolios.get_by_config(config_id)
         open_positions = self.positions.list_open(config_id)
         order_date = (
@@ -52,8 +52,9 @@ class DailyPlanService:
         )
         if config.strategy_type == "radar0458_pro":
             return self._get_radar_daily_plan(
-                config, portfolio, open_positions, order_date, latest_price, state
+                config, portfolio, open_positions, order_date, latest_price
             )
+        state = self.mode_states.get_or_create_safe(config_id)
         mode_settings = config.settings_json[state.confirmed_mode.value]
         split_count = int(mode_settings["split_count"])
         buy_threshold = Decimal(str(mode_settings["buy_threshold_percent"]))
@@ -125,7 +126,7 @@ class DailyPlanService:
         )
 
     def _get_radar_daily_plan(
-        self, config, portfolio, positions, order_date, latest_price, state
+        self, config, portfolio, positions, order_date, latest_price
     ) -> DailyPlanDto:
         required = (
             "radar_tier",
@@ -202,8 +203,8 @@ class DailyPlanService:
             plan_date=order_date,
             market_data_as_of=latest_price.date if latest_price is not None else None,
             symbol=config.symbol,
-            confirmed_mode=state.confirmed_mode,
-            confirmed_source=state.confirmed_source,
+            confirmed_mode=StrategyMode.SAFE,
+            confirmed_source=ModeConfirmationSource.MANUAL,
             recommended_mode=None,
             differs=False,
             effective_week=None,

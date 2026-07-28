@@ -5,7 +5,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.domain.enums import LocOrderStatus, TradeSide, TradeSource
-from app.domain.models import LocOrder
+from app.domain.models import LocOrder, Position
 from app.infrastructure.repositories.portfolios import PositionRepository
 from app.infrastructure.repositories.strategies import StrategyConfigRepository
 from app.services.daily_plan_service import DailyPlanService
@@ -63,7 +63,7 @@ class LocOrderService:
                 plan.LOC.limit_price
                 * (Decimal("1") + preset.sell_threshold_percent / Decimal("100"))
             ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-            PositionRepository(self.session).create_pending(
+            pending_position = PositionRepository(self.session).create_pending(
                 strategy_config_id=config_id,
                 buy_date=order.order_date,
                 limit_price=order.limit_price,
@@ -77,6 +77,7 @@ class LocOrderService:
                 sell_limit_price=sell_limit,
                 max_holding_days=preset.max_holding_days,
             )
+            order.position_id = pending_position.id
         self.session.commit()
         self.session.refresh(order)
         return order
@@ -88,18 +89,7 @@ class LocOrderService:
                 raise ValueError("Only pending LOC orders can be filled.")
             radar_position = None
             if self._get_config(order.strategy_config_id).strategy_type == "radar0458_pro":
-                radar_position = next(
-                    (
-                        position
-                        for position in PositionRepository(self.session).list_open(
-                            order.strategy_config_id
-                        )
-                        if position.status.value == "pending"
-                        and position.buy_date == order.order_date
-                        and position.limit_price == order.limit_price
-                    ),
-                    None,
-                )
+                radar_position = self._linked_pending_position(order)
                 if radar_position is None:
                     raise ValueError("radar_position_snapshot_missing")
                 self.session.delete(radar_position)
@@ -137,6 +127,7 @@ class LocOrderService:
                 .values(
                     status=LocOrderStatus.FILLED,
                     trade_id=result.trade.id,
+                    position_id=result.trade.position_id,
                     memo=request.memo or order.memo,
                 )
                 .execution_options(synchronize_session=False)
@@ -158,20 +149,7 @@ class LocOrderService:
         self.session.add(order)
         config = self._get_config(order.strategy_config_id)
         if config.strategy_type == "radar0458_pro":
-            pending = next(
-                (
-                    position
-                    for position in PositionRepository(self.session).list_open(
-                        order.strategy_config_id
-                    )
-                    if position.status.value == "pending"
-                    and position.buy_date == order.order_date
-                    and position.limit_price == order.limit_price
-                ),
-                None,
-            )
-            if pending is not None:
-                self.session.delete(pending)
+            self._delete_linked_pending_position(order)
         self.session.commit()
         self.session.refresh(order)
         return order
@@ -184,11 +162,31 @@ class LocOrderService:
         )
         changed = False
         for order in self.session.scalars(stmt):
+            if order.position_id is not None:
+                self._delete_linked_pending_position(order)
             order.status = LocOrderStatus.UNFILLED
             self.session.add(order)
             changed = True
         if changed:
             self.session.commit()
+
+    def _linked_pending_position(self, order: LocOrder) -> Position | None:
+        if order.position_id is None:
+            return None
+        position = self.session.get(Position, order.position_id)
+        if (
+            position is None
+            or position.strategy_config_id != order.strategy_config_id
+            or position.status.value != "pending"
+        ):
+            return None
+        return position
+
+    def _delete_linked_pending_position(self, order: LocOrder) -> None:
+        position = self._linked_pending_position(order)
+        if position is not None:
+            self.session.delete(position)
+        order.position_id = None
 
     def _get_config(self, config_id: int):
         config = self.configs.get(config_id)

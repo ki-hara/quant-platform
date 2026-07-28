@@ -575,3 +575,14 @@ def test_daily_plan_defaults_to_the_market_timezone_for_order_and_loc_basis(monk
     assert plan.plan_date == date(2026, 7, 15)
     assert plan.loc_basis_date == date(2026, 7, 14)
     assert plan.previous_close == Decimal("100.000000")
+
+
+def test_radar_daily_plan_does_not_create_dynamic_wave_mode_state() -> None:
+    with create_session() as session:
+        config = create_radar_config(session)
+        seed_daily_prices(session, "SOXL", date(2026, 7, 24), ["50"])
+
+        plan = DailyPlanService(session).get_daily_plan(config.id, today=date(2026, 7, 27))
+
+        assert plan.strategy_type == "radar0458_pro"
+        assert ModeStateRepository(session).get(config.id) is None

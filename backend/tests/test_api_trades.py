@@ -5,7 +5,8 @@ from sqlalchemy.orm import Session
 from app.db.base import Base
 from app.db.seed import seed_default_owner
 from app.domain.enums import LocOrderStatus, StrategyMode, TradeSide
-from app.domain.models import LocOrder, MarketPrice
+from app.domain.models import LocOrder, MarketPrice, Owner
+from app.api.routes_trades import PositionUpdateDto, update_position
 from app.infrastructure.repositories.portfolios import PortfolioRepository, PositionRepository
 from app.services.dashboard_service import DashboardService
 from app.services.loc_order_service import LocOrderFillRequest, LocOrderService
@@ -159,7 +160,7 @@ def test_radar_loc_fill_propagates_cycle_metadata_and_snapshots_fill_exit_price(
             status=LocOrderStatus.PENDING,
         )
         session.add(order)
-        PositionRepository(session).create_pending(
+        pending_position = PositionRepository(session).create_pending(
             strategy_config_id=config.id,
             buy_date=order.order_date,
             limit_price=order.limit_price,
@@ -173,6 +174,21 @@ def test_radar_loc_fill_propagates_cycle_metadata_and_snapshots_fill_exit_price(
             sell_limit_price=Decimal("39.99"),
             max_holding_days=10,
         )
+        order.position_id = pending_position.id
+        PositionRepository(session).create_pending(
+            strategy_config_id=config.id,
+            buy_date=order.order_date,
+            limit_price=Decimal("38"),
+            quantity=Decimal("1"),
+            mode=order.mode,
+            radar_tier=4,
+            radar_profile="pro1",
+            radar_cycle_id="cycle-one",
+            radar_cycle_capital=Decimal("1000"),
+            sell_threshold_percent=Decimal("0.01"),
+            sell_limit_price=Decimal("38.00"),
+            max_holding_days=10,
+        )
         session.commit()
 
         LocOrderService(session).fill_order(
@@ -184,7 +200,12 @@ def test_radar_loc_fill_propagates_cycle_metadata_and_snapshots_fill_exit_price(
             ),
         )
 
-        position = PositionRepository(session).list_open(config.id)[0]
+        position = next(
+            item
+            for item in PositionRepository(session).list_open(config.id)
+            if item.status.value == "open"
+        )
+        assert order.position_id == position.id
         assert position.status.value == "open"
         assert position.radar_tier == 3
         assert position.radar_profile == "pro1"
@@ -193,3 +214,144 @@ def test_radar_loc_fill_propagates_cycle_metadata_and_snapshots_fill_exit_price(
         assert position.sell_threshold_percent == Decimal("0.01")
         assert position.sell_limit_price == Decimal("40.13")
         assert position.max_holding_days == 10
+
+
+def test_radar_ledger_rebuild_preserves_open_snapshots_and_realized_capital() -> None:
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    with Session(engine) as session:
+        seed_default_owner(session, "default")
+        config = StrategyConfigService(session).create_config(
+            "default",
+            StrategyConfigCreateRequest(
+                name="Radar",
+                strategy_type="radar0458_pro",
+                symbol="SOXL",
+                initial_capital=Decimal("1000"),
+                fee_rate=Decimal("0"),
+                slippage_rate=Decimal("0"),
+                settings_json={"pro_profile": "pro1"},
+            ),
+        )
+        service = ManualTradeService(session)
+
+        first = service.record_manual_trade(
+            ManualTradeRequest(
+                config_id=config.id,
+                side=TradeSide.BUY,
+                trade_date=date(2026, 7, 1),
+                quantity=Decimal("1"),
+                price=Decimal("40"),
+                fee=Decimal("0"),
+                radar_tier=1,
+                radar_profile="pro1",
+                radar_cycle_id="cycle-one",
+                radar_cycle_capital=Decimal("1000"),
+            )
+        )
+        first_position = PositionRepository(session).list_open(config.id)[0]
+        removable = service.record_manual_trade(
+            ManualTradeRequest(
+                config_id=config.id,
+                side=TradeSide.BUY,
+                trade_date=date(2026, 7, 2),
+                quantity=Decimal("1"),
+                price=Decimal("30"),
+                fee=Decimal("0"),
+                radar_tier=2,
+                radar_profile="pro1",
+                radar_cycle_id="cycle-one",
+                radar_cycle_capital=Decimal("1000"),
+            )
+        )
+        service.record_manual_trade(
+            ManualTradeRequest(
+                config_id=config.id,
+                side=TradeSide.BUY,
+                trade_date=date(2026, 7, 3),
+                quantity=Decimal("1"),
+                price=Decimal("20"),
+                fee=Decimal("0"),
+                radar_tier=3,
+                radar_profile="pro1",
+                radar_cycle_id="cycle-one",
+                radar_cycle_capital=Decimal("1000"),
+            )
+        )
+        service.record_manual_trade(
+            ManualTradeRequest(
+                config_id=config.id,
+                side=TradeSide.SELL,
+                trade_date=date(2026, 7, 4),
+                quantity=Decimal("1"),
+                price=Decimal("50"),
+                fee=Decimal("0"),
+                position_id=first_position.id,
+            )
+        )
+        assert first.trade.id != removable.trade.id
+
+        service.delete_trade(removable.trade.id)
+
+        open_positions = PositionRepository(session).list_open(config.id)
+        assert len(open_positions) == 1
+        position = open_positions[0]
+        assert position.radar_tier == 3
+        assert position.radar_profile == "pro1"
+        assert position.radar_cycle_id == "cycle-one"
+        assert position.radar_cycle_capital == Decimal("1000")
+        assert position.sell_threshold_percent == Decimal("0.01")
+        assert position.sell_limit_price == Decimal("20.00")
+        assert position.max_holding_days == 10
+        portfolio = PortfolioRepository(session).get_by_config(config.id)
+        assert portfolio is not None
+        assert portfolio.realized_pnl == Decimal("10")
+        assert portfolio.capital == Decimal("1010")
+
+
+def test_pending_to_open_radar_position_rounds_sell_limit_to_usd_cent() -> None:
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    with Session(engine) as session:
+        seed_default_owner(session, "default")
+        owner = session.get(Owner, "default")
+        assert owner is not None
+        config = StrategyConfigService(session).create_config(
+            "default",
+            StrategyConfigCreateRequest(
+                name="Radar",
+                strategy_type="radar0458_pro",
+                symbol="SOXL",
+                initial_capital=Decimal("1000"),
+                fee_rate=Decimal("0"),
+                slippage_rate=Decimal("0"),
+                settings_json={"pro_profile": "pro2"},
+            ),
+        )
+        position = PositionRepository(session).create_pending(
+            strategy_config_id=config.id,
+            buy_date=date(2026, 7, 24),
+            limit_price=Decimal("40"),
+            quantity=Decimal("1"),
+            mode=StrategyMode.SAFE,
+            radar_tier=1,
+            radar_profile="pro2",
+            radar_cycle_id="cycle-one",
+            radar_cycle_capital=Decimal("1000"),
+            sell_threshold_percent=Decimal("1.50"),
+            sell_limit_price=Decimal("40.60"),
+            max_holding_days=10,
+        )
+        session.commit()
+
+        updated = update_position(
+            position.id,
+            PositionUpdateDto(
+                buy_price=Decimal("40.126"),
+                status="open",
+            ),
+            session,
+            owner,
+        )
+
+        assert updated.sell_limit_price == Decimal("40.73")

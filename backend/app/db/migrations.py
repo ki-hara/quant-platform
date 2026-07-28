@@ -278,6 +278,15 @@ def _snapshot_position_exit_policies(connection: Connection) -> None:
     )
 
 
+def _link_loc_orders_to_positions(connection: Connection) -> None:
+    _add_column_if_missing(
+        connection,
+        "loc_orders",
+        "position_id",
+        "position_id INTEGER REFERENCES positions(id) ON DELETE SET NULL",
+    )
+
+
 def _add_radar_position_snapshots(connection: Connection) -> None:
     _add_column_if_missing(connection, "positions", "radar_tier", "radar_tier INTEGER")
     _add_column_if_missing(connection, "positions", "radar_profile", "radar_profile VARCHAR(16)")
@@ -295,6 +304,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     (2, "loc_orders_trade_fk_set_null", _rebuild_loc_orders_trade_foreign_key),
     (3, "snapshot_position_exit_policies", _snapshot_position_exit_policies),
     (4, "radar_position_snapshots", _add_radar_position_snapshots),
+    (5, "link_loc_orders_to_positions", _link_loc_orders_to_positions),
 )
 LATEST_SCHEMA_VERSION = MIGRATIONS[-1][0]
 

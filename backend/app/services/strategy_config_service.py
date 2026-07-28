@@ -73,7 +73,8 @@ class StrategyConfigService:
                 settings_json=request.settings_json,
             )
             self.portfolios.create_for_config(config)
-            self.mode_states.get_or_create_safe(config.id)
+            if config.strategy_type != "radar0458_pro":
+                self.mode_states.get_or_create_safe(config.id)
             self.session.commit()
             return config
         except Exception:

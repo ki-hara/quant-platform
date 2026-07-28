@@ -3,7 +3,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -164,10 +164,16 @@ def update_position(
             position.sell_limit_price = exit_policy.sell_limit_price
             position.max_holding_days = exit_policy.max_holding_days
         elif request.buy_price is not None:
-            position.sell_limit_price = sell_limit_price_for(
-                position.buy_price,
-                position.sell_threshold_percent,
-            )
+            if config.strategy_type == "radar0458_pro":
+                position.sell_limit_price = (
+                    position.buy_price
+                    * (Decimal("1") + position.sell_threshold_percent / Decimal("100"))
+                ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            else:
+                position.sell_limit_price = sell_limit_price_for(
+                    position.buy_price,
+                    position.sell_threshold_percent,
+                )
 
     fee = _estimate_fee(config, position.buy_price, position.quantity)
     position.buy_fee = fee

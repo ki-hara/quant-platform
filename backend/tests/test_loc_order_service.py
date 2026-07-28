@@ -11,12 +11,13 @@ from app.db.base import Base
 from app.db.seed import seed_default_owner
 from app.domain.enums import LocOrderStatus, StrategyMode, TradeSide, TradeSource
 from app.domain.models import LocOrder, Position, Trade
-from app.infrastructure.repositories.portfolios import PortfolioRepository
+from app.infrastructure.repositories.portfolios import PortfolioRepository, PositionRepository
 from app.services.daily_plan_service import DailyPlanService
 from app.services.loc_order_service import LocOrderFillRequest, LocOrderService
 from app.services.manual_trade_service import ManualTradeRequest, ManualTradeService
 from app.services.strategy_config_service import StrategyConfigCreateRequest, StrategyConfigService
 from app.strategy_engine.dynamic_wave import DynamicWaveStrategy
+from app.strategy_engine.radar0458_pro import Radar0458ProStrategy
 
 
 def create_session() -> Session:
@@ -141,7 +142,10 @@ def test_fill_order_rejects_a_stale_pending_order_loaded_by_another_session(tmp_
         config_id = config.id
         order_id = order.id
 
-    with Session(engine, expire_on_commit=False) as first, Session(engine, expire_on_commit=False) as stale:
+    with (
+        Session(engine, expire_on_commit=False) as first,
+        Session(engine, expire_on_commit=False) as stale,
+    ):
         stale_order = stale.get(LocOrder, order_id)
         assert stale_order is not None
         assert stale_order.status == LocOrderStatus.PENDING
@@ -180,7 +184,9 @@ def test_create_from_daily_plan_rejects_a_blocked_buy_plan() -> None:
     with create_session() as session:
         config = create_config(session)
         blocked_plan = SimpleNamespace(
-            LOC=SimpleNamespace(quantity=1, blocking_reason="split_limit_reached", limit_price=Decimal("100")),
+            LOC=SimpleNamespace(
+                quantity=1, blocking_reason="split_limit_reached", limit_price=Decimal("100")
+            ),
             confirmed_mode=StrategyMode.SAFE,
         )
 
@@ -189,3 +195,146 @@ def test_create_from_daily_plan_rejects_a_blocked_buy_plan() -> None:
                 LocOrderService(session).create_from_daily_plan(config.id)
 
         assert session.scalars(select(LocOrder)).all() == []
+
+
+def test_expiring_radar_order_removes_only_its_linked_pending_position() -> None:
+    with create_session() as session:
+        config = StrategyConfigService(session).create_config(
+            "default",
+            StrategyConfigCreateRequest(
+                name="Radar LOC",
+                strategy_type="radar0458_pro",
+                symbol="SOXL",
+                initial_capital=Decimal("1000"),
+                fee_rate=Decimal("0"),
+                slippage_rate=Decimal("0"),
+                settings_json=Radar0458ProStrategy.default_settings(),
+            ),
+        )
+        positions = PositionRepository(session)
+        linked = positions.create_pending(
+            strategy_config_id=config.id,
+            buy_date=date(2026, 7, 10),
+            limit_price=Decimal("40"),
+            quantity=Decimal("2"),
+            mode=StrategyMode.SAFE,
+            radar_tier=1,
+            radar_profile="pro1",
+            radar_cycle_id="cycle-one",
+            radar_cycle_capital=Decimal("1000"),
+            sell_threshold_percent=Decimal("0.01"),
+            sell_limit_price=Decimal("40.00"),
+            max_holding_days=10,
+        )
+        unrelated = positions.create_pending(
+            strategy_config_id=config.id,
+            buy_date=date(2026, 7, 10),
+            limit_price=Decimal("40"),
+            quantity=Decimal("2"),
+            mode=StrategyMode.SAFE,
+            radar_tier=2,
+            radar_profile="pro1",
+            radar_cycle_id="cycle-one",
+            radar_cycle_capital=Decimal("1000"),
+            sell_threshold_percent=Decimal("0.01"),
+            sell_limit_price=Decimal("40.00"),
+            max_holding_days=10,
+        )
+        order = LocOrder(
+            strategy_config_id=config.id,
+            position_id=linked.id,
+            order_date=date(2026, 7, 10),
+            symbol="SOXL",
+            limit_price=Decimal("40"),
+            recommended_quantity=Decimal("2"),
+            mode=StrategyMode.SAFE,
+            status=LocOrderStatus.PENDING,
+        )
+        session.add(order)
+        session.commit()
+
+        LocOrderService(session)._expire_old_pending(config.id, date(2026, 7, 11))
+
+        session.refresh(order)
+        assert order.status == LocOrderStatus.UNFILLED
+        assert session.get(Position, linked.id) is None
+        assert session.get(Position, unrelated.id) is not None
+
+
+def test_radar_ledger_rebuild_relinks_preserved_pending_loc_position() -> None:
+    with create_session() as session:
+        config = StrategyConfigService(session).create_config(
+            "default",
+            StrategyConfigCreateRequest(
+                name="Radar LOC",
+                strategy_type="radar0458_pro",
+                symbol="SOXL",
+                initial_capital=Decimal("1000"),
+                fee_rate=Decimal("0"),
+                slippage_rate=Decimal("0"),
+                settings_json=Radar0458ProStrategy.default_settings(),
+            ),
+        )
+        buy = ManualTradeService(session).record_manual_trade(
+            ManualTradeRequest(
+                config_id=config.id,
+                side=TradeSide.BUY,
+                trade_date=date(2026, 7, 9),
+                quantity=Decimal("1"),
+                price=Decimal("30"),
+                fee=Decimal("0"),
+                radar_tier=1,
+                radar_profile="pro1",
+                radar_cycle_id="cycle-one",
+                radar_cycle_capital=Decimal("1000"),
+            )
+        )
+        pending = PositionRepository(session).create_pending(
+            strategy_config_id=config.id,
+            buy_date=date(2026, 7, 10),
+            limit_price=Decimal("40"),
+            quantity=Decimal("2"),
+            mode=StrategyMode.SAFE,
+            radar_tier=2,
+            radar_profile="pro1",
+            radar_cycle_id="cycle-one",
+            radar_cycle_capital=Decimal("1000"),
+            sell_threshold_percent=Decimal("0.01"),
+            sell_limit_price=Decimal("40.00"),
+            max_holding_days=10,
+        )
+        order = LocOrder(
+            strategy_config_id=config.id,
+            position_id=pending.id,
+            order_date=pending.buy_date,
+            symbol="SOXL",
+            limit_price=pending.limit_price,
+            recommended_quantity=pending.quantity,
+            mode=pending.mode,
+            status=LocOrderStatus.PENDING,
+        )
+        session.add(order)
+        other_config = create_config(session)
+        PositionRepository(session).create_pending(
+            strategy_config_id=other_config.id,
+            buy_date=date(2026, 7, 10),
+            limit_price=Decimal("50"),
+            quantity=Decimal("1"),
+            mode=StrategyMode.SAFE,
+        )
+        session.commit()
+        old_position_id = pending.id
+
+        ManualTradeService(session).delete_trade(buy.trade.id)
+
+        session.refresh(order)
+        assert order.position_id is not None
+        assert order.position_id != old_position_id
+        rebuilt = session.get(Position, order.position_id)
+        assert rebuilt is not None
+        assert rebuilt.status.value == "pending"
+        assert rebuilt.radar_tier == 2
+        assert rebuilt.radar_profile == "pro1"
+        assert rebuilt.radar_cycle_id == "cycle-one"
+        assert rebuilt.radar_cycle_capital == Decimal("1000")
+        assert rebuilt.sell_limit_price == Decimal("40.00")

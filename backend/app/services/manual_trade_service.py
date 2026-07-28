@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.core.errors import NotFoundError, ValidationAppError
@@ -189,7 +189,7 @@ class ManualTradeService:
             sell_threshold_percent = exit_policy.sell_threshold_percent
             sell_limit_price = exit_policy.sell_limit_price
             max_holding_days = exit_policy.max_holding_days
-        self.positions.create_open(
+        position = self.positions.create_open(
             strategy_config_id=request.config_id,
             buy_date=request.trade_date,
             buy_price=request.price,
@@ -219,6 +219,7 @@ class ManualTradeService:
             sell_reason=None,
             source=request.source,
             limit_price=request.limit_price,
+            position_id=position.id,
         )
         return ManualTradeResult(trade=trade, cash=portfolio.cash, realized_pnl=Decimal("0"))
 
@@ -235,14 +236,29 @@ class ManualTradeService:
         return None
 
     def _rebuild_live_ledger(self, config: StrategyConfig, portfolio: LivePortfolio) -> None:
-        pending_positions = [
-            {
+        existing_positions = self.positions.list_by_strategy_config(config.id)
+        snapshots = {
+            position.id: {
+                "position_id": position.id,
                 "buy_date": position.buy_date,
-                "limit_price": position.limit_price or position.buy_price,
+                "buy_price": position.buy_price,
+                "buy_fee": position.buy_fee,
+                "limit_price": position.limit_price,
                 "quantity": position.quantity,
                 "mode": position.mode,
+                "sell_threshold_percent": position.sell_threshold_percent,
+                "sell_limit_price": position.sell_limit_price,
+                "max_holding_days": position.max_holding_days,
+                "radar_tier": position.radar_tier,
+                "radar_profile": position.radar_profile,
+                "radar_cycle_id": position.radar_cycle_id,
+                "radar_cycle_capital": position.radar_cycle_capital,
             }
-            for position in self.positions.list_by_strategy_config(config.id)
+            for position in existing_positions
+        }
+        pending_positions = [
+            snapshots[position.id]
+            for position in existing_positions
             if position.status == PositionStatus.PENDING
         ]
         self.positions.delete_by_strategy_config(config.id)
@@ -254,15 +270,27 @@ class ManualTradeService:
         open_positions: list[Position] = []
         for trade in self.trades.list_by_strategy_config(config.id):
             if trade.side == TradeSide.BUY:
+                snapshot = snapshots.get(trade.position_id)
                 position = self.positions.create_open(
                     strategy_config_id=config.id,
                     buy_date=trade.date,
                     buy_price=trade.price,
                     quantity=trade.quantity,
-                    mode=StrategyMode.SAFE,
+                    mode=snapshot["mode"] if snapshot else StrategyMode.SAFE,
                     buy_fee=trade.fee,
                     limit_price=trade.limit_price,
+                    sell_threshold_percent=(
+                        snapshot["sell_threshold_percent"] if snapshot else None
+                    ),
+                    sell_limit_price=snapshot["sell_limit_price"] if snapshot else None,
+                    max_holding_days=snapshot["max_holding_days"] if snapshot else None,
+                    radar_tier=snapshot["radar_tier"] if snapshot else None,
+                    radar_profile=snapshot["radar_profile"] if snapshot else None,
+                    radar_cycle_id=snapshot["radar_cycle_id"] if snapshot else None,
+                    radar_cycle_capital=snapshot["radar_cycle_capital"] if snapshot else None,
                 )
+                trade.position_id = position.id
+                self.session.add(trade)
                 open_positions.append(position)
                 portfolio.cash -= trade.price * trade.quantity + trade.fee
                 portfolio.cumulative_fees += trade.fee
@@ -271,15 +299,32 @@ class ManualTradeService:
                 trade.realized_pnl = realized_pnl
                 portfolio.cash += trade.price * trade.quantity - trade.fee
                 portfolio.realized_pnl += realized_pnl
+                if config.strategy_type == "radar0458_pro":
+                    portfolio.capital = (portfolio.capital + realized_pnl).quantize(MONEY_QUANT)
                 portfolio.cumulative_fees += trade.fee
                 self.session.add(trade)
         for pending in pending_positions:
-            self.positions.create_pending(
+            rebuilt_pending = self.positions.create_pending(
                 strategy_config_id=config.id,
                 buy_date=pending["buy_date"],
-                limit_price=pending["limit_price"],
+                limit_price=pending["limit_price"] or pending["buy_price"],
                 quantity=pending["quantity"],
                 mode=pending["mode"],
+                radar_tier=pending["radar_tier"],
+                radar_profile=pending["radar_profile"],
+                radar_cycle_id=pending["radar_cycle_id"],
+                radar_cycle_capital=pending["radar_cycle_capital"],
+                sell_threshold_percent=pending["sell_threshold_percent"],
+                sell_limit_price=pending["sell_limit_price"],
+                max_holding_days=pending["max_holding_days"],
+            )
+            self.session.execute(
+                update(LocOrder)
+                .where(
+                    LocOrder.strategy_config_id == config.id,
+                    LocOrder.position_id == pending["position_id"],
+                )
+                .values(position_id=rebuilt_pending.id)
             )
         self.portfolios.save(portfolio)
 

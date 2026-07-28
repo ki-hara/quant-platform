@@ -55,6 +55,7 @@ def test_legacy_database_receives_all_required_tables_and_columns() -> None:
     assert "strategy_config_snapshots" in schema.get_table_names()
     assert "portfolio_adjustments" in schema.get_table_names()
     assert "loc_orders" in schema.get_table_names()
+    assert "position_id" in {column["name"] for column in schema.get_columns("loc_orders")}
     assert "archived_at" in {column["name"] for column in schema.get_columns("strategy_configs")}
     assert {"mode", "mode_rule_code"} <= {
         column["name"] for column in schema.get_columns("backtest_daily_snapshots")
