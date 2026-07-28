@@ -77,9 +77,15 @@ def test_legacy_database_receives_all_required_tables_and_columns() -> None:
     assert {"limit_price", "position_id", "entry_date", "entry_price"} <= {
         column["name"] for column in schema.get_columns("trades")
     }
-    assert {"holding_days", "open_position_count", "cash_after", "capital_after"} <= {
-        column["name"] for column in schema.get_columns("backtest_trades")
-    }
+    assert {
+        "holding_days",
+        "open_position_count",
+        "cash_after",
+        "capital_after",
+        "radar_tier",
+        "radar_profile",
+        "radar_cycle_capital",
+    } <= {column["name"] for column in schema.get_columns("backtest_trades")}
     assert {"pin_hash", "is_active", "is_admin", "created_at"} <= {
         column["name"] for column in schema.get_columns("owners")
     }

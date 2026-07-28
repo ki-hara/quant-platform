@@ -47,7 +47,11 @@ def run_radar_backtest(
     trades: list[SimulatedTrade] = []
     snapshots: list[DailySnapshot] = []
     configured_profile = str(settings.get("pro_profile", "pro1"))
+    profile_schedule = settings.get("pro_profile_schedule", {})
     for index, price in enumerate(prices):
+        scheduled_profile = profile_schedule.get(price.date.isoformat())
+        if scheduled_profile is not None:
+            configured_profile = str(scheduled_profile)
         previous_close = prices[index - 1].close if index else price.close
         if index:
             active = positions[0] if positions else None

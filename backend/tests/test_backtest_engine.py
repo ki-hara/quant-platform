@@ -630,3 +630,42 @@ def test_radar_applies_one_hundred_percent_realized_pnl_to_capital() -> None:
     assert sell.realized_pnl == Decimal("5.000000")
     assert sell.capital_after == Decimal("10005.000000")
     assert result.daily_snapshots[-1].capital == Decimal("10005.000000")
+
+
+def _profile_change_prices() -> list[str]:
+    return ["100", "90"] + ["90"] * 9 + ["80", "90", "80"]
+
+
+def test_radar_same_day_final_sell_and_preplanned_buy_keep_active_cycle() -> None:
+    result = _run_radar(
+        _profile_change_prices(),
+        {
+            "pro_profile": "pro1",
+            "pro_profile_schedule": {"2026-01-12": "pro2"},
+        },
+    )
+
+    final_sell_day = [trade for trade in result.trades if trade.date == date(2026, 1, 12)]
+    assert [(trade.side, trade.radar_tier, trade.radar_profile) for trade in final_sell_day] == [
+        ("SELL", 1, "pro1"),
+        ("BUY", 2, "pro1"),
+    ]
+    assert final_sell_day[1].radar_cycle_capital == Decimal("10000")
+
+
+def test_radar_profile_change_applies_after_a_truly_empty_end_of_day() -> None:
+    result = _run_radar(
+        _profile_change_prices(),
+        {
+            "pro_profile": "pro1",
+            "pro_profile_schedule": {"2026-01-12": "pro2"},
+        },
+    )
+
+    buys = [trade for trade in result.trades if trade.side == "BUY"]
+    assert [(trade.date, trade.radar_tier, trade.radar_profile) for trade in buys] == [
+        (date(2026, 1, 2), 1, "pro1"),
+        (date(2026, 1, 12), 2, "pro1"),
+        (date(2026, 1, 14), 1, "pro2"),
+    ]
+    assert buys[-1].radar_cycle_capital == Decimal("10060")

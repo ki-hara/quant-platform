@@ -12,7 +12,9 @@ class BacktestCreateDto(BaseModel):
     start_date: date
     end_date: date
     mode_policy: BacktestModePolicy = BacktestModePolicy.FIXED_SAFE
-    position_sizing_policy: BacktestPositionSizingPolicy = BacktestPositionSizingPolicy.FIXED_QUANTITY
+    position_sizing_policy: BacktestPositionSizingPolicy = (
+        BacktestPositionSizingPolicy.FIXED_QUANTITY
+    )
 
 
 class BacktestRunResponseDto(BaseModel):
@@ -31,5 +33,29 @@ class BacktestRunResponseDto(BaseModel):
     max_drawdown: Decimal
     win_rate: Decimal
     total_trades: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class BacktestTradeResponseDto(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    backtest_run_id: int
+    date: date
+    side: str
+    quantity: Decimal
+    price: Decimal
+    fee: Decimal
+    realized_pnl: Decimal
+    sell_reason: str | None
+    holding_days: int | None
+    open_position_count: int | None
+    cash_after: Decimal | None
+    capital_after: Decimal | None
+    radar_tier: int | None
+    radar_profile: str | None
+    radar_cycle_capital: Decimal | None
+    source: str
     created_at: datetime
     updated_at: datetime

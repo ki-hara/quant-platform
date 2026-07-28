@@ -385,6 +385,9 @@ class BacktestTrade(Base):
     open_position_count: Mapped[int | None] = mapped_column()
     cash_after: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))
     capital_after: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))
+    radar_tier: Mapped[int | None] = mapped_column()
+    radar_profile: Mapped[str | None] = mapped_column(String(16))
+    radar_cycle_capital: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))
     source: Mapped[TradeSource] = mapped_column(enum_column(TradeSource), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(

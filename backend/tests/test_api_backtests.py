@@ -243,3 +243,38 @@ def test_radar_backtest_skips_weekly_rsi_fetch_and_snapshots_profile(
     assert [call[0] for call in api_client.app.state.fake_market_data_service.calls] == ["SOXL"]
     snapshot = run.json()["strategy_config_snapshot_json"]
     assert snapshot["pro_profile"] == "pro2"
+
+
+def test_radar_backtest_persists_and_exports_trade_snapshots(api_client: TestClient) -> None:
+    config_response = api_client.post(
+        "/api/strategy-configs",
+        json={
+            "name": "Radar Persistence",
+            "strategy_type": "radar0458_pro",
+            "symbol": "SOXL",
+            "initial_capital": "10000",
+            "fee_rate": "0",
+            "slippage_rate": "0",
+            "settings_json": {"pro_profile": "pro1"},
+        },
+    )
+    run = api_client.post(
+        "/api/backtests",
+        json={
+            "config_id": config_response.json()["id"],
+            "start_date": "2026-01-01",
+            "end_date": "2026-01-06",
+        },
+    ).json()
+
+    trades_response = api_client.get(f"/api/backtests/{run['id']}/trades")
+    assert trades_response.status_code == 200
+    trades = trades_response.json()
+    assert trades
+    assert trades[0]["radar_tier"] == 1
+    assert trades[0]["radar_profile"] == "pro1"
+    assert trades[0]["radar_cycle_capital"] == "10000.000000"
+
+    csv_response = api_client.get(f"/api/backtests/{run['id']}/trades.csv")
+    assert "radar_tier,radar_profile,radar_cycle_capital" in csv_response.text
+    assert ",1,pro1,10000.000000" in csv_response.text

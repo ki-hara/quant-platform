@@ -93,6 +93,9 @@ class BacktestRepository:
                 open_position_count=trade.open_position_count,
                 cash_after=trade.cash_after,
                 capital_after=trade.capital_after,
+                radar_tier=trade.radar_tier,
+                radar_profile=trade.radar_profile,
+                radar_cycle_capital=trade.radar_cycle_capital,
                 source=TradeSource.SIGNAL_EXECUTION,
             )
             for trade in trades

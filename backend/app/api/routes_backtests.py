@@ -10,7 +10,11 @@ from app.api.deps import CurrentOwnerDep, ensure_backtest_owner, ensure_config_o
 from app.core.config import settings
 from app.core.errors import AppError, MarketDataError
 from app.db.session import get_session
-from app.dto.backtests import BacktestCreateDto, BacktestRunResponseDto
+from app.dto.backtests import (
+    BacktestCreateDto,
+    BacktestRunResponseDto,
+    BacktestTradeResponseDto,
+)
 from app.infrastructure.market_data.cached_provider import CachedMarketDataProvider
 from app.infrastructure.market_data.finance_data_reader_provider import FinanceDataReaderProvider
 from app.infrastructure.repositories.backtests import BacktestRepository
@@ -79,7 +83,9 @@ def get_backtest(run_id: int, session: SessionDep, owner: CurrentOwnerDep) -> ob
 
 
 @router.get("/{run_id}/daily.csv")
-def download_daily_csv(run_id: int, session: SessionDep, owner: CurrentOwnerDep) -> StreamingResponse:
+def download_daily_csv(
+    run_id: int, session: SessionDep, owner: CurrentOwnerDep
+) -> StreamingResponse:
     run = ensure_backtest_owner(run_id, owner, session)
     output = StringIO()
     writer = csv.writer(output)
@@ -113,8 +119,16 @@ def download_daily_csv(run_id: int, session: SessionDep, owner: CurrentOwnerDep)
     return _csv_response(output, f"backtest-{run_id}-daily.csv")
 
 
+@router.get("/{run_id}/trades", response_model=list[BacktestTradeResponseDto])
+def get_backtest_trades(run_id: int, session: SessionDep, owner: CurrentOwnerDep) -> object:
+    run = ensure_backtest_owner(run_id, owner, session)
+    return sorted(run.trades, key=lambda item: (item.date, item.id))
+
+
 @router.get("/{run_id}/trades.csv")
-def download_trades_csv(run_id: int, session: SessionDep, owner: CurrentOwnerDep) -> StreamingResponse:
+def download_trades_csv(
+    run_id: int, session: SessionDep, owner: CurrentOwnerDep
+) -> StreamingResponse:
     run = ensure_backtest_owner(run_id, owner, session)
     output = StringIO()
     writer = csv.writer(output)
@@ -132,6 +146,9 @@ def download_trades_csv(run_id: int, session: SessionDep, owner: CurrentOwnerDep
             "open_position_count",
             "cash_after",
             "capital_after",
+            "radar_tier",
+            "radar_profile",
+            "radar_cycle_capital",
         ]
     )
     for trade in sorted(run.trades, key=lambda item: (item.date, item.id)):
@@ -149,13 +166,18 @@ def download_trades_csv(run_id: int, session: SessionDep, owner: CurrentOwnerDep
                 trade.open_position_count if trade.open_position_count is not None else "",
                 trade.cash_after if trade.cash_after is not None else "",
                 trade.capital_after if trade.capital_after is not None else "",
+                trade.radar_tier if trade.radar_tier is not None else "",
+                trade.radar_profile or "",
+                trade.radar_cycle_capital if trade.radar_cycle_capital is not None else "",
             ]
         )
     return _csv_response(output, f"backtest-{run_id}-trades.csv")
 
 
 @router.get("/{run_id}/summary.csv")
-def download_summary_csv(run_id: int, session: SessionDep, owner: CurrentOwnerDep) -> StreamingResponse:
+def download_summary_csv(
+    run_id: int, session: SessionDep, owner: CurrentOwnerDep
+) -> StreamingResponse:
     run = ensure_backtest_owner(run_id, owner, session)
     output = StringIO()
     writer = csv.writer(output)

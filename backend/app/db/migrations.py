@@ -361,6 +361,22 @@ def _add_radar_position_snapshots(connection: Connection) -> None:
     )
 
 
+def _add_radar_backtest_trade_snapshots(connection: Connection) -> None:
+    _add_column_if_missing(connection, "backtest_trades", "radar_tier", "radar_tier INTEGER")
+    _add_column_if_missing(
+        connection,
+        "backtest_trades",
+        "radar_profile",
+        "radar_profile VARCHAR(16)",
+    )
+    _add_column_if_missing(
+        connection,
+        "backtest_trades",
+        "radar_cycle_capital",
+        "radar_cycle_capital NUMERIC(18, 6)",
+    )
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     (1, "legacy_schema", _upgrade_legacy_schema),
     (2, "loc_orders_trade_fk_set_null", _rebuild_loc_orders_trade_foreign_key),
@@ -368,6 +384,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     (4, "radar_position_snapshots", _add_radar_position_snapshots),
     (5, "link_loc_orders_to_positions", _link_loc_orders_to_positions),
     (6, "backfill_legacy_radar_loc_positions", _backfill_legacy_radar_loc_order_positions),
+    (7, "radar_backtest_trade_snapshots", _add_radar_backtest_trade_snapshots),
 )
 LATEST_SCHEMA_VERSION = MIGRATIONS[-1][0]
 
