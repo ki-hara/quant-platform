@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.db.base import Base
 from app.db.seed import seed_default_owner
+from app.db.session import create_database_engine
 from app.domain.enums import LocOrderStatus, StrategyMode, TradeSide, TradeSource
 from app.domain.models import LocOrder, Position, Trade
 from app.infrastructure.repositories.portfolios import PortfolioRepository, PositionRepository
@@ -262,7 +263,10 @@ def test_expiring_radar_order_removes_only_its_linked_pending_position() -> None
 
 
 def test_radar_ledger_rebuild_relinks_preserved_pending_loc_position() -> None:
-    with create_session() as session:
+    engine = create_database_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    with Session(engine) as session:
+        seed_default_owner(session, "default")
         config = StrategyConfigService(session).create_config(
             "default",
             StrategyConfigCreateRequest(
@@ -387,7 +391,7 @@ def test_expiring_legacy_radar_order_removes_uniquely_matching_pending_position(
         assert order.status == LocOrderStatus.UNFILLED
 
 
-def test_expiring_legacy_radar_order_keeps_ambiguous_pending_positions() -> None:
+def test_expiring_legacy_radar_order_removes_all_exact_pending_matches_only() -> None:
     with create_session() as session:
         config = StrategyConfigService(session).create_config(
             "default",
@@ -419,6 +423,21 @@ def test_expiring_legacy_radar_order_keeps_ambiguous_pending_positions() -> None
             )
             for tier in (1, 2)
         ]
+        open_position = positions.create_open(
+            strategy_config_id=config.id,
+            buy_date=date(2026, 7, 10),
+            buy_price=Decimal("40"),
+            quantity=Decimal("2"),
+            mode=StrategyMode.SAFE,
+            limit_price=Decimal("40"),
+            radar_tier=3,
+            radar_profile="pro1",
+            radar_cycle_id="cycle-one",
+            radar_cycle_capital=Decimal("1000"),
+            sell_threshold_percent=Decimal("0.01"),
+            sell_limit_price=Decimal("40.00"),
+            max_holding_days=10,
+        )
         order = LocOrder(
             strategy_config_id=config.id,
             position_id=None,
@@ -434,5 +453,6 @@ def test_expiring_legacy_radar_order_keeps_ambiguous_pending_positions() -> None
 
         LocOrderService(session)._expire_old_pending(config.id, date(2026, 7, 11))
 
-        assert all(session.get(Position, position.id) is not None for position in matches)
+        assert all(session.get(Position, position.id) is None for position in matches)
+        assert session.get(Position, open_position.id) is not None
         assert order.status == LocOrderStatus.UNFILLED

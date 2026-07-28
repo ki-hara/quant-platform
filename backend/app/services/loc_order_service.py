@@ -166,8 +166,7 @@ class LocOrderService:
             if order.position_id is not None:
                 self._delete_linked_pending_position(order)
             elif config.strategy_type == "radar0458_pro":
-                legacy_position = self._uniquely_matching_legacy_pending_position(order)
-                if legacy_position is not None:
+                for legacy_position in self._matching_legacy_pending_positions(order):
                     self.session.delete(legacy_position)
             order.status = LocOrderStatus.UNFILLED
             self.session.add(order)
@@ -175,7 +174,7 @@ class LocOrderService:
         if changed:
             self.session.commit()
 
-    def _uniquely_matching_legacy_pending_position(self, order: LocOrder) -> Position | None:
+    def _matching_legacy_pending_positions(self, order: LocOrder) -> list[Position]:
         stmt = select(Position).where(
             Position.strategy_config_id == order.strategy_config_id,
             Position.status == PositionStatus.PENDING,
@@ -185,8 +184,7 @@ class LocOrderService:
             Position.mode == order.mode,
             Position.radar_profile.is_not(None),
         )
-        matches = list(self.session.scalars(stmt))
-        return matches[0] if len(matches) == 1 else None
+        return list(self.session.scalars(stmt))
 
     def _linked_pending_position(self, order: LocOrder) -> Position | None:
         if order.position_id is None:

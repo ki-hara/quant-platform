@@ -256,6 +256,16 @@ class ManualTradeService:
             }
             for position in existing_positions
         }
+        loc_orders = list(
+            self.session.scalars(select(LocOrder).where(LocOrder.strategy_config_id == config.id))
+        )
+        loc_order_position_ids = {
+            order.id: order.position_id for order in loc_orders if order.position_id is not None
+        }
+        for order in loc_orders:
+            if order.position_id is not None:
+                order.position_id = None
+                self.session.add(order)
         trades = self.trades.list_by_strategy_config(config.id)
         trade_position_ids = {trade.id: trade.position_id for trade in trades}
         for trade in trades:
@@ -331,14 +341,15 @@ class ManualTradeService:
                 sell_limit_price=pending["sell_limit_price"],
                 max_holding_days=pending["max_holding_days"],
             )
-            self.session.execute(
-                update(LocOrder)
-                .where(
-                    LocOrder.strategy_config_id == config.id,
-                    LocOrder.position_id == pending["position_id"],
+            rebuilt_positions[pending["position_id"]] = rebuilt_pending
+        for order_id, old_position_id in loc_order_position_ids.items():
+            rebuilt_position = rebuilt_positions.get(old_position_id)
+            if rebuilt_position is not None:
+                self.session.execute(
+                    update(LocOrder)
+                    .where(LocOrder.id == order_id)
+                    .values(position_id=rebuilt_position.id)
                 )
-                .values(position_id=rebuilt_pending.id)
-            )
         self.portfolios.save(portfolio)
 
     def _replay_portfolio_adjustments(self, config_id: int, portfolio: LivePortfolio) -> None:
