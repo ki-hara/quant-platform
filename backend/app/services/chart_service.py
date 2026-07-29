@@ -1,5 +1,5 @@
 from datetime import date, datetime, time, timedelta
-from decimal import Decimal
+from decimal import ROUND_DOWN, Decimal
 
 from sqlalchemy.orm import Session
 
@@ -25,6 +25,7 @@ from app.infrastructure.repositories.trades import TradeRepository
 from app.services.market_session_service import latest_confirmed_market_date
 from app.services.trend_filter_service import trend_filter_symbols
 from app.strategy_engine.loc import calculate_loc_plan
+from app.strategy_engine.radar0458_pro import get_radar_preset
 from app.strategy_engine.weekly_rsi import (
     DailyClose,
     aggregate_daily_closes_to_weekly_closes,
@@ -81,30 +82,55 @@ class ChartService:
             )
             for price in prices
         ]
-        loc = self._loc_line(config_id, config.symbol, config.settings_json, as_of)
+        loc = self._loc_line(config, as_of)
         return ChartResponseDto(
             candles=candles,
             LOC=loc,
             trade_markers=self._trade_markers(config_id, start_date, as_of),
-            rsi=self._rsi_series(config.settings_json, start_date, as_of),
-            mode_markers=self._mode_markers(config_id, start_date, as_of),
-            cci=self._cci_series(config.symbol, config.settings_json, start_date, as_of),
+            rsi=(
+                RsiSeriesDto(guides=[], points=[])
+                if config.strategy_type == "radar0458_pro"
+                else self._rsi_series(config.settings_json, start_date, as_of)
+            ),
+            mode_markers=(
+                []
+                if config.strategy_type == "radar0458_pro"
+                else self._mode_markers(config_id, start_date, as_of)
+            ),
+            cci=(
+                CciSeriesDto(guides=[], series=[])
+                if config.strategy_type == "radar0458_pro"
+                else self._cci_series(config.symbol, config.settings_json, start_date, as_of)
+            ),
         )
 
-    def _loc_line(self, config_id: int, symbol: str, config_settings: dict, today: date) -> ChartLineDto:
-        state = self.mode_states.get_or_create_safe(config_id)
+    def _loc_line(self, config, today: date) -> ChartLineDto:
         basis_date = latest_confirmed_market_date(
-            symbol,
+            config.symbol,
             datetime.combine(today, time(23, 59)).astimezone(),
         )
         latest_price = self.market_prices.latest_price_on_or_before(
             settings.market_data_provider,
-            symbol,
+            config.symbol,
             basis_date,
         )
         if latest_price is None:
             return ChartLineDto(value=Decimal("0.000000"), as_of=None)
-        mode_settings = config_settings[state.confirmed_mode.value]
+        if config.strategy_type == "radar0458_pro":
+            positions = self.positions.list_open(config.id)
+            profile = next(
+                (position.radar_profile for position in positions if position.radar_profile),
+                config.settings_json["pro_profile"],
+            )
+            preset = get_radar_preset(profile)
+            threshold = Decimal("1") + preset.buy_threshold_percent / Decimal("100")
+            limit_price = (latest_price.close * threshold).quantize(
+                Decimal("0.01"), rounding=ROUND_DOWN
+            )
+            return ChartLineDto(value=limit_price, as_of=latest_price.date)
+
+        state = self.mode_states.get_or_create_safe(config.id)
+        mode_settings = config.settings_json[state.confirmed_mode.value]
         plan = calculate_loc_plan(
             previous_close=latest_price.close,
             capital=Decimal("1"),
@@ -112,7 +138,7 @@ class ChartService:
             fee_rate=Decimal("0"),
             split_count=int(mode_settings["split_count"]),
             buy_threshold_percent=Decimal(str(mode_settings["buy_threshold_percent"])),
-            open_position_count=len(self.positions.list_open(config_id)),
+            open_position_count=len(self.positions.list_open(config.id)),
         )
         return ChartLineDto(value=plan.limit_price, as_of=latest_price.date)
 

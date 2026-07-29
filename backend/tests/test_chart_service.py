@@ -303,6 +303,35 @@ def test_chart_range_keys_map_to_expected_day_windows(range_key: str, expected_d
         assert chart.candles[0].date == date(2026, 6, 20) - timedelta(days=expected_days - 1)
 
 
+def test_radar_chart_uses_profile_loc_without_dynamic_wave_indicators() -> None:
+    with create_session() as session:
+        config = StrategyConfigService(session).create_config(
+            "default",
+            StrategyConfigCreateRequest(
+                name="Radar",
+                strategy_type="radar0458_pro",
+                symbol="SOXL",
+                initial_capital=Decimal("3000"),
+                fee_rate=Decimal("0"),
+                slippage_rate=Decimal("0"),
+                settings_json={"pro_profile": "pro2"},
+            ),
+        )
+        seed_prices(session, "SOXL", date(2026, 7, 24), 1)
+
+        chart = ChartService(session).get_chart(
+            config.id, range_key="1m", today=date(2026, 7, 27)
+        )
+
+        assert chart.LOC.value == Decimal("99.99")
+        assert chart.LOC.as_of == date(2026, 7, 24)
+        assert chart.rsi.guides == []
+        assert chart.rsi.points == []
+        assert chart.mode_markers == []
+        assert chart.cci.guides == []
+        assert chart.cci.series == []
+
+
 def test_chart_missing_config_raises_value_error() -> None:
     with create_session() as session:
         with pytest.raises(ValueError, match="Strategy config not found"):
