@@ -178,6 +178,11 @@ export function TradesPage() {
       );
       setPositionHistory(positionHistoryRows);
       setPlan(dailyPlan);
+      if (dailyPlan.strategy_type === "radar0458_pro") {
+        setManualForm((current) =>
+          current.side === "buy" ? { ...current, trade_date: dailyPlan.plan_date } : current,
+        );
+      }
       setDashboard(dashboardData);
     } catch (caught) {
       if (rowRequests.isCurrent(controller) && !isAbortError(caught)) {
