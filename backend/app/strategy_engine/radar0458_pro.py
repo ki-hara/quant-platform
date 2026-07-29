@@ -147,13 +147,7 @@ class Radar0458ProStrategy(Strategy):
     def get_settings_schema(self) -> dict:
         return {
             "type": "object",
-            "fields": {
-                "pro_profile": {
-                    "type": "string",
-                    "enum": list(VALID_RADAR_PROFILES),
-                    "default": "pro1",
-                }
-            },
+            "fields": self.default_settings(),
         }
 
     def get_mode(self, context):
