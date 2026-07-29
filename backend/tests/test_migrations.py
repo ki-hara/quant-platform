@@ -238,3 +238,39 @@ def test_legacy_radar_loc_position_backfill_links_only_unique_matches() -> None:
 
         rows = connection.execute(text("SELECT id, position_id FROM loc_orders ORDER BY id")).all()
     assert rows == [(100, 10), (200, None)]
+
+
+def test_active_radar_tier_migration_creates_partial_unique_index() -> None:
+    migrations = migration_module()
+    engine = create_engine("sqlite:///:memory:")
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "CREATE TABLE positions ("
+                "id INTEGER PRIMARY KEY, strategy_config_id INTEGER NOT NULL, "
+                "radar_cycle_id VARCHAR(64), radar_tier INTEGER, status VARCHAR(10) NOT NULL)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO positions VALUES "
+                "(1, 1, 'cycle-one', 1, 'pending'), "
+                "(2, 1, 'cycle-one', 1, 'open'), "
+                "(3, 1, 'cycle-one', 1, 'closed')"
+            )
+        )
+        migrations._add_active_radar_tier_index(connection)
+        cycle_rows = connection.execute(
+            text("SELECT id, radar_cycle_id FROM positions ORDER BY id")
+        ).all()
+        index_sql = connection.scalar(
+            text(
+                "SELECT sql FROM sqlite_master "
+                "WHERE type = 'index' AND name = 'uq_positions_active_radar_tier'"
+            )
+        )
+
+    assert cycle_rows == [(1, "cycle-one"), (2, "cycle-one-recovered-2"), (3, "cycle-one")]
+    assert index_sql is not None
+    assert "WHERE radar_cycle_id IS NOT NULL" in index_sql
+    assert "status IN ('pending', 'open')" in index_sql

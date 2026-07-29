@@ -59,7 +59,12 @@ def run_radar_backtest(
             profile = active.profile if active else configured_profile
             cycle_capital = active.cycle_capital if active else capital
             plan = build_radar_buy_plan(
-                previous_close, cycle_capital, cash, {p.tier for p in positions}, profile
+                previous_close,
+                cycle_capital,
+                cash,
+                {p.tier for p in positions},
+                profile,
+                fee_rate_percent=fee_rate,
             )
             start_count = len(positions)
             remaining = []

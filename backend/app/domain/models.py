@@ -2,7 +2,18 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import Date, DateTime, Enum, ForeignKey, JSON, Numeric, String, UniqueConstraint
+from sqlalchemy import (
+    Date,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Index,
+    JSON,
+    Numeric,
+    String,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -233,6 +244,19 @@ class PortfolioAdjustment(Base):
 
 class Position(Base):
     __tablename__ = "positions"
+    __table_args__ = (
+        Index(
+            "uq_positions_active_radar_tier",
+            "strategy_config_id",
+            "radar_cycle_id",
+            "radar_tier",
+            unique=True,
+            sqlite_where=text(
+                "radar_cycle_id IS NOT NULL AND radar_tier IS NOT NULL "
+                "AND status IN ('pending', 'open')"
+            ),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     strategy_config_id: Mapped[int] = mapped_column(

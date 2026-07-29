@@ -197,6 +197,7 @@ export function SettingsForm({
             전략
             <select
               value={selectedStrategyType}
+              disabled={Boolean(editingConfig)}
               onChange={(event) => {
                 const strategyType = event.target.value;
                 onStrategyTypeChange(strategyType);

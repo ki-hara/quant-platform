@@ -513,6 +513,7 @@ def test_strategy_config_snapshot_preserves_live_portfolio_when_applied() -> Non
         service.update_config(
             config.id,
             StrategyConfigUpdateRequest(
+                symbol="TQQQ",
                 fee_rate=Decimal("0.002"),
                 slippage_rate=Decimal("0.001"),
                 settings_json={
@@ -531,19 +532,19 @@ def test_strategy_config_snapshot_preserves_live_portfolio_when_applied() -> Non
         assert applied.fee_rate == Decimal("0.001")
         assert applied.slippage_rate == Decimal("0")
         assert applied.settings_json["safe"]["buy_threshold_percent"] == 3
-        assert applied.symbol == "SOXL"
+        assert applied.symbol == "TQQQ"
         assert portfolio_after is not None
         assert portfolio_after.cash == Decimal("9000")
         assert portfolio_after.capital == Decimal("10000")
 
 
-def test_strategy_config_snapshot_restores_cross_strategy_identity_and_settings() -> None:
+def test_strategy_config_identity_is_immutable_and_cross_strategy_snapshot_is_rejected() -> None:
     with create_session() as session:
         service = StrategyConfigService(session)
         config = service.create_config(
             "default",
             StrategyConfigCreateRequest(
-                name="Switchable",
+                name="Fixed identity",
                 strategy_type="dynamic_wave",
                 symbol="TQQQ",
                 initial_capital=Decimal("10000"),
@@ -556,21 +557,29 @@ def test_strategy_config_snapshot_restores_cross_strategy_identity_and_settings(
             config.id,
             StrategyConfigSnapshotCreateRequest(name="Dynamic baseline"),
         )
-        service.update_config(
-            config.id,
-            StrategyConfigUpdateRequest(
-                strategy_type="radar0458_pro",
-                symbol="SOXL",
-                settings_json={"pro_profile": "pro3"},
-            ),
-        )
 
-        applied = service.apply_snapshot(config.id, snapshot.id)
+        with pytest.raises(ValueError, match="strategy_type cannot be changed"):
+            service.update_config(
+                config.id,
+                StrategyConfigUpdateRequest(
+                    strategy_type="radar0458_pro",
+                    symbol="SOXL",
+                    settings_json={"pro_profile": "pro3"},
+                ),
+            )
 
-        assert applied.strategy_type == "dynamic_wave"
-        assert applied.symbol == "TQQQ"
-        assert applied.settings_json == DynamicWaveStrategy.default_settings()
+        snapshot.strategy_type = "radar0458_pro"
+        snapshot.symbol = "SOXL"
+        snapshot.settings_json = {"pro_profile": "pro3"}
+        session.commit()
 
+        with pytest.raises(ValueError, match="different strategy type"):
+            service.apply_snapshot(config.id, snapshot.id)
+
+        unchanged = service.get_config(config.id)
+        assert unchanged.strategy_type == "dynamic_wave"
+        assert unchanged.symbol == "TQQQ"
+        assert unchanged.settings_json == DynamicWaveStrategy.default_settings()
 
 def test_strategy_config_snapshot_rejects_invalid_snapshot_atomically() -> None:
     with create_session() as session:
@@ -586,7 +595,7 @@ def test_strategy_config_snapshot_rejects_invalid_snapshot_atomically() -> None:
         snapshot.settings_json = {"pro_profile": "pro1"}
         session.commit()
 
-        with pytest.raises(ValueError, match="SOXL"):
+        with pytest.raises(ValueError, match="different strategy type"):
             service.apply_snapshot(config.id, snapshot.id)
 
         unchanged = service.get_config(config.id)

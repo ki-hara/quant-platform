@@ -587,6 +587,7 @@ def _run_radar(
     closes: list[str],
     settings: dict | None = None,
     profile_for_date=None,
+    fee_rate: Decimal = Decimal("0"),
 ):
     engine = BacktestEngine()
     prices = [_price(date(2026, 1, i + 1), close) for i, close in enumerate(closes)]
@@ -596,7 +597,7 @@ def _run_radar(
             engine,
             prices,
             Decimal("10000"),
-            Decimal("0"),
+            fee_rate,
             Decimal("0"),
             run_settings,
             profile_for_date=profile_for_date,
@@ -605,7 +606,7 @@ def _run_radar(
         strategy=Radar0458ProStrategy(),
         prices=prices,
         initial_capital=Decimal("10000"),
-        fee_rate=Decimal("0"),
+        fee_rate=fee_rate,
         slippage_rate=Decimal("0"),
         settings=run_settings,
     )
@@ -693,3 +694,10 @@ def test_radar_ignores_undocumented_profile_schedule_in_runtime_settings() -> No
 
     buys = [trade for trade in result.trades if trade.side == "BUY"]
     assert [trade.radar_profile for trade in buys] == ["pro1", "pro1"]
+
+
+def test_radar_backtest_reserves_tier_allocation_for_fees() -> None:
+    result = _run_radar(["100", "90"], fee_rate=Decimal("1"))
+
+    buy = next(trade for trade in result.trades if trade.side == "BUY")
+    assert buy.quantity == 4

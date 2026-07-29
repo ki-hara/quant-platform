@@ -147,7 +147,7 @@ class DashboardService:
                     and holding_days >= position.max_holding_days
                 )
                 reason = (
-                    "target_return" if price_hit else ("max_holding_days" if deadline_hit else None)
+                    "profit_target" if price_hit else ("max_holding_period" if deadline_hit else None)
                 )
                 sell_signals.append(
                     {

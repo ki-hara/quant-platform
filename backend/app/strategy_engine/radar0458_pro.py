@@ -89,11 +89,13 @@ def build_radar_buy_plan(
     available_cash: Decimal,
     occupied_tiers: set[int],
     profile: str,
+    fee_rate_percent: Decimal = Decimal("0"),
 ) -> RadarTierPlan:
     preset = get_radar_preset(profile)
     previous_close = Decimal(str(previous_close))
     cycle_capital = Decimal(str(cycle_capital))
     available_cash = Decimal(str(available_cash))
+    fee_rate_percent = Decimal(str(fee_rate_percent))
     if previous_close <= 0:
         raise ValueError("previous_close_must_be_positive")
 
@@ -114,8 +116,9 @@ def build_radar_buy_plan(
     allocation = (
         available_cash if tier == 7 else cycle_capital * preset.tier_ratios[tier - 1]
     ).quantize(CENT, rounding=ROUND_DOWN)
-    quantity = int((allocation / limit_price).to_integral_value(rounding=ROUND_DOWN))
-    required_cash = limit_price * Decimal(quantity)
+    unit_cost = limit_price * (Decimal("1") + fee_rate_percent / Decimal("100"))
+    quantity = int((allocation / unit_cost).to_integral_value(rounding=ROUND_DOWN))
+    required_cash = unit_cost * Decimal(quantity)
     if quantity == 0:
         blocking_reason = "quantity_zero"
     elif required_cash > available_cash:

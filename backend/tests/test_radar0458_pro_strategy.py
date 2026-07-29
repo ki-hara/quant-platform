@@ -65,6 +65,21 @@ def test_build_radar_buy_plan_uses_available_cash_for_reserve_tier() -> None:
     assert plan.blocking_reason is None
 
 
+def test_build_radar_buy_plan_reserves_cash_for_fees() -> None:
+    plan = build_radar_buy_plan(
+        previous_close=Decimal("100"),
+        cycle_capital=Decimal("10000"),
+        available_cash=Decimal("1000"),
+        occupied_tiers={1, 2, 3, 4, 5, 6},
+        profile="pro2",
+        fee_rate_percent=Decimal("1"),
+    )
+
+    assert plan.tier == 7
+    assert plan.quantity == 9
+    assert plan.blocking_reason is None
+
+
 def test_radar_strategy_is_registered_with_profile_schema() -> None:
     strategy = registry.create("radar0458_pro")
     assert isinstance(strategy, Radar0458ProStrategy)

@@ -377,6 +377,37 @@ def _add_radar_backtest_trade_snapshots(connection: Connection) -> None:
     )
 
 
+def _add_active_radar_tier_index(connection: Connection) -> None:
+    required = {
+        "strategy_config_id",
+        "radar_cycle_id",
+        "radar_tier",
+        "status",
+    }
+    if not required <= _column_names(connection, "positions"):
+        return
+    connection.execute(
+        text(
+            "WITH ranked AS ("
+            "SELECT id, ROW_NUMBER() OVER ("
+            "PARTITION BY strategy_config_id, radar_cycle_id, radar_tier ORDER BY id"
+            ") AS duplicate_rank FROM positions "
+            "WHERE radar_cycle_id IS NOT NULL AND radar_tier IS NOT NULL "
+            "AND status IN ('pending', 'open')"
+            ") UPDATE positions "
+            "SET radar_cycle_id = radar_cycle_id || '-recovered-' || id "
+            "WHERE id IN (SELECT id FROM ranked WHERE duplicate_rank > 1)"
+        )
+    )
+    connection.execute(
+        text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_positions_active_radar_tier "
+            "ON positions (strategy_config_id, radar_cycle_id, radar_tier) "
+            "WHERE radar_cycle_id IS NOT NULL AND radar_tier IS NOT NULL "
+            "AND status IN ('pending', 'open')"
+        )
+    )
+
 def _add_integrated_order_preferences(connection: Connection) -> None:
     connection.execute(
         text(
@@ -401,6 +432,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     (6, "backfill_legacy_radar_loc_positions", _backfill_legacy_radar_loc_order_positions),
     (7, "radar_backtest_trade_snapshots", _add_radar_backtest_trade_snapshots),
     (8, "integrated_order_preferences", _add_integrated_order_preferences),
+    (9, "active_radar_tier_index", _add_active_radar_tier_index),
 )
 LATEST_SCHEMA_VERSION = MIGRATIONS[-1][0]
 

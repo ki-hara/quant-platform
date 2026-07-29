@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { buildBacktestCreateRequest, buildBuyOrderPositionRequest, shouldLoadModeRecommendation } from "./strategyOperations";
 
 describe("strategy operations boundaries", () => {
-  it("submits all Radar cycle and immutable exit snapshots from the daily plan", () => {
-    expect(buildBuyOrderPositionRequest({ orderDate: "2026-07-28", quantity: "12", limitPrice: "21.50", mode: "safe", plan: { strategy_type: "radar0458_pro", radar_tier: 3, radar_profile: "pro2", radar_cycle_id: "cycle-1", radar_cycle_capital: "12000", radar_sell_threshold_percent: "1.50", radar_sell_limit_price: "21.82", radar_max_holding_days: 10 } })).toEqual({ order_date: "2026-07-28", quantity: "12", limit_price: "21.50", mode: "safe", radar_tier: 3, radar_profile: "pro2", radar_cycle_id: "cycle-1", radar_cycle_capital: "12000", sell_threshold_percent: "1.50", sell_limit_price: "21.82", max_holding_days: 10 });
+  it("sends only Radar concurrency snapshots from the daily plan", () => {
+    expect(buildBuyOrderPositionRequest({ orderDate: "2026-07-28", quantity: "12", limitPrice: "21.50", mode: "safe", plan: { strategy_type: "radar0458_pro", radar_tier: 3, radar_profile: "pro2", radar_cycle_id: "cycle-1", radar_cycle_capital: "12000" } })).toEqual({ order_date: "2026-07-28", quantity: "12", limit_price: "21.50", mode: "safe", radar_tier: 3, radar_profile: "pro2", radar_cycle_id: "cycle-1", radar_cycle_capital: "12000" });
   });
 
   it("keeps Dynamic Wave buy requests free of Radar snapshots", () => {

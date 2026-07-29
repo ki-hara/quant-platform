@@ -4,6 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from decimal import ROUND_HALF_UP, Decimal
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -29,6 +30,7 @@ from app.dto.loc_orders import LocOrderCreateDto, LocOrderFillDto, LocOrderRespo
 from app.infrastructure.repositories.portfolios import PositionRepository
 from app.infrastructure.repositories.strategies import StrategyConfigRepository
 from app.infrastructure.repositories.trades import TradeRepository
+from app.services.daily_plan_service import DailyPlanService
 from app.services.manual_trade_service import ManualTradeRequest, ManualTradeService
 from app.services.position_exit_policy import build_position_exit_policy, sell_limit_price_for
 from app.services.loc_order_service import LocOrderFillRequest, LocOrderService
@@ -104,23 +106,100 @@ def create_buy_order_position(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Quantity and LOC price must be positive.",
         )
-    position = PositionRepository(session).create_pending(
-        strategy_config_id=config_id,
-        buy_date=request.order_date,
-        limit_price=request.limit_price,
-        quantity=request.quantity,
-        mode=request.mode,
-        radar_tier=request.radar_tier,
-        radar_profile=request.radar_profile,
-        radar_cycle_id=request.radar_cycle_id,
-        radar_cycle_capital=request.radar_cycle_capital,
-        sell_threshold_percent=request.sell_threshold_percent,
-        sell_limit_price=request.sell_limit_price,
-        max_holding_days=request.max_holding_days,
-    )
-    session.commit()
-    return position
+    config = StrategyConfigRepository(session).get(config_id)
+    if config is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Strategy config not found.")
 
+    radar_values = (
+        request.radar_tier,
+        request.radar_profile,
+        request.radar_cycle_id,
+        request.radar_cycle_capital,
+    )
+    radar_kwargs = {}
+    if config.strategy_type == "radar0458_pro":
+        plan = DailyPlanService(session).get_daily_plan(config_id, today=request.order_date)
+        expected = (
+            plan.radar_tier,
+            plan.radar_profile,
+            plan.radar_cycle_id,
+            plan.radar_cycle_capital,
+        )
+        if not plan.buy_available or plan.radar_tier is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Radar buy order unavailable: {plan.LOC.blocking_reason}",
+            )
+        if radar_values != expected:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Radar order plan is stale. Refresh the daily plan.",
+            )
+        if any(
+            position.radar_cycle_id == plan.radar_cycle_id
+            and position.radar_tier == plan.radar_tier
+            for position in PositionRepository(session).list_open(config_id)
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Radar tier already has a pending or open position.",
+            )
+        portfolio = config.live_portfolio
+        fee = _estimate_fee(config, request.limit_price, request.quantity)
+        if portfolio is None or request.limit_price * request.quantity + fee > portfolio.cash:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Insufficient cash for Radar buy order.",
+            )
+        threshold = plan.radar_sell_threshold_percent
+        if threshold is None or plan.radar_max_holding_days is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Radar exit policy is unavailable.",
+            )
+        radar_kwargs = {
+            "radar_tier": plan.radar_tier,
+            "radar_profile": plan.radar_profile,
+            "radar_cycle_id": plan.radar_cycle_id,
+            "radar_cycle_capital": plan.radar_cycle_capital,
+            "sell_threshold_percent": threshold,
+            "sell_limit_price": (
+                request.limit_price * (Decimal("1") + threshold / Decimal("100"))
+            ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),
+            "max_holding_days": plan.radar_max_holding_days,
+        }
+    elif any(value is not None for value in radar_values) or any(
+        value is not None
+        for value in (
+            request.sell_threshold_percent,
+            request.sell_limit_price,
+            request.max_holding_days,
+        )
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Radar snapshots are not valid for this strategy.",
+        )
+
+    try:
+        position = PositionRepository(session).create_pending(
+            strategy_config_id=config_id,
+            buy_date=request.order_date,
+            limit_price=request.limit_price,
+            quantity=request.quantity,
+            mode=request.mode,
+            **radar_kwargs,
+        )
+        session.commit()
+        return position
+    except IntegrityError as exc:
+        session.rollback()
+        if config.strategy_type == "radar0458_pro":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Radar tier already has a pending or open position.",
+            ) from exc
+        raise
 
 @router.put("/positions/{position_id}", response_model=PositionDto)
 def update_position(
@@ -185,6 +264,12 @@ def update_position(
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Live portfolio not found."
             )
+        total_cost = (position.buy_price * position.quantity) + fee
+        if total_cost > config.live_portfolio.cash:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Insufficient cash for buy fill.",
+            )
         trade_repo = TradeRepository(session)
         trade_repo.create(
             strategy_config_id=position.strategy_config_id,
@@ -199,11 +284,24 @@ def update_position(
             source=TradeSource.MANUAL,
             position_id=position.id,
         )
-        config.live_portfolio.cash -= (position.buy_price * position.quantity) + fee
+        config.live_portfolio.cash -= total_cost
         config.live_portfolio.cumulative_fees += fee
         session.add(config.live_portfolio)
         created_trade = True
     else:
+        if config is None or config.live_portfolio is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Live portfolio not found."
+            )
+        current_cost = (
+            matching_trade.price * matching_trade.quantity + matching_trade.fee
+        )
+        replacement_cost = position.buy_price * position.quantity + fee
+        if replacement_cost > config.live_portfolio.cash + current_cost:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Insufficient cash for corrected buy fill.",
+            )
         matching_trade.quantity = position.quantity
         matching_trade.price = position.buy_price
         matching_trade.fee = fee
@@ -216,9 +314,14 @@ def update_position(
 
 
 def _matching_buy_trade(position, session: Session):
-    for trade in TradeRepository(session).list_by_strategy_config(position.strategy_config_id):
+    trades = TradeRepository(session).list_by_strategy_config(position.strategy_config_id)
+    for trade in trades:
+        if trade.side == TradeSide.BUY and trade.position_id == position.id:
+            return trade
+    for trade in trades:
         if (
             trade.side == TradeSide.BUY
+            and trade.position_id is None
             and trade.date == position.buy_date
             and trade.limit_price == position.limit_price
             and trade.price == position.buy_price
@@ -279,6 +382,12 @@ def create_loc_order(
     ensure_config_owner(config_id, owner, session)
     try:
         return LocOrderService(session).create_from_daily_plan(config_id, request.memo)
+    except IntegrityError as exc:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Radar tier already has a pending or open position.",
+        ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
@@ -335,6 +444,16 @@ def record_manual_trade(
     owner: CurrentOwnerDep,
 ) -> object:
     ensure_config_owner(request.config_id, owner, session)
+    config = StrategyConfigRepository(session).get(request.config_id)
+    if (
+        config is not None
+        and config.strategy_type == "radar0458_pro"
+        and request.side == TradeSide.BUY
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Radar buys must be created from the daily buy order plan.",
+        )
     service_request = ManualTradeRequest(
         config_id=request.config_id,
         side=request.side,

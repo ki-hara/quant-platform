@@ -183,6 +183,20 @@ class ManualTradeService:
             ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
             max_holding_days = preset.max_holding_days
         else:
+            radar_values = (
+                request.radar_tier,
+                request.radar_profile,
+                request.radar_cycle_id,
+                request.radar_cycle_capital,
+                request.sell_threshold_percent,
+                request.sell_limit_price,
+                request.max_holding_days,
+            )
+            if any(value is not None for value in radar_values):
+                raise ValidationAppError(
+                    "invalid_strategy_snapshot",
+                    "Radar position snapshots are not valid for this strategy.",
+                )
             exit_policy = build_position_exit_policy(
                 config.settings_json, request.mode, request.price
             )
@@ -317,8 +331,15 @@ class ManualTradeService:
             elif trade.side == TradeSide.SELL:
                 old_position_id = trade_position_ids[trade.id]
                 rebuilt_position = rebuilt_positions.get(old_position_id)
+                if old_position_id is not None and rebuilt_position is None:
+                    raise ValidationAppError(
+                        "position_replay_mismatch",
+                        f"Linked position cannot be rebuilt for sell trade: {trade.id}",
+                    )
                 trade.position_id = rebuilt_position.id if rebuilt_position is not None else None
-                realized_pnl = self._replay_sell(trade, open_positions)
+                realized_pnl = self._replay_sell(
+                    trade, open_positions, target_position=rebuilt_position
+                )
                 trade.realized_pnl = realized_pnl
                 portfolio.cash += trade.price * trade.quantity - trade.fee
                 portfolio.realized_pnl += realized_pnl
@@ -362,10 +383,21 @@ class ManualTradeService:
             portfolio.cash = (portfolio.cash + adjustment.cash_delta).quantize(MONEY_QUANT)
             portfolio.capital = (portfolio.capital + adjustment.capital_delta).quantize(MONEY_QUANT)
 
-    def _replay_sell(self, trade: Trade, open_positions: list[Position]) -> Decimal:
+    def _replay_sell(
+        self,
+        trade: Trade,
+        open_positions: list[Position],
+        target_position: Position | None = None,
+    ) -> Decimal:
+        if target_position is not None and target_position not in open_positions:
+            raise ValidationAppError(
+                "position_replay_mismatch",
+                f"Linked position is not open for sell trade: {trade.id}",
+            )
         remaining_quantity = trade.quantity
         realized_pnl = Decimal("0")
-        for position in list(open_positions):
+        candidates = [target_position] if target_position is not None else list(open_positions)
+        for position in candidates:
             if remaining_quantity <= 0:
                 break
             sell_quantity = min(remaining_quantity, position.quantity)
@@ -386,7 +418,10 @@ class ManualTradeService:
                 position.buy_fee = (position.buy_fee - allocated_buy_fee).quantize(MONEY_QUANT)
                 self.positions.save(position)
         if remaining_quantity > 0:
-            realized_pnl += trade.price * remaining_quantity
+            raise ValidationAppError(
+                "position_replay_mismatch",
+                f"Sell trade quantity exceeds rebuilt positions: {trade.id}",
+            )
         return realized_pnl.quantize(MONEY_QUANT)
 
     def _sell(

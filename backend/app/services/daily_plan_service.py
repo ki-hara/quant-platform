@@ -2,10 +2,12 @@ from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal
 from uuid import NAMESPACE_URL, uuid5
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.domain.enums import ModeConfirmationSource, StrategyMode
+from app.domain.enums import ModeConfirmationSource, StrategyMode, TradeSide
+from app.domain.models import Position, Trade
 from app.dto.trading_plan import DailyPlanDto, LocPlanDto
 from app.infrastructure.repositories.market_data import MarketPriceRepository
 from app.infrastructure.repositories.modes import ModeStateRepository
@@ -44,6 +46,10 @@ class DailyPlanService:
             if now is not None
             else (today or current_market_date(config.symbol))
         )
+        if config.strategy_type == "radar0458_pro":
+            open_positions = self._radar_start_of_day_positions(
+                config.id, order_date, open_positions
+            )
         basis_date = previous_exchange_trading_day(config.symbol, order_date)
         latest_price = self.market_prices.latest_price_on_or_before(
             settings.market_data_provider,
@@ -125,6 +131,26 @@ class DailyPlanService:
             LOC=LocPlanDto.model_validate(loc_plan),
         )
 
+    def _radar_start_of_day_positions(
+        self,
+        config_id: int,
+        order_date: date,
+        open_positions: list[Position],
+    ) -> list[Position]:
+        sold_today = list(
+            self.session.scalars(
+                select(Position)
+                .join(Trade, Trade.position_id == Position.id)
+                .where(Trade.strategy_config_id == config_id)
+                .where(Trade.side == TradeSide.SELL)
+                .where(Trade.date == order_date)
+                .where(Position.radar_tier.is_not(None))
+            ).unique()
+        )
+        positions_by_id = {position.id: position for position in open_positions}
+        for position in sold_today:
+            positions_by_id.setdefault(position.id, position)
+        return sorted(positions_by_id.values(), key=lambda position: (position.buy_date, position.id))
     def _get_radar_daily_plan(
         self, config, portfolio, positions, order_date, latest_price
     ) -> DailyPlanDto:
@@ -168,6 +194,7 @@ class DailyPlanService:
                 available_cash=portfolio.cash,
                 occupied_tiers={position.radar_tier for position in positions},
                 profile=profile,
+                fee_rate_percent=config.fee_rate,
             )
             required_cash = radar_plan.limit_price * Decimal(radar_plan.quantity)
             estimated_fee = (required_cash * config.fee_rate / Decimal("100")).quantize(

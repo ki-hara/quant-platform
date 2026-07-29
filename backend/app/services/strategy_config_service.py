@@ -125,12 +125,12 @@ class StrategyConfigService:
         try:
             config = self.get_config(config_id)
             snapshot = self._get_snapshot(config_id, snapshot_id)
+            if snapshot.strategy_type != config.strategy_type:
+                raise ValueError("Cannot apply a snapshot from a different strategy type.")
             registry.create(snapshot.strategy_type)
             self._validate_strategy_config(
-                snapshot.strategy_type, snapshot.symbol, snapshot.settings_json
+                snapshot.strategy_type, config.symbol, snapshot.settings_json
             )
-            config.strategy_type = snapshot.strategy_type
-            config.symbol = snapshot.symbol
             config.fee_rate = snapshot.fee_rate
             config.slippage_rate = snapshot.slippage_rate
             config.settings_json = deepcopy(snapshot.settings_json)
@@ -184,6 +184,8 @@ class StrategyConfigService:
                 )
             if request.strategy_type is not None:
                 registry.create(request.strategy_type)
+                if request.strategy_type != config.strategy_type:
+                    raise ValueError("strategy_type cannot be changed after creation.")
             effective_strategy_type = request.strategy_type or config.strategy_type
             effective_symbol = request.symbol or config.symbol
             effective_settings = (

@@ -5,6 +5,7 @@ from decimal import Decimal
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
@@ -17,6 +18,7 @@ from app.domain.models import StrategyConfigSnapshot
 from app.infrastructure.repositories.market_data import MarketPriceRepository
 from app.infrastructure.repositories.trades import TradeRepository
 from app.main import create_app
+from app.services.loc_order_service import LocOrderService
 import app.services.dashboard_service as dashboard_service_module
 import app.services.fear_greed_service as fear_greed_service_module
 from app.strategy_engine.dynamic_wave import DynamicWaveStrategy
@@ -182,7 +184,7 @@ def test_apply_strategy_snapshot_maps_validation_to_400_and_missing_to_404(
     )
 
     assert invalid_response.status_code == 400
-    assert "SOXL" in invalid_response.json()["detail"]
+    assert "different strategy type" in invalid_response.json()["detail"]
     assert missing_response.status_code == 404
     assert "not found" in missing_response.json()["detail"].lower()
 
@@ -730,20 +732,28 @@ def test_radar_open_recomputes_sell_limit_after_pending_buy_price_edit(
         },
     )
     config_id = config_response.json()["id"]
+    with Session(api_client.app.state.test_engine) as session:
+        MarketPriceRepository(session).upsert_prices(
+            "finance_data_reader",
+            [_price("SOXL", date(2026, 7, 24), "40")],
+        )
+        session.commit()
+    plan_response = api_client.get(
+        f"/api/strategy-configs/{config_id}/daily-plan?today=2026-07-27"
+    )
+    assert plan_response.status_code == 200, plan_response.text
+    plan = plan_response.json()
     pending = api_client.post(
         f"/api/strategy-configs/{config_id}/positions/buy-order",
         json={
-            "order_date": "2026-07-24",
+            "order_date": "2026-07-27",
             "quantity": "1",
             "limit_price": "40",
             "mode": "safe",
-            "radar_tier": 1,
-            "radar_profile": "pro2",
-            "radar_cycle_id": "cycle-one",
-            "radar_cycle_capital": "1000",
-            "sell_threshold_percent": "1.50",
-            "sell_limit_price": "40.60",
-            "max_holding_days": 10,
+            "radar_tier": plan["radar_tier"],
+            "radar_profile": plan["radar_profile"],
+            "radar_cycle_id": plan["radar_cycle_id"],
+            "radar_cycle_capital": plan["radar_cycle_capital"],
         },
     ).json()
 
@@ -758,3 +768,102 @@ def test_radar_open_recomputes_sell_limit_after_pending_buy_price_edit(
     assert opened.status_code == 200, opened.text
     assert opened.json()["buy_price"] == "40.126000"
     assert opened.json()["sell_limit_price"] == "40.730000"
+
+
+def test_manual_radar_buy_must_use_daily_order_plan(api_client: TestClient) -> None:
+    config_response = api_client.post(
+        "/api/strategy-configs",
+        json={
+            "name": "Radar manual guard",
+            "strategy_type": "radar0458_pro",
+            "symbol": "SOXL",
+            "initial_capital": "1000",
+            "fee_rate": "0",
+            "slippage_rate": "0",
+            "settings_json": {"pro_profile": "pro1"},
+        },
+    )
+    config_id = config_response.json()["id"]
+
+    response = api_client.post(
+        "/api/trades/manual",
+        json={
+            "config_id": config_id,
+            "trade_date": "2026-07-27",
+            "side": "buy",
+            "quantity": "1",
+            "price": "40",
+            "fee": "0",
+            "source": "manual",
+            "radar_tier": 1,
+            "radar_profile": "pro1",
+            "radar_cycle_id": "forged-cycle",
+            "radar_cycle_capital": "1000",
+        },
+    )
+
+    assert response.status_code == 400
+    assert "daily buy order plan" in response.json()["detail"]
+
+
+def test_manual_dynamic_buy_rejects_radar_snapshots(api_client: TestClient) -> None:
+    config_response = api_client.post(
+        "/api/strategy-configs",
+        json={
+            "name": "Dynamic manual guard",
+            "strategy_type": "dynamic_wave",
+            "symbol": "TQQQ",
+            "initial_capital": "1000",
+            "fee_rate": "0",
+            "slippage_rate": "0",
+            "settings_json": DynamicWaveStrategy.default_settings(),
+        },
+    )
+    config_id = config_response.json()["id"]
+
+    response = api_client.post(
+        "/api/trades/manual",
+        json={
+            "config_id": config_id,
+            "trade_date": "2026-07-27",
+            "side": "buy",
+            "quantity": "1",
+            "price": "40",
+            "fee": "0",
+            "source": "manual",
+            "radar_tier": 1,
+        },
+    )
+
+    assert response.status_code == 400
+    assert "not valid for this strategy" in response.json()["detail"]
+
+
+def test_create_loc_order_maps_active_tier_conflict_to_409(
+    api_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config_response = api_client.post(
+        "/api/strategy-configs",
+        json={
+            "name": "Radar LOC conflict",
+            "strategy_type": "radar0458_pro",
+            "symbol": "SOXL",
+            "initial_capital": "1000",
+            "fee_rate": "0",
+            "slippage_rate": "0",
+            "settings_json": {"pro_profile": "pro1"},
+        },
+    )
+    config_id = config_response.json()["id"]
+
+    def raise_conflict(*_args, **_kwargs):
+        raise IntegrityError("INSERT positions", {}, Exception("duplicate tier"))
+
+    monkeypatch.setattr(LocOrderService, "create_from_daily_plan", raise_conflict)
+    response = api_client.post(
+        f"/api/strategy-configs/{config_id}/loc-orders",
+        json={"memo": None},
+    )
+
+    assert response.status_code == 409
+    assert "already has" in response.json()["detail"]
