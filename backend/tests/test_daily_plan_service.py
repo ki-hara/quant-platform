@@ -497,44 +497,51 @@ def test_radar_daily_plan_uses_active_cycle_snapshot_and_lowest_empty_tier() -> 
         assert plan.LOC.quantity == 17
 
 
-def test_radar_daily_plan_keeps_same_day_sold_tier_occupied() -> None:
+def test_radar_daily_plan_reuses_lowest_same_day_sold_tier() -> None:
     with create_session() as session:
         config = create_radar_config(session)
         trades = ManualTradeService(session)
-        trades.record_manual_trade(
-            ManualTradeRequest(
-                config_id=config.id,
-                side=TradeSide.BUY,
-                trade_date=date(2026, 7, 24),
-                quantity=Decimal("1"),
-                price=Decimal("40"),
-                fee=Decimal("0"),
-                radar_tier=1,
-                radar_profile="pro1",
-                radar_cycle_id="cycle-existing",
-                radar_cycle_capital=Decimal("10000"),
+        for tier in (1, 2, 3):
+            trades.record_manual_trade(
+                ManualTradeRequest(
+                    config_id=config.id,
+                    side=TradeSide.BUY,
+                    trade_date=date(2026, 7, 24),
+                    quantity=Decimal("1"),
+                    price=Decimal("40"),
+                    fee=Decimal("0"),
+                    radar_tier=tier,
+                    radar_profile="pro1",
+                    radar_cycle_id="cycle-existing",
+                    radar_cycle_capital=Decimal("10000"),
+                )
             )
-        )
-        position = PositionRepository(session).list_open(config.id)[0]
-        trades.record_manual_trade(
-            ManualTradeRequest(
-                config_id=config.id,
-                side=TradeSide.SELL,
-                trade_date=date(2026, 7, 27),
-                quantity=Decimal("1"),
-                price=Decimal("45"),
-                fee=Decimal("0"),
-                position_id=position.id,
+        positions = {
+            position.radar_tier: position
+            for position in PositionRepository(session).list_open(config.id)
+        }
+        for tier in (2, 3):
+            trades.record_manual_trade(
+                ManualTradeRequest(
+                    config_id=config.id,
+                    side=TradeSide.SELL,
+                    trade_date=date(2026, 7, 27),
+                    quantity=Decimal("1"),
+                    price=Decimal("45"),
+                    fee=Decimal("0"),
+                    position_id=positions[tier].id,
+                )
             )
-        )
         seed_daily_prices(session, "SOXL", date(2026, 7, 24), ["50"])
 
         plan = DailyPlanService(session).get_daily_plan(config.id, today=date(2026, 7, 27))
 
         assert plan.radar_tier == 2
+        assert plan.open_position_count == 1
         assert plan.radar_profile == "pro1"
         assert plan.radar_cycle_id == "cycle-existing"
         assert plan.radar_cycle_capital == Decimal("10000")
+
 
 def test_radar_daily_plan_starts_new_cycle_from_current_settings_and_capital() -> None:
     with create_session() as session:
