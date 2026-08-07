@@ -33,6 +33,55 @@ def test_fresh_database_records_latest_schema_version() -> None:
     assert versions == list(range(1, migrations.LATEST_SCHEMA_VERSION + 1))
 
 
+def test_open_source_migration_invalidates_daily_open_and_preserves_manual_value() -> None:
+    migrations = migration_module()
+    engine = create_engine("sqlite:///:memory:")
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                CREATE TABLE gold_toilet_order_sheets (
+                    id INTEGER PRIMARY KEY,
+                    owner_id VARCHAR(64) NOT NULL,
+                    order_date DATE NOT NULL,
+                    entry_percent NUMERIC(18, 6) NOT NULL,
+                    allocation_percent NUMERIC(18, 6) NOT NULL,
+                    loc_percent NUMERIC(18, 6) NOT NULL,
+                    market_open NUMERIC(18, 6),
+                    open_source VARCHAR(32),
+                    open_observed_at DATETIME,
+                    provider_market_open NUMERIC(18, 6),
+                    provider_open_observed_at DATETIME,
+                    created_at DATETIME NOT NULL,
+                    updated_at DATETIME NOT NULL
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO gold_toilet_order_sheets VALUES (
+                    1, 'default', '2026-08-04', 1.49, 22.5, -9.34,
+                    131.5, 'manual', '2026-08-04 13:31:44',
+                    106.15, '2026-08-04 13:30:16',
+                    '2026-08-04 11:38:04', '2026-08-04 13:31:44'
+                )
+                """
+            )
+        )
+        migrations._separate_gold_toilet_open_sources(connection)
+        row = connection.execute(
+            text("SELECT * FROM gold_toilet_order_sheets WHERE id = 1")
+        ).mappings().one()
+
+    assert row["provider_market_open"] is None
+    assert row["provider_open_observed_at"] is None
+    assert row["provider_open_source"] is None
+    assert row["manual_market_open"] == 131.5
+    assert str(row["manual_open_observed_at"]) == "2026-08-04 13:31:44"
+
+
 def test_legacy_database_receives_all_required_tables_and_columns() -> None:
     migrations = migration_module()
     engine = create_engine("sqlite:///:memory:")
@@ -56,6 +105,11 @@ def test_legacy_database_receives_all_required_tables_and_columns() -> None:
     assert "portfolio_adjustments" in schema.get_table_names()
     assert "loc_orders" in schema.get_table_names()
     assert "integrated_order_preferences" in schema.get_table_names()
+    assert "gold_toilet_accounts" in schema.get_table_names()
+    assert "gold_toilet_order_sheets" in schema.get_table_names()
+    assert {"provider_market_open", "provider_open_observed_at"} <= {
+        column["name"] for column in schema.get_columns("gold_toilet_order_sheets")
+    }
     assert "position_id" in {column["name"] for column in schema.get_columns("loc_orders")}
     assert "archived_at" in {column["name"] for column in schema.get_columns("strategy_configs")}
     assert {"mode", "mode_rule_code"} <= {

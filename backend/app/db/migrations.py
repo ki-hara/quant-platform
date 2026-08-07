@@ -423,6 +423,111 @@ def _add_integrated_order_preferences(connection: Connection) -> None:
     )
 
 
+def _add_gold_toilet_order_tables(connection: Connection) -> None:
+    connection.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS gold_toilet_accounts (
+                owner_id VARCHAR(64) PRIMARY KEY,
+                capital NUMERIC(18, 6) NOT NULL,
+                cash NUMERIC(18, 6) NOT NULL,
+                updated_at DATETIME NOT NULL,
+                FOREIGN KEY(owner_id) REFERENCES owners (id)
+            )
+            """
+        )
+    )
+    connection.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS gold_toilet_order_sheets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_id VARCHAR(64) NOT NULL,
+                order_date DATE NOT NULL,
+                entry_percent NUMERIC(18, 6) NOT NULL,
+                allocation_percent NUMERIC(18, 6) NOT NULL,
+                loc_percent NUMERIC(18, 6) NOT NULL,
+                market_open NUMERIC(18, 6),
+                open_source VARCHAR(32),
+                open_observed_at DATETIME,
+                created_at DATETIME NOT NULL,
+                updated_at DATETIME NOT NULL,
+                FOREIGN KEY(owner_id) REFERENCES owners (id),
+                CONSTRAINT uq_gold_toilet_owner_order_date UNIQUE (owner_id, order_date)
+            )
+            """
+        )
+    )
+    connection.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_gold_toilet_order_sheets_owner_id "
+            "ON gold_toilet_order_sheets (owner_id)"
+        )
+    )
+    connection.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_gold_toilet_order_sheets_order_date "
+            "ON gold_toilet_order_sheets (order_date)"
+        )
+    )
+
+
+def _track_gold_toilet_provider_open(connection: Connection) -> None:
+    _add_column_if_missing(
+        connection,
+        "gold_toilet_order_sheets",
+        "provider_market_open",
+        "provider_market_open NUMERIC(18, 6)",
+    )
+    _add_column_if_missing(
+        connection,
+        "gold_toilet_order_sheets",
+        "provider_open_observed_at",
+        "provider_open_observed_at DATETIME",
+    )
+    connection.execute(
+        text(
+            "UPDATE gold_toilet_order_sheets "
+            "SET provider_market_open = market_open, "
+            "provider_open_observed_at = open_observed_at "
+            "WHERE open_source = 'finance_data_reader' "
+            "AND provider_market_open IS NULL"
+        )
+    )
+
+
+def _separate_gold_toilet_open_sources(connection: Connection) -> None:
+    columns = (
+        ("provider_open_source", "provider_open_source VARCHAR(32)"),
+        ("provider_open_last_checked_at", "provider_open_last_checked_at DATETIME"),
+        ("provider_open_failure_reason", "provider_open_failure_reason VARCHAR(64)"),
+        ("manual_market_open", "manual_market_open NUMERIC(18, 6)"),
+        ("manual_open_observed_at", "manual_open_observed_at DATETIME"),
+    )
+    for column_name, definition in columns:
+        _add_column_if_missing(
+            connection,
+            "gold_toilet_order_sheets",
+            column_name,
+            definition,
+        )
+    connection.execute(
+        text(
+            "UPDATE gold_toilet_order_sheets "
+            "SET manual_market_open = market_open, "
+            "manual_open_observed_at = open_observed_at "
+            "WHERE open_source = 'manual' AND manual_market_open IS NULL"
+        )
+    )
+    connection.execute(
+        text(
+            "UPDATE gold_toilet_order_sheets "
+            "SET provider_market_open = NULL, provider_open_observed_at = NULL, "
+            "provider_open_source = NULL, provider_open_failure_reason = NULL"
+        )
+    )
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     (1, "legacy_schema", _upgrade_legacy_schema),
     (2, "loc_orders_trade_fk_set_null", _rebuild_loc_orders_trade_foreign_key),
@@ -433,6 +538,9 @@ MIGRATIONS: tuple[Migration, ...] = (
     (7, "radar_backtest_trade_snapshots", _add_radar_backtest_trade_snapshots),
     (8, "integrated_order_preferences", _add_integrated_order_preferences),
     (9, "active_radar_tier_index", _add_active_radar_tier_index),
+    (10, "gold_toilet_order_tables", _add_gold_toilet_order_tables),
+    (11, "gold_toilet_provider_open", _track_gold_toilet_provider_open),
+    (12, "separate_gold_toilet_open_sources", _separate_gold_toilet_open_sources),
 )
 LATEST_SCHEMA_VERSION = MIGRATIONS[-1][0]
 

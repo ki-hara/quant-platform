@@ -36,9 +36,11 @@ export async function apiPut<T>(path: string, body: unknown): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export async function apiDelete(path: string): Promise<void> {
+export async function apiDelete<T = void>(path: string): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, { method: "DELETE", headers: authHeaders() });
   if (!response.ok) throw new Error(await errorMessage(response));
+  if (response.status === 204) return undefined as T;
+  return response.json() as Promise<T>;
 }
 
 export async function apiGetText(path: string): Promise<string> {

@@ -12,6 +12,7 @@ from app.api.routes_admin import router as admin_router
 from app.api.routes_auth import router as auth_router
 from app.api.routes_backtests import router as backtests_router
 from app.api.routes_dashboard import router as dashboard_router
+from app.api.routes_gold_toilet_orders import router as gold_toilet_orders_router
 from app.api.routes_integrated_orders import router as integrated_orders_router
 from app.api.routes_portfolios import router as portfolios_router
 from app.api.routes_trading_plan import router as trading_plan_router
@@ -54,6 +55,7 @@ def create_app(
     app.include_router(strategies_router)
     app.include_router(trading_plan_router)
     app.include_router(dashboard_router)
+    app.include_router(gold_toilet_orders_router)
     app.include_router(integrated_orders_router)
     app.include_router(portfolios_router)
     app.include_router(trades_router)

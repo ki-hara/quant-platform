@@ -103,6 +103,45 @@ class IntegratedOrderPreference(Base):
     )
 
 
+class GoldToiletAccount(Base):
+    __tablename__ = "gold_toilet_accounts"
+
+    owner_id: Mapped[str] = mapped_column(ForeignKey("owners.id"), primary_key=True)
+    capital: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
+    cash: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+
+class GoldToiletOrderSheet(Base):
+    __tablename__ = "gold_toilet_order_sheets"
+    __table_args__ = (
+        UniqueConstraint("owner_id", "order_date", name="uq_gold_toilet_owner_order_date"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("owners.id"), nullable=False, index=True)
+    order_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    entry_percent: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
+    allocation_percent: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
+    loc_percent: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
+    market_open: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))
+    open_source: Mapped[str | None] = mapped_column(String(32))
+    open_observed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    provider_market_open: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))
+    provider_open_observed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    provider_open_source: Mapped[str | None] = mapped_column(String(32))
+    provider_open_last_checked_at: Mapped[datetime | None] = mapped_column(DateTime)
+    provider_open_failure_reason: Mapped[str | None] = mapped_column(String(64))
+    manual_market_open: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))
+    manual_open_observed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+
 class StrategyConfigSnapshot(Base):
     __tablename__ = "strategy_config_snapshots"
 

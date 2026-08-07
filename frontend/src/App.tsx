@@ -1,4 +1,4 @@
-import { Activity, BarChart3, BriefcaseBusiness, KeyRound, LogOut, Settings2, ShieldCheck, WalletCards, Layers3 } from "lucide-react";
+import { Activity, BarChart3, BriefcaseBusiness, ClipboardList, KeyRound, LogOut, Settings2, ShieldCheck, WalletCards, Layers3 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { changeMyPin, getMe } from "./api/auth";
 import { setAuthToken } from "./api/client";
@@ -8,11 +8,12 @@ import { CapitalAdjustmentPage } from "./pages/CapitalAdjustmentPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { LoginPage } from "./pages/LoginPage";
 import { IntegratedOrdersPage } from "./pages/IntegratedOrdersPage";
+import { GoldToiletOrdersPage } from "./pages/GoldToiletOrdersPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { TradesPage } from "./pages/TradesPage";
 import type { AuthOwner } from "./types/api";
 
-type TabKey = "dashboard" | "backtest" | "settings" | "trades" | "integrated-orders" | "capital" | "admin";
+type TabKey = "dashboard" | "gold-toilet" | "backtest" | "settings" | "trades" | "integrated-orders" | "capital" | "admin";
 
 interface TabItem {
   key: TabKey;
@@ -22,6 +23,7 @@ interface TabItem {
 
 const baseTabs: TabItem[] = [
   { key: "dashboard", label: "대시보드", icon: Activity },
+  { key: "gold-toilet", label: "황금변기 주문 해석", icon: ClipboardList },
   { key: "integrated-orders", label: "전략 통합 주문", icon: Layers3 },
   { key: "trades", label: "거래/포지션", icon: BriefcaseBusiness },
   { key: "settings", label: "전략 설정", icon: Settings2 },
@@ -156,6 +158,7 @@ function App() {
         </header>
 
         {activeTab === "dashboard" && <DashboardPage />}
+        {activeTab === "gold-toilet" && <GoldToiletOrdersPage />}
         {activeTab === "backtest" && <BacktestPage />}
         {activeTab === "capital" && <CapitalAdjustmentPage />}
         {activeTab === "settings" && <SettingsPage />}

@@ -9,13 +9,13 @@ dependencies = [
   "pydantic-settings>=2.14.2",
   "sqlalchemy>=2.0.30",
   "finance-datareader>=0.9.90",
+  "httpx>=0.27.0",
   "pandas>=2.2.0",
 ]
 
 [project.optional-dependencies]
 dev = [
   "pytest>=8.2.0",
-  "httpx>=0.27.0",
   "ruff>=0.5.0",
 ]
 

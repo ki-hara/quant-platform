@@ -542,6 +542,107 @@ h2 {
   box-shadow: var(--shadow-soft);
 }
 
+.gold-toilet-page {
+  display: grid;
+  gap: 14px;
+}
+
+.gold-toilet-intro {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  border: 1px solid #e5c76b;
+  border-radius: 12px;
+  padding: 20px;
+  background: linear-gradient(135deg, #fffdf5, #fff7cf);
+  box-shadow: var(--shadow-soft);
+}
+
+.gold-toilet-intro h2 { margin: 6px 0; font-size: clamp(20px, 2vw, 28px); }
+.gold-toilet-intro p { margin: 0; color: var(--muted); }
+.gold-kicker { color: #8a6500; font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+
+.gold-toilet-input-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, .72fr) minmax(480px, 1.28fr);
+  gap: 14px;
+}
+
+.gold-input-panel { display: grid; align-content: start; gap: 12px; }
+.gold-input-panel label { display: grid; gap: 6px; color: var(--muted); font-size: 12px; font-weight: 700; }
+.gold-sheet-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.gold-sheet-grid .manual-open-field { grid-column: 1 / -1; }
+
+.open-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 11px 14px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 13px;
+}
+.status-dot { width: 9px; height: 9px; border-radius: 50%; background: #d19b00; box-shadow: 0 0 0 4px #fff2bf; }
+.open-status.ready .status-dot { background: #16875d; box-shadow: 0 0 0 4px #dff5ec; }
+.open-status.failed { border-color: #e6b5ad; background: #fff7f5; color: #9c3326; }
+.open-status.failed .status-dot { background: #c64534; box-shadow: 0 0 0 4px #f8ddd8; }
+
+.gold-market-open-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  border: 1px solid #d8b84e;
+  border-radius: 12px;
+  padding: 18px 22px;
+  background: linear-gradient(120deg, #172820, #244236);
+  color: #fff;
+  box-shadow: var(--shadow-soft);
+}
+.gold-market-open-card > div:first-child { display: grid; gap: 5px; }
+.gold-market-open-card > div:first-child span { color: #d8e5df; font-size: 12px; font-weight: 700; }
+.gold-market-open-card strong { font-size: clamp(34px, 5vw, 56px); line-height: 1; letter-spacing: -.04em; }
+.gold-market-open-card.waiting strong { color: #d8e5df; font-size: clamp(25px, 4vw, 38px); }
+.gold-market-open-meta { display: grid; justify-items: end; gap: 4px; color: #d8e5df; font-size: 12px; }
+.gold-market-open-meta b { color: #f4d66f; font-size: 18px; }
+.gold-market-open-meta time { color: #aebfb7; }
+
+.gold-manual-open-panel {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(210px, .55fr) auto auto;
+  align-items: end;
+  gap: 12px;
+}
+.gold-manual-open-panel h3 { margin: 0 0 5px; }
+.gold-manual-open-panel p { margin: 0; color: var(--muted); font-size: 12px; }
+.gold-manual-open-panel label { display: grid; gap: 6px; color: var(--muted); font-size: 12px; font-weight: 700; }
+
+.gold-order-results { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.gold-order-card {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+.gold-order-card.featured { border-color: #d4ad32; background: #fffaf0; }
+.gold-order-card > span { color: var(--muted); font-size: 13px; font-weight: 700; }
+.gold-order-card strong { color: #142f25; font-size: clamp(29px, 4vw, 46px); letter-spacing: -.04em; }
+.gold-order-card button { justify-self: start; display: inline-flex; align-items: center; gap: 6px; }
+.gold-cash-summary { padding: 4px 2px; color: var(--muted); font-size: 13px; }
+
+@media (max-width: 900px) {
+  .gold-toilet-input-grid, .gold-order-results { grid-template-columns: 1fr; }
+  .gold-toilet-intro { flex-direction: column; }
+  .gold-market-open-card { align-items: flex-start; }
+  .gold-manual-open-panel { grid-template-columns: 1fr; align-items: stretch; }
+}
+
 .panel-header {
   display: flex;
   align-items: flex-start;
