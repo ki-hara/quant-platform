@@ -3,7 +3,7 @@ import { buildBacktestCreateRequest, buildBuyOrderPositionRequest, shouldLoadMod
 
 describe("strategy operations boundaries", () => {
   it("sends only Radar concurrency snapshots from the daily plan", () => {
-    expect(buildBuyOrderPositionRequest({ orderDate: "2026-07-28", quantity: "12", limitPrice: "21.50", mode: "safe", plan: { strategy_type: "radar0458_pro", radar_tier: 3, radar_profile: "pro2", radar_cycle_id: "cycle-1", radar_cycle_capital: "12000" } })).toEqual({ order_date: "2026-07-28", quantity: "12", limit_price: "21.50", mode: "safe", radar_tier: 3, radar_profile: "pro2", radar_cycle_id: "cycle-1", radar_cycle_capital: "12000" });
+    expect(buildBuyOrderPositionRequest({ orderDate: "2026-07-27", quantity: "12", limitPrice: "21.50", mode: "safe", plan: { plan_date: "2026-07-28", strategy_type: "radar0458_pro", radar_tier: 3, radar_profile: "pro2", radar_cycle_id: "cycle-1", radar_cycle_capital: "12000" } })).toEqual({ order_date: "2026-07-28", quantity: "12", limit_price: "21.50", mode: "safe", radar_tier: 3, radar_profile: "pro2", radar_cycle_id: "cycle-1", radar_cycle_capital: "12000" });
   });
 
   it("keeps Dynamic Wave buy requests free of Radar snapshots", () => {

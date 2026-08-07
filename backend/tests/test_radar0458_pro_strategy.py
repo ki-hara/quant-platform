@@ -86,11 +86,5 @@ def test_radar_strategy_is_registered_with_profile_schema() -> None:
     assert strategy.strategy_type == "radar0458_pro"
     assert strategy.get_settings_schema() == {
         "type": "object",
-        "fields": {
-            "pro_profile": {
-                "type": "string",
-                "enum": ["pro1", "pro2", "pro3"],
-                "default": "pro1",
-            }
-        },
+        "fields": {"pro_profile": "pro1"},
     }
