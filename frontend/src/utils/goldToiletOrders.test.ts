@@ -7,9 +7,9 @@ import {
 } from "./goldToiletOrders";
 
 describe("gold toilet order helpers", () => {
-  it("polls every five seconds for today's SOXL open until it is ready", () => {
+  it("polls every second for today's SOXL open until it is ready", () => {
     const now = new Date("2026-08-04T15:00:00Z");
-    expect(GOLD_TOILET_OPEN_POLL_INTERVAL_MS).toBe(5_000);
+    expect(GOLD_TOILET_OPEN_POLL_INTERVAL_MS).toBe(1_000);
     expect(shouldPollForOpen("2026-08-04", "waiting", now)).toBe(true);
     expect(shouldPollForOpen("2026-08-04", "failed", now)).toBe(true);
     expect(shouldPollForOpen("2026-08-04", "ready", now)).toBe(false);

@@ -35,6 +35,13 @@ class GoldToiletOrderRepository:
         )
         return self.session.scalar(statement)
 
+    def list_unresolved_sheets(self, order_date: date) -> list[GoldToiletOrderSheet]:
+        statement = select(GoldToiletOrderSheet).where(
+            GoldToiletOrderSheet.order_date == order_date,
+            GoldToiletOrderSheet.provider_market_open.is_(None),
+        )
+        return list(self.session.scalars(statement))
+
     def save_sheet(
         self,
         *,
@@ -64,7 +71,7 @@ class GoldToiletOrderRepository:
         if sheet.provider_market_open is None:
             sheet.provider_market_open = market_open
             sheet.provider_open_observed_at = observed_at
-            sheet.provider_open_source = "yahoo_1m_regular_session"
+            sheet.provider_open_source = "yahoo_1d_regular_session"
         sheet.provider_open_last_checked_at = observed_at
         sheet.provider_open_failure_reason = None
         return self.save(sheet)

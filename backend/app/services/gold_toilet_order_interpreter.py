@@ -145,7 +145,7 @@ class GoldToiletOrderInterpreter:
             return None, None
         if sheet.manual_market_open is not None:
             return sheet.manual_market_open, "manual"
-        return sheet.provider_market_open, "yahoo_1m_regular_session"
+        return sheet.provider_market_open, "yahoo_1d_regular_session"
 
     @staticmethod
     def _now() -> datetime:

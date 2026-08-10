@@ -119,7 +119,7 @@ def test_provider_open_is_snapshotted_only_once(gold_toilet_client) -> None:
 
     assert first.json()["sheet"]["provider_market_open"] == "48.250000"
     assert second.json()["sheet"]["provider_market_open"] == "48.250000"
-    assert second.json()["sheet"]["provider_open_source"] == "yahoo_1m_regular_session"
+    assert second.json()["sheet"]["provider_open_source"] == "yahoo_1d_regular_session"
     assert provider.calls == 1
 
 
@@ -169,7 +169,7 @@ def test_manual_open_can_be_cleared_back_to_provider_value(gold_toilet_client) -
     sheet = response.json()["sheet"]
     assert sheet["manual_market_open"] is None
     assert sheet["effective_market_open"] == "48.250000"
-    assert sheet["effective_open_source"] == "yahoo_1m_regular_session"
+    assert sheet["effective_open_source"] == "yahoo_1d_regular_session"
 
 
 def test_status_becomes_failed_five_minutes_after_open() -> None:

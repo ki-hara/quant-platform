@@ -1,8 +1,9 @@
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
 from app.infrastructure.market_data.yahoo_regular_open_provider import (
+    YahooRegularOpenProvider,
     parse_regular_session_open,
 )
 
@@ -145,3 +146,82 @@ def test_rejects_non_finite_opening_bar_values() -> None:
 
     assert result.quote is None
     assert result.failure_reason == "opening_bar_values_invalid"
+
+
+def test_daily_provider_queries_but_rejects_open_before_regular_session_start() -> None:
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            pass
+
+        def json(self) -> dict:
+            return _payload(
+                timestamps=[_timestamp(9, 30)],
+                opens=[131.505],
+                highs=[None],
+                lows=[None],
+            )
+
+    calls = []
+
+    def fake_get(*args, **kwargs):
+        calls.append((args, kwargs))
+        return FakeResponse()
+
+    provider = YahooRegularOpenProvider(
+        http_get=fake_get,
+        now=lambda: datetime(2026, 8, 4, 13, 29, 59, tzinfo=UTC),
+    )
+
+    result = provider.get_open("SOXL", date(2026, 8, 4))
+
+    assert result.quote is None
+    assert result.failure_reason == "regular_session_not_started"
+    assert len(calls) == 1
+
+
+def test_daily_provider_requests_one_day_candles_after_open() -> None:
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            pass
+
+        def json(self) -> dict:
+            return _payload(
+                timestamps=[_timestamp(9, 30)],
+                opens=[131.505],
+                highs=[None],
+                lows=[None],
+            )
+
+    calls = []
+
+    def fake_get(*args, **kwargs):
+        calls.append((args, kwargs))
+        return FakeResponse()
+
+    provider = YahooRegularOpenProvider(
+        http_get=fake_get,
+        now=lambda: datetime(2026, 8, 4, 13, 30, tzinfo=UTC),
+    )
+
+    result = provider.get_open("SOXL", date(2026, 8, 4))
+
+    assert result.quote is not None
+    assert result.quote.price == Decimal("131.505")
+    assert calls[0][1]["params"]["interval"] == "1d"
+    assert calls[0][1]["params"]["cache_buster"] == 1785850200
+
+
+def test_accepts_in_progress_daily_candle_timestamped_after_0930() -> None:
+    result = parse_regular_session_open(
+        _payload(
+            timestamps=[_timestamp(10, 35)],
+            opens=[131.505],
+            highs=[133.04],
+            lows=[129.66],
+        ),
+        "SOXL",
+        date(2026, 8, 4),
+    )
+
+    assert result.quote is not None
+    assert result.quote.price == Decimal("131.505")

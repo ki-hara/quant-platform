@@ -1,5 +1,7 @@
+import asyncio
 from collections.abc import Callable
 from contextlib import asynccontextmanager
+from contextlib import suppress
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -15,6 +17,8 @@ from app.api.routes_dashboard import router as dashboard_router
 from app.api.routes_gold_toilet_orders import router as gold_toilet_orders_router
 from app.api.routes_integrated_orders import router as integrated_orders_router
 from app.api.routes_portfolios import router as portfolios_router
+from app.infrastructure.market_data.yahoo_regular_open_provider import YahooRegularOpenProvider
+from app.services.gold_toilet_open_collector import GoldToiletOpenCollector
 from app.api.routes_trading_plan import router as trading_plan_router
 from app.api.routes_strategies import router as strategies_router
 from app.api.routes_trades import router as trades_router
@@ -28,6 +32,7 @@ from app.db.session import SessionLocal, engine
 def create_app(
     database_engine: Engine = engine,
     session_factory: Callable[[], Session] = SessionLocal,
+    gold_toilet_collector: GoldToiletOpenCollector | None = None,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -36,7 +41,20 @@ def create_app(
         run_sqlite_migrations(database_engine)
         with session_factory() as session:
             seed_default_owner(session, settings.default_owner_id)
-        yield
+        collector = gold_toilet_collector or GoldToiletOpenCollector(
+            session_factory=session_factory,
+            market_provider=YahooRegularOpenProvider(),
+        )
+        collector_task = asyncio.create_task(
+            collector.run(),
+            name="gold-toilet-open-collector",
+        )
+        try:
+            yield
+        finally:
+            collector_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await collector_task
 
     app = FastAPI(title="Quant Strategy Platform", version="0.1.0", lifespan=lifespan)
     app.state.session_factory = session_factory

@@ -1,5 +1,6 @@
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -27,21 +28,37 @@ class RegularOpenLookup:
 
 
 class YahooRegularOpenProvider:
+    def __init__(
+        self,
+        http_get: Callable[..., Any] = httpx.get,
+        now: Callable[[], datetime] | None = None,
+    ) -> None:
+        self._http_get = http_get
+        self._now = now or (lambda: datetime.now(UTC))
+
     def get_open(self, symbol: str, session_date: date) -> RegularOpenLookup:
         session_start = datetime.combine(session_date, time(9, 30), NEW_YORK)
+        observed_at = self._now()
+        if observed_at.tzinfo is None:
+            observed_at = observed_at.replace(tzinfo=UTC)
+        session_started = observed_at.astimezone(NEW_YORK) >= session_start
+
         try:
-            response = httpx.get(
+            response = self._http_get(
                 f"https://query2.finance.yahoo.com/v8/finance/chart/{symbol}",
                 params={
-                    "period1": int((session_start - timedelta(minutes=1)).timestamp()),
-                    "period2": int((session_start + timedelta(minutes=2)).timestamp()),
-                    "interval": "1m",
+                    "period1": int((session_start - timedelta(days=1)).timestamp()),
+                    "period2": int((session_start + timedelta(days=1)).timestamp()),
+                    "interval": "1d",
                     "includePrePost": "false",
+                    "cache_buster": int(observed_at.timestamp()),
                 },
-                headers={"User-Agent": "Mozilla/5.0"},
+                headers={"User-Agent": "Mozilla/5.0", "Cache-Control": "no-cache"},
                 timeout=5.0,
             )
             response.raise_for_status()
+            if not session_started:
+                return RegularOpenLookup(None, "regular_session_not_started")
             return parse_regular_session_open(response.json(), symbol, session_date)
         except (httpx.HTTPError, ValueError, KeyError, TypeError):
             return RegularOpenLookup(None, "opening_price_provider_unavailable")
@@ -62,7 +79,7 @@ def parse_regular_session_open(
 
     for index, timestamp in enumerate(timestamps):
         bar_time = datetime.fromtimestamp(timestamp, tz=NEW_YORK)
-        if bar_time.date() != session_date or bar_time.time().replace(tzinfo=None) != time(9, 30):
+        if bar_time.date() != session_date or bar_time.timetz().replace(tzinfo=None) < time(9, 30):
             continue
         if index >= len(opens):
             return RegularOpenLookup(None, "opening_bar_values_missing")

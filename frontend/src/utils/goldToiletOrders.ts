@@ -1,7 +1,7 @@
 import type { GoldToiletOpenStatus } from "../api/goldToiletOrders";
 import { marketDateIso } from "./format";
 
-export const GOLD_TOILET_OPEN_POLL_INTERVAL_MS = 5_000;
+export const GOLD_TOILET_OPEN_POLL_INTERVAL_MS = 1_000;
 
 export function shouldPollForOpen(
   orderDate: string,

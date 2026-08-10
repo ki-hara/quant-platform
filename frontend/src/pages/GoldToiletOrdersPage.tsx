@@ -169,7 +169,7 @@ export function GoldToiletOrdersPage() {
           <b>SOXL</b>
           <span>자동 시가 {providerOpen ? `$${Number(providerOpen).toFixed(2)}` : "-"}</span>
           <span>직접 입력 {sheet?.manual_market_open ? `$${Number(sheet.manual_market_open).toFixed(2)}` : "미적용"}</span>
-          {sheet?.provider_open_observed_at ? <time>09:30 봉 · {formatObservedAt(sheet.provider_open_observed_at)}</time> : null}
+          {sheet?.provider_open_observed_at ? <time>일봉 시가 수신 · {formatObservedAt(sheet.provider_open_observed_at)}</time> : null}
         </div>
       </article>
 
@@ -228,14 +228,14 @@ function OpenStatus({ data, orderDate }: { data: GoldToiletOrderResponse | null;
     return (
       <div className="open-status failed">
         <span className="status-dot" />
-        자동 시가 검증 실패 · {failureLabel(data.open_failure_reason)} · 5초마다 계속 재조회합니다.
+        자동 시가 검증 실패 · {failureLabel(data.open_failure_reason)} · 1초마다 계속 재조회합니다.
       </div>
     );
   }
   return (
     <div className="open-status waiting">
       <span className="status-dot" />
-      {orderDate} 09:30(뉴욕) 첫 1분봉을 기다리는 중입니다. 5초마다 확인합니다.
+      {orderDate} 09:30(뉴욕) 당일 일봉 시가를 기다리는 중입니다. 1초마다 확인합니다.
     </div>
   );
 }
@@ -257,15 +257,16 @@ function OrderResult({ label, value, copyValue, kind, featured = false }: { labe
 }
 
 function sourceLabel(source: string | null) {
-  return source === "manual" ? "직접 입력 강제 적용" : "Yahoo 09:30 첫 1분봉";
+  return source === "manual" ? "직접 입력 강제 적용" : "Yahoo 당일 일봉 시가";
 }
 
 function failureLabel(reason: string | null) {
   const labels: Record<string, string> = {
-    opening_bar_not_available: "09:30 봉 미수신",
-    opening_bar_values_missing: "09:30 봉 값 누락",
-    opening_bar_values_invalid: "09:30 봉 값 오류",
-    opening_bar_ohlc_invalid: "09:30 봉 OHLC 검증 실패",
+    regular_session_not_started: "정규장 개시 대기",
+    opening_bar_not_available: "당일 일봉 미수신",
+    opening_bar_values_missing: "당일 일봉 값 누락",
+    opening_bar_values_invalid: "당일 일봉 값 오류",
+    opening_bar_ohlc_invalid: "당일 일봉 OHLC 검증 실패",
     opening_price_payload_invalid: "시세 응답 형식 오류",
     opening_price_provider_unavailable: "시세 제공자 연결 실패",
   };

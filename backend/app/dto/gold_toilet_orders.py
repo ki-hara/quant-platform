@@ -39,7 +39,7 @@ class GoldToiletOrderSheetDto(BaseModel):
     manual_market_open: Decimal | None
     manual_open_observed_at: datetime | None
     effective_market_open: Decimal | None
-    effective_open_source: Literal["manual", "yahoo_1m_regular_session"] | None
+    effective_open_source: Literal["manual", "yahoo_1d_regular_session"] | None
     updated_at: datetime
 
 
