@@ -58,6 +58,7 @@ class GoldToiletOrderResponseDto(BaseModel):
     account: GoldToiletAccountDto | None
     sheet: GoldToiletOrderSheetDto | None
     allocation_amount: Decimal | None
+    manual_open_allowed: bool
     calculation: GoldToiletCalculationDto | None
     open_status: Literal["waiting", "ready", "failed"]
     open_failure_reason: str | None = None

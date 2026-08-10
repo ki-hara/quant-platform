@@ -17,7 +17,10 @@ from app.infrastructure.market_data.yahoo_regular_open_provider import (
     RegularSessionOpen,
 )
 from app.main import create_app
-from app.services.gold_toilet_order_interpreter import classify_open_status
+from app.services.gold_toilet_order_interpreter import (
+    classify_open_status,
+    manual_open_allowed,
+)
 
 
 class FakeRegularOpenProvider:
@@ -155,7 +158,7 @@ def test_allocation_amount_is_returned_before_market_open(gold_toilet_client) ->
     assert response.json()["calculation"] is None
 
 
-def test_manual_open_is_rejected_until_provider_open_exists(gold_toilet_client) -> None:
+def test_manual_open_recovers_when_provider_open_is_unavailable(gold_toilet_client) -> None:
     client, provider = gold_toilet_client
     provider.lookup = RegularOpenLookup(None, "opening_bar_not_available")
     _save_account_and_sheet(client)
@@ -165,10 +168,14 @@ def test_manual_open_is_rejected_until_provider_open_exists(gold_toilet_client) 
         json={"market_open": "131.5"},
     )
 
-    assert response.status_code == 409
-    waiting = client.get("/api/gold-toilet/order-sheet", params={"order_date": "2026-08-04"}).json()
-    assert waiting["calculation"] is None
-    assert waiting["open_failure_reason"] == "opening_bar_not_available"
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["sheet"]["provider_market_open"] is None
+    assert payload["sheet"]["manual_market_open"] == "131.500000"
+    assert payload["sheet"]["effective_market_open"] == "131.500000"
+    assert payload["sheet"]["effective_open_source"] == "manual"
+    assert payload["calculation"] is not None
+    assert payload["open_status"] == "ready"
 
 
 def test_manual_open_can_be_cleared_back_to_provider_value(gold_toilet_client) -> None:
@@ -205,3 +212,11 @@ def test_status_becomes_failed_five_minutes_after_open() -> None:
         )
         == "failed"
     )
+
+
+def test_manual_open_permission_starts_at_new_york_open_in_edt_and_est() -> None:
+    assert (
+        manual_open_allowed(date(2026, 8, 4), datetime(2026, 8, 4, 13, 29, 59, tzinfo=UTC)) is False
+    )
+    assert manual_open_allowed(date(2026, 8, 4), datetime(2026, 8, 4, 13, 30, tzinfo=UTC)) is True
+    assert manual_open_allowed(date(2026, 11, 3), datetime(2026, 11, 3, 14, 30, tzinfo=UTC)) is True

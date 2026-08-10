@@ -14,9 +14,7 @@ class GoldToiletOrderRepository:
     def get_account(self, owner_id: str) -> GoldToiletAccount | None:
         return self.session.get(GoldToiletAccount, owner_id)
 
-    def save_account(
-        self, owner_id: str, capital: Decimal, cash: Decimal
-    ) -> GoldToiletAccount:
+    def save_account(self, owner_id: str, capital: Decimal, cash: Decimal) -> GoldToiletAccount:
         account = self.get_account(owner_id)
         if account is None:
             account = GoldToiletAccount(owner_id=owner_id, capital=capital, cash=cash)
@@ -86,8 +84,6 @@ class GoldToiletOrderRepository:
     def set_manual_open(
         self, sheet: GoldToiletOrderSheet, market_open: Decimal, observed_at: datetime
     ) -> GoldToiletOrderSheet:
-        if sheet.provider_market_open is None:
-            raise ValueError("자동 시가가 확인된 뒤에만 직접 입력할 수 있습니다.")
         sheet.manual_market_open = market_open
         sheet.manual_open_observed_at = observed_at
         return self.save(sheet)

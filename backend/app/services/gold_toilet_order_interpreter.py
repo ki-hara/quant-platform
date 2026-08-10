@@ -22,6 +22,12 @@ class MarketProvider(Protocol):
 NEW_YORK = ZoneInfo("America/New_York")
 
 
+def manual_open_allowed(order_date: date, now: datetime) -> bool:
+    aware_now = now.replace(tzinfo=UTC) if now.tzinfo is None else now
+    session_start = datetime.combine(order_date, time(9, 30), NEW_YORK)
+    return aware_now.astimezone(NEW_YORK) >= session_start
+
+
 class GoldToiletOrderInterpreter:
     def __init__(self, session: Session, market_provider: MarketProvider) -> None:
         self.session = session
@@ -63,7 +69,10 @@ class GoldToiletOrderInterpreter:
 
     def set_manual_open(self, owner_id: str, order_date: date, market_open: Decimal):
         sheet = self._require_sheet(owner_id, order_date)
-        self.repository.set_manual_open(sheet, market_open, self._now())
+        observed_at = self._now()
+        if not manual_open_allowed(order_date, observed_at):
+            raise ValueError("뉴욕 정규장 시작 후 시가를 직접 입력할 수 있습니다.")
+        self.repository.set_manual_open(sheet, market_open, observed_at)
         self.session.commit()
         return self.get(owner_id, order_date, capture_open=False)
 
@@ -94,12 +103,15 @@ class GoldToiletOrderInterpreter:
         sheet_dto = None
         open_status = "waiting"
         failure_reason = None
+        observed_at = self._now()
+        allow_manual_open = False
         if sheet is not None:
             effective_open, effective_source = self._effective_open(sheet)
+            allow_manual_open = manual_open_allowed(sheet.order_date, observed_at)
             open_status = classify_open_status(
                 sheet.order_date,
-                sheet.provider_market_open is not None,
-                self._now(),
+                effective_open is not None,
+                observed_at,
             )
             failure_reason = sheet.provider_open_failure_reason
             sheet_dto = GoldToiletOrderSheetDto(
@@ -136,6 +148,7 @@ class GoldToiletOrderInterpreter:
             sheet=sheet_dto,
             calculation=calculation,
             allocation_amount=allocation_amount,
+            manual_open_allowed=allow_manual_open,
             open_status=open_status,
             open_failure_reason=failure_reason,
         )
@@ -150,10 +163,10 @@ class GoldToiletOrderInterpreter:
     def _effective_open(
         sheet: GoldToiletOrderSheet,
     ) -> tuple[Decimal | None, str | None]:
-        if sheet.provider_market_open is None:
-            return None, None
         if sheet.manual_market_open is not None:
             return sheet.manual_market_open, "manual"
+        if sheet.provider_market_open is None:
+            return None, None
         return sheet.provider_market_open, "yahoo_1d_regular_session"
 
     @staticmethod
