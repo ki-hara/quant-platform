@@ -16,6 +16,10 @@ class GoldToiletCalculation:
     cash_warning: bool
 
 
+def calculate_allocation_amount(capital: Decimal, allocation_percent: Decimal) -> Decimal:
+    return _money(capital * allocation_percent / HUNDRED)
+
+
 def calculate_gold_toilet_order(
     *,
     capital: Decimal,
@@ -25,11 +29,9 @@ def calculate_gold_toilet_order(
     allocation_percent: Decimal,
     loc_percent: Decimal,
 ) -> GoldToiletCalculation:
-    breakout_buy_price = _money(
-        market_open * (Decimal("1") + entry_percent / HUNDRED)
-    )
+    breakout_buy_price = _money(market_open * (Decimal("1") + entry_percent / HUNDRED))
     loc_buy_price = _money(market_open * (Decimal("1") + loc_percent / HUNDRED))
-    allocation_amount = _money(capital * allocation_percent / HUNDRED)
+    allocation_amount = calculate_allocation_amount(capital, allocation_percent)
     quantity_price = min(breakout_buy_price, loc_buy_price)
     order_quantity = int(
         (allocation_amount / quantity_price).to_integral_value(rounding=ROUND_FLOOR)

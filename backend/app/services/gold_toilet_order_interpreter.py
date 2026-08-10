@@ -9,7 +9,10 @@ from app.domain.models import GoldToiletOrderSheet
 from app.dto.gold_toilet_orders import GoldToiletOrderResponseDto, GoldToiletOrderSheetDto
 from app.infrastructure.market_data.yahoo_regular_open_provider import RegularOpenLookup
 from app.infrastructure.repositories.gold_toilet_orders import GoldToiletOrderRepository
-from app.services.gold_toilet_order_service import calculate_gold_toilet_order
+from app.services.gold_toilet_order_service import (
+    calculate_allocation_amount,
+    calculate_gold_toilet_order,
+)
 
 
 class MarketProvider(Protocol):
@@ -85,6 +88,7 @@ class GoldToiletOrderInterpreter:
 
     def _response(self, account, sheet) -> GoldToiletOrderResponseDto:
         calculation = None
+        allocation_amount = None
         effective_open = None
         effective_source = None
         sheet_dto = None
@@ -114,19 +118,24 @@ class GoldToiletOrderInterpreter:
                 effective_open_source=effective_source,
                 updated_at=sheet.updated_at,
             )
-        if account is not None and sheet is not None and effective_open is not None:
-            calculation = calculate_gold_toilet_order(
-                capital=account.capital,
-                cash=account.cash,
-                market_open=effective_open,
-                entry_percent=sheet.entry_percent,
-                allocation_percent=sheet.allocation_percent,
-                loc_percent=sheet.loc_percent,
+        if account is not None and sheet is not None:
+            allocation_amount = calculate_allocation_amount(
+                account.capital, sheet.allocation_percent
             )
+            if effective_open is not None:
+                calculation = calculate_gold_toilet_order(
+                    capital=account.capital,
+                    cash=account.cash,
+                    market_open=effective_open,
+                    entry_percent=sheet.entry_percent,
+                    allocation_percent=sheet.allocation_percent,
+                    loc_percent=sheet.loc_percent,
+                )
         return GoldToiletOrderResponseDto(
             account=account,
             sheet=sheet_dto,
             calculation=calculation,
+            allocation_amount=allocation_amount,
             open_status=open_status,
             open_failure_reason=failure_reason,
         )

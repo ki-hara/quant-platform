@@ -57,6 +57,7 @@ class GoldToiletOrderResponseDto(BaseModel):
     symbol: Literal["SOXL"] = "SOXL"
     account: GoldToiletAccountDto | None
     sheet: GoldToiletOrderSheetDto | None
+    allocation_amount: Decimal | None
     calculation: GoldToiletCalculationDto | None
     open_status: Literal["waiting", "ready", "failed"]
     open_failure_reason: str | None = None

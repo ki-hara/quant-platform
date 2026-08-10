@@ -8,7 +8,14 @@ from app.db.base import Base
 from app.domain.models import Owner
 from app.infrastructure.repositories.gold_toilet_orders import GoldToiletOrderRepository
 
-from app.services.gold_toilet_order_service import calculate_gold_toilet_order
+from app.services.gold_toilet_order_service import (
+    calculate_allocation_amount,
+    calculate_gold_toilet_order,
+)
+
+
+def test_calculates_allocation_amount_without_market_open() -> None:
+    assert calculate_allocation_amount(Decimal("10000"), Decimal("22.5")) == Decimal("2250.00")
 
 
 def test_calculation_uses_loc_price_for_one_shared_quantity() -> None:
@@ -104,12 +111,8 @@ def test_repository_keeps_account_and_sheet_isolated_by_owner() -> None:
         assert account.cash == Decimal("5000.000000")
         assert sheet is not None
         assert sheet.entry_percent == Decimal("1.490000")
-        repository.snapshot_provider_open(
-            sheet, Decimal("131.505"), datetime(2026, 8, 4, 13, 30)
-        )
-        repository.set_manual_open(
-            sheet, Decimal("131.50"), datetime(2026, 8, 4, 13, 31)
-        )
+        repository.snapshot_provider_open(sheet, Decimal("131.505"), datetime(2026, 8, 4, 13, 30))
+        repository.set_manual_open(sheet, Decimal("131.50"), datetime(2026, 8, 4, 13, 31))
         assert sheet.provider_market_open == Decimal("131.505000")
         assert sheet.manual_market_open == Decimal("131.500000")
         repository.clear_manual_open(sheet)

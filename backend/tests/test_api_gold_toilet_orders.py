@@ -64,17 +64,23 @@ def gold_toilet_client() -> Generator[tuple[TestClient, FakeRegularOpenProvider]
 
 
 def _save_account_and_sheet(client: TestClient) -> None:
-    assert client.put(
-        "/api/gold-toilet/account", json={"capital": "10000", "cash": "5000"}
-    ).status_code == 200
-    assert client.put(
-        "/api/gold-toilet/order-sheet/2026-08-04",
-        json={
-            "entry_percent": "1.49",
-            "allocation_percent": "22.5",
-            "loc_percent": "-9.34",
-        },
-    ).status_code == 200
+    assert (
+        client.put(
+            "/api/gold-toilet/account", json={"capital": "10000", "cash": "5000"}
+        ).status_code
+        == 200
+    )
+    assert (
+        client.put(
+            "/api/gold-toilet/order-sheet/2026-08-04",
+            json={
+                "entry_percent": "1.49",
+                "allocation_percent": "22.5",
+                "loc_percent": "-9.34",
+            },
+        ).status_code
+        == 200
+    )
 
 
 def test_manual_override_returns_three_outputs_and_preserves_provider_open(
@@ -137,6 +143,18 @@ def test_sheet_save_rejects_embedded_manual_open(gold_toilet_client) -> None:
     assert response.status_code == 422
 
 
+def test_allocation_amount_is_returned_before_market_open(gold_toilet_client) -> None:
+    client, provider = gold_toilet_client
+    provider.lookup = RegularOpenLookup(None, "opening_bar_not_available")
+    _save_account_and_sheet(client)
+
+    response = client.get("/api/gold-toilet/order-sheet", params={"order_date": "2026-08-04"})
+
+    assert response.status_code == 200
+    assert response.json()["allocation_amount"] == "2250.00"
+    assert response.json()["calculation"] is None
+
+
 def test_manual_open_is_rejected_until_provider_open_exists(gold_toilet_client) -> None:
     client, provider = gold_toilet_client
     provider.lookup = RegularOpenLookup(None, "opening_bar_not_available")
@@ -148,9 +166,7 @@ def test_manual_open_is_rejected_until_provider_open_exists(gold_toilet_client) 
     )
 
     assert response.status_code == 409
-    waiting = client.get(
-        "/api/gold-toilet/order-sheet", params={"order_date": "2026-08-04"}
-    ).json()
+    waiting = client.get("/api/gold-toilet/order-sheet", params={"order_date": "2026-08-04"}).json()
     assert waiting["calculation"] is None
     assert waiting["open_failure_reason"] == "opening_bar_not_available"
 
@@ -173,13 +189,19 @@ def test_manual_open_can_be_cleared_back_to_provider_value(gold_toilet_client) -
 
 
 def test_status_becomes_failed_five_minutes_after_open() -> None:
-    assert classify_open_status(
-        date(2026, 8, 4),
-        False,
-        datetime(2026, 8, 4, 13, 34, tzinfo=UTC),
-    ) == "waiting"
-    assert classify_open_status(
-        date(2026, 8, 4),
-        False,
-        datetime(2026, 8, 4, 13, 35, tzinfo=UTC),
-    ) == "failed"
+    assert (
+        classify_open_status(
+            date(2026, 8, 4),
+            False,
+            datetime(2026, 8, 4, 13, 34, tzinfo=UTC),
+        )
+        == "waiting"
+    )
+    assert (
+        classify_open_status(
+            date(2026, 8, 4),
+            False,
+            datetime(2026, 8, 4, 13, 35, tzinfo=UTC),
+        )
+        == "failed"
+    )
