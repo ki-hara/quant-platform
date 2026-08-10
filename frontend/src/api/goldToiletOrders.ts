@@ -39,6 +39,8 @@ export interface GoldToiletOrderResponse {
   account: GoldToiletAccount | null;
   sheet: GoldToiletOrderSheet | null;
   calculation: GoldToiletCalculation | null;
+  allocation_amount: string | null;
+  manual_open_allowed: boolean;
   open_status: GoldToiletOpenStatus;
   open_failure_reason: string | null;
 }

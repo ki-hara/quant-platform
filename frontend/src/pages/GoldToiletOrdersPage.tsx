@@ -10,7 +10,7 @@ import {
 } from "../api/goldToiletOrders";
 import { formatMoney, marketDateIso } from "../utils/format";
 import {
-  canOverrideOpen,
+  goldToiletOrderResultItems,
   GOLD_TOILET_OPEN_POLL_INTERVAL_MS,
   orderCopyText,
   shouldPollForOpen,
@@ -57,7 +57,7 @@ export function GoldToiletOrdersPage() {
   }, [load]);
 
   useEffect(() => {
-    if (!data || !shouldPollForOpen(orderDate, data.open_status)) return;
+    if (!data || !shouldPollForOpen(orderDate, data.sheet?.provider_market_open)) return;
     const timer = window.setInterval(() => void load(), GOLD_TOILET_OPEN_POLL_INTERVAL_MS);
     return () => window.clearInterval(timer);
   }, [data, load, orderDate]);
@@ -120,7 +120,8 @@ export function GoldToiletOrdersPage() {
   const sheet = data?.sheet;
   const effectiveOpen = sheet?.effective_market_open;
   const providerOpen = sheet?.provider_market_open;
-  const manualOverrideAllowed = canOverrideOpen(providerOpen);
+  const manualOverrideAllowed = data?.manual_open_allowed ?? false;
+  const orderResults = goldToiletOrderResultItems(calculation ?? null);
 
   return (
     <section className="gold-toilet-page">
@@ -159,6 +160,14 @@ export function GoldToiletOrdersPage() {
       </div>
 
       <OpenStatus data={data} orderDate={orderDate} />
+      <article className="gold-allocation-card" aria-live="polite">
+        <div>
+          <span>매수 비중 금액</span>
+          <small>시가 없이 미리 확정</small>
+        </div>
+        <strong>{data?.allocation_amount ? formatMoney(data.allocation_amount, "SOXL") : "-"}</strong>
+      </article>
+
 
       <article className={`gold-market-open-card ${effectiveOpen ? "ready" : "waiting"}`}>
         <div>
@@ -167,7 +176,7 @@ export function GoldToiletOrdersPage() {
         </div>
         <div className="gold-market-open-meta">
           <b>SOXL</b>
-          <span>자동 시가 {providerOpen ? `$${Number(providerOpen).toFixed(2)}` : "-"}</span>
+          <span>자동 시가 {providerOpen ? `$${Number(providerOpen).toFixed(2)}` : "조회 중"}</span>
           <span>직접 입력 {sheet?.manual_market_open ? `$${Number(sheet.manual_market_open).toFixed(2)}` : "미적용"}</span>
           {sheet?.provider_open_observed_at ? <time>일봉 시가 수신 · {formatObservedAt(sheet.provider_open_observed_at)}</time> : null}
         </div>
@@ -176,7 +185,7 @@ export function GoldToiletOrdersPage() {
       <form className="panel gold-manual-open-panel" onSubmit={applyManualOpen}>
         <div>
           <h3>시가 직접 입력</h3>
-          <p>자동 시가가 먼저 확인된 뒤에만 사용할 수 있습니다. 적용 시 자동 조회값은 보존됩니다.</p>
+          <p>뉴욕 정규장 시작 후 사용할 수 있습니다. 직접 입력 중에도 자동 시가 조회는 계속됩니다.</p>
         </div>
         <label>
           강제 적용 시가
@@ -186,7 +195,7 @@ export function GoldToiletOrdersPage() {
             step="0.001"
             value={manualOpen}
             onChange={(event) => setManualOpen(event.target.value)}
-            placeholder={manualOverrideAllowed ? "예: 131.50" : "자동 시가 확인 후 입력 가능"}
+            placeholder={manualOverrideAllowed ? "예: 131.50" : "뉴욕 정규장 시작 후 입력 가능"}
             disabled={!manualOverrideAllowed || working}
             required
           />
@@ -195,15 +204,21 @@ export function GoldToiletOrdersPage() {
         {sheet?.manual_market_open ? <button className="ghost-button" type="button" onClick={() => void resetManualOpen()} disabled={working}>자동 시가로 되돌리기</button> : null}
       </form>
 
-      <div className="gold-order-results" aria-live="polite">
-        <OrderResult label="매수가" value={calculation ? `$${Number(calculation.breakout_buy_price).toFixed(2)}` : "-"} copyValue={calculation?.breakout_buy_price} kind="price" />
-        <OrderResult label="주문 수량" value={calculation ? `${calculation.order_quantity.toLocaleString()}주` : "-"} copyValue={calculation?.order_quantity} kind="quantity" featured />
-        <OrderResult label="LOC 매수가" value={calculation ? `$${Number(calculation.loc_buy_price).toFixed(2)}` : "-"} copyValue={calculation?.loc_buy_price} kind="price" />
-      </div>
+      {calculation ? (
+        <div className="gold-order-results" aria-live="polite">
+          {orderResults.map((item) => (
+            <OrderResult
+              key={item.label}
+              {...item}
+              featured={item.kind === "quantity"}
+            />
+          ))}
+        </div>
+      ) : null}
 
       {calculation ? (
         <div className={calculation.cash_warning ? "notice notice-error" : "gold-cash-summary"}>
-          주문 배정액 {formatMoney(calculation.allocation_amount, "SOXL")} · 두 주문 예약 필요 현금 {formatMoney(calculation.required_reservation_cash, "SOXL")}
+          두 주문 예약 필요 현금 {formatMoney(calculation.required_reservation_cash, "SOXL")}
           {calculation.cash_warning ? " · 현재 현금으로 두 주문을 동시에 예약하기 부족합니다." : " · 두 주문 동시 예약 가능"}
         </div>
       ) : null}

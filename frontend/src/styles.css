@@ -574,6 +574,31 @@ h2 {
 .gold-sheet-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .gold-sheet-grid .manual-open-field { grid-column: 1 / -1; }
 
+.gold-allocation-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border: 1px solid #e5c76b;
+  border-radius: 12px;
+  background: #fffaf0;
+  padding: 16px 20px;
+  box-shadow: var(--shadow-soft);
+}
+
+.gold-allocation-card > div {
+  display: grid;
+  gap: 3px;
+}
+
+.gold-allocation-card span { color: #765900; font-size: 13px; font-weight: 800; }
+.gold-allocation-card small { color: var(--muted); font-size: 12px; }
+.gold-allocation-card strong {
+  color: #6e5200;
+  font-size: clamp(28px, 4vw, 42px);
+  letter-spacing: -.03em;
+}
+
 .open-status {
   display: flex;
   align-items: center;
@@ -620,7 +645,7 @@ h2 {
 .gold-manual-open-panel p { margin: 0; color: var(--muted); font-size: 12px; }
 .gold-manual-open-panel label { display: grid; gap: 6px; color: var(--muted); font-size: 12px; font-weight: 700; }
 
-.gold-order-results { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.gold-order-results { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
 .gold-order-card {
   display: grid;
   gap: 10px;
