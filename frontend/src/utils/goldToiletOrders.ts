@@ -1,7 +1,7 @@
 import type { GoldToiletCalculation } from "../api/goldToiletOrders";
 import { marketDateIso } from "./format";
 
-export const GOLD_TOILET_OPEN_POLL_INTERVAL_MS = 1_000;
+export const GOLD_TOILET_OPEN_POLL_INTERVAL_MS = 2_000;
 
 export function shouldPollForOpen(
   orderDate: string,
@@ -49,6 +49,16 @@ export function goldToiletOrderResultItems(
       kind: "quantity",
     },
   ];
+}
+
+export function sourceLabel(source: string | null): string {
+  const labels: Record<string, string> = {
+    manual: "직접 입력 강제 적용",
+    cnbc_us_quote: "CNBC 미국 실시간 시세",
+    finnhub_us_quote: "Finnhub 미국 실시간 시세",
+    yahoo_1d_regular_session: "Yahoo 당일 일봉 시가",
+  };
+  return source ? labels[source] ?? source : "자동 시세";
 }
 
 

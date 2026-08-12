@@ -6,13 +6,13 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
-from app.infrastructure.market_data.yahoo_regular_open_provider import RegularOpenLookup
+from app.infrastructure.market_data.regular_open import RegularOpenLookup
 from app.infrastructure.repositories.gold_toilet_orders import GoldToiletOrderRepository
 
 
 NEW_YORK = ZoneInfo("America/New_York")
 CAPTURE_LEAD = timedelta(seconds=5)
-POLL_INTERVAL_SECONDS = 1.0
+POLL_INTERVAL_SECONDS = 2.0
 
 
 class MarketProvider(Protocol):
@@ -71,7 +71,12 @@ class GoldToiletOpenCollector:
                         checked_at,
                     )
                 else:
-                    repository.snapshot_provider_open(sheet, lookup.quote.price, checked_at)
+                    repository.snapshot_provider_open(
+                        sheet,
+                        lookup.quote.price,
+                        lookup.quote.source,
+                        checked_at,
+                    )
             session.commit()
             return lookup.quote is not None
 

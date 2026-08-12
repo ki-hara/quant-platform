@@ -10,7 +10,7 @@ from app.dto.gold_toilet_orders import (
     GoldToiletOrderResponseDto,
     GoldToiletOrderSheetUpdateDto,
 )
-from app.infrastructure.market_data.yahoo_regular_open_provider import YahooRegularOpenProvider
+from app.infrastructure.market_data.regular_open_factory import build_regular_open_provider
 from app.services.gold_toilet_order_interpreter import GoldToiletOrderInterpreter, MarketProvider
 
 
@@ -18,7 +18,7 @@ router = APIRouter(prefix="/api/gold-toilet", tags=["gold-toilet"])
 
 
 def get_gold_toilet_market_provider() -> MarketProvider:
-    return YahooRegularOpenProvider()
+    return build_regular_open_provider()
 
 
 MarketProviderDep = Annotated[MarketProvider, Depends(get_gold_toilet_market_provider)]

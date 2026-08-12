@@ -14,6 +14,7 @@ import {
   GOLD_TOILET_OPEN_POLL_INTERVAL_MS,
   orderCopyText,
   shouldPollForOpen,
+  sourceLabel,
 } from "../utils/goldToiletOrders";
 
 export function GoldToiletOrdersPage() {
@@ -178,7 +179,7 @@ export function GoldToiletOrdersPage() {
           <b>SOXL</b>
           <span>자동 시가 {providerOpen ? `$${Number(providerOpen).toFixed(2)}` : "조회 중"}</span>
           <span>직접 입력 {sheet?.manual_market_open ? `$${Number(sheet.manual_market_open).toFixed(2)}` : "미적용"}</span>
-          {sheet?.provider_open_observed_at ? <time>일봉 시가 수신 · {formatObservedAt(sheet.provider_open_observed_at)}</time> : null}
+          {sheet?.provider_open_observed_at ? <time>실시간 시가 수신 · {formatObservedAt(sheet.provider_open_observed_at)}</time> : null}
         </div>
       </article>
 
@@ -243,14 +244,14 @@ function OpenStatus({ data, orderDate }: { data: GoldToiletOrderResponse | null;
     return (
       <div className="open-status failed">
         <span className="status-dot" />
-        자동 시가 검증 실패 · {failureLabel(data.open_failure_reason)} · 1초마다 계속 재조회합니다.
+        자동 시가 검증 실패 · {failureLabel(data.open_failure_reason)} · 2초마다 다른 공급자도 함께 재조회합니다.
       </div>
     );
   }
   return (
     <div className="open-status waiting">
       <span className="status-dot" />
-      {orderDate} 09:30(뉴욕) 당일 일봉 시가를 기다리는 중입니다. 1초마다 확인합니다.
+      {orderDate} 09:30(뉴욕) 실시간 시가를 기다리는 중입니다. 2초마다 여러 공급자를 확인합니다.
     </div>
   );
 }
@@ -269,10 +270,6 @@ function OrderResult({ label, value, copyValue, kind, featured = false }: { labe
       <button type="button" onClick={() => void copy()} disabled={copyValue === undefined}><Clipboard size={16} aria-hidden="true" />{copied ? "복사됨" : "복사"}</button>
     </article>
   );
-}
-
-function sourceLabel(source: string | null) {
-  return source === "manual" ? "직접 입력 강제 적용" : "Yahoo 당일 일봉 시가";
 }
 
 function failureLabel(reason: string | null) {

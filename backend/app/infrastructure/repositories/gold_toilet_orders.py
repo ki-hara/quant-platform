@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.domain.models import GoldToiletAccount, GoldToiletOrderSheet
@@ -64,15 +64,28 @@ class GoldToiletOrderRepository:
         self,
         sheet: GoldToiletOrderSheet,
         market_open: Decimal,
+        source: str,
         observed_at: datetime,
     ) -> GoldToiletOrderSheet:
-        if sheet.provider_market_open is None:
-            sheet.provider_market_open = market_open
-            sheet.provider_open_observed_at = observed_at
-            sheet.provider_open_source = "yahoo_1d_regular_session"
-        sheet.provider_open_last_checked_at = observed_at
-        sheet.provider_open_failure_reason = None
-        return self.save(sheet)
+        statement = (
+            update(GoldToiletOrderSheet)
+            .where(
+                GoldToiletOrderSheet.id == sheet.id,
+                GoldToiletOrderSheet.provider_market_open.is_(None),
+            )
+            .values(
+                provider_market_open=market_open,
+                provider_open_observed_at=observed_at,
+                provider_open_source=source,
+                provider_open_last_checked_at=observed_at,
+                provider_open_failure_reason=None,
+            )
+            .execution_options(synchronize_session=False)
+        )
+        self.session.execute(statement)
+        self.session.flush()
+        self.session.refresh(sheet)
+        return sheet
 
     def record_provider_failure(
         self, sheet: GoldToiletOrderSheet, reason: str, checked_at: datetime

@@ -33,7 +33,7 @@
 - Produces: `RegularSessionOpen(symbol, session_date, price, high, low, bar_time, source)` and `RegularOpenLookup(quote, failure_reason)`.
 - Produces: `CnbcRegularOpenProvider.get_open(symbol, session_date)` and `FinnhubRegularOpenProvider.get_open(symbol, session_date)`.
 
-- [ ] Write CNBC contract tests using a fixture whose `open` is `147.30`, market status is regular, timestamp is after 09:30, and source is `nyse_arca_cta`; add rejection cases for pre-open, wrong symbol, and impossible OHLC.
+- [ ] Write CNBC contract tests using a fixture whose `open` is `147.30`, market status is regular, timestamp is after 09:30, and source is `cnbc_us_quote`; add rejection cases for pre-open, wrong symbol, and impossible OHLC.
 - [ ] Run `cd backend; uv run pytest tests/test_cnbc_regular_open_provider.py -q` and verify failure because the provider module does not exist.
 - [ ] Implement provider-neutral dataclasses, common session/OHLC validation, and the CNBC parser/client with a five-second timeout.
 - [ ] Run the CNBC tests and verify they pass.
@@ -72,7 +72,7 @@
 
 **Interfaces:**
 - `snapshot_provider_open(sheet, market_open, source, observed_at)` persists the provider source.
-- `effective_open_source` accepts `manual`, `nyse_arca_cta`, `finnhub_us_quote`, and legacy `yahoo_1d_regular_session`.
+- `effective_open_source` accepts `manual`, `cnbc_us_quote`, `finnhub_us_quote`, and legacy `yahoo_1d_regular_session`.
 
 - [ ] Update collector/API tests first to expect a quote's selected source and verify legacy Yahoo-labelled rows still serialize.
 - [ ] Run the focused tests and verify failures at the repository signature/source assertions.

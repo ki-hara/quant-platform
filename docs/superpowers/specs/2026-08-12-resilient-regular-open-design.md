@@ -70,7 +70,7 @@ the final value is stored.
 6. The order interpreter calculates the regular buy and LOC order quantities
    from the stored opening price as it does today.
 
-The stored source label becomes `nyse_arca_cta` or `finnhub_us_quote`. Existing
+The stored source label becomes `cnbc_us_quote` or `finnhub_us_quote`. Existing
 rows labelled `yahoo_1d_regular_session` remain readable for historical
 compatibility, but new automatic captures never use that source.
 

@@ -19,7 +19,12 @@ export interface GoldToiletOrderSheet {
   manual_market_open: string | null;
   manual_open_observed_at: string | null;
   effective_market_open: string | null;
-  effective_open_source: "yahoo_1d_regular_session" | "manual" | null;
+  effective_open_source:
+    | "cnbc_us_quote"
+    | "finnhub_us_quote"
+    | "yahoo_1d_regular_session"
+    | "manual"
+    | null;
   updated_at: string;
 }
 

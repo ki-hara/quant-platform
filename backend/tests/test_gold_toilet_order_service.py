@@ -111,7 +111,12 @@ def test_repository_keeps_account_and_sheet_isolated_by_owner() -> None:
         assert account.cash == Decimal("5000.000000")
         assert sheet is not None
         assert sheet.entry_percent == Decimal("1.490000")
-        repository.snapshot_provider_open(sheet, Decimal("131.505"), datetime(2026, 8, 4, 13, 30))
+        repository.snapshot_provider_open(
+            sheet,
+            Decimal("131.505"),
+            "yahoo_1d_regular_session",
+            datetime(2026, 8, 4, 13, 30),
+        )
         repository.set_manual_open(sheet, Decimal("131.50"), datetime(2026, 8, 4, 13, 31))
         assert sheet.provider_market_open == Decimal("131.505000")
         assert sheet.manual_market_open == Decimal("131.500000")

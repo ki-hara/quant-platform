@@ -12,7 +12,7 @@ from app.api.routes_gold_toilet_orders import get_gold_toilet_market_provider
 from app.db.base import Base
 from app.db.seed import seed_default_owner
 from app.db.session import get_session
-from app.infrastructure.market_data.yahoo_regular_open_provider import (
+from app.infrastructure.market_data.regular_open import (
     RegularOpenLookup,
     RegularSessionOpen,
 )
@@ -34,6 +34,7 @@ class FakeRegularOpenProvider:
                 high=Decimal("49"),
                 low=Decimal("48"),
                 bar_time=datetime(2026, 8, 4, 9, 30),
+                source="cnbc_us_quote",
             )
         )
 
@@ -120,6 +121,7 @@ def test_provider_open_is_snapshotted_only_once(gold_toilet_client) -> None:
             high=Decimal("49"),
             low=Decimal("49"),
             bar_time=datetime(2026, 8, 4, 9, 30),
+            source="finnhub_us_quote",
         )
     )
 
@@ -128,7 +130,7 @@ def test_provider_open_is_snapshotted_only_once(gold_toilet_client) -> None:
 
     assert first.json()["sheet"]["provider_market_open"] == "48.250000"
     assert second.json()["sheet"]["provider_market_open"] == "48.250000"
-    assert second.json()["sheet"]["provider_open_source"] == "yahoo_1d_regular_session"
+    assert second.json()["sheet"]["provider_open_source"] == "cnbc_us_quote"
     assert provider.calls == 1
 
 
@@ -192,7 +194,7 @@ def test_manual_open_can_be_cleared_back_to_provider_value(gold_toilet_client) -
     sheet = response.json()["sheet"]
     assert sheet["manual_market_open"] is None
     assert sheet["effective_market_open"] == "48.250000"
-    assert sheet["effective_open_source"] == "yahoo_1d_regular_session"
+    assert sheet["effective_open_source"] == "cnbc_us_quote"
 
 
 def test_status_becomes_failed_five_minutes_after_open() -> None:

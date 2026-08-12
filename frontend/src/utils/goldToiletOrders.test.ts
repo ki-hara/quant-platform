@@ -4,15 +4,23 @@ import {
   GOLD_TOILET_OPEN_POLL_INTERVAL_MS,
   orderCopyText,
   shouldPollForOpen,
+  sourceLabel,
 } from "./goldToiletOrders";
 
 describe("gold toilet order helpers", () => {
-  it("polls every second until the automatic SOXL open is received", () => {
+  it("polls every two seconds until the automatic SOXL open is received", () => {
     const now = new Date("2026-08-04T15:00:00Z");
-    expect(GOLD_TOILET_OPEN_POLL_INTERVAL_MS).toBe(1_000);
+    expect(GOLD_TOILET_OPEN_POLL_INTERVAL_MS).toBe(2_000);
     expect(shouldPollForOpen("2026-08-04", null, now)).toBe(true);
     expect(shouldPollForOpen("2026-08-04", "131.505", now)).toBe(false);
     expect(shouldPollForOpen("2026-08-03", null, now)).toBe(false);
+  });
+
+  it("labels every automatic open source in Korean", () => {
+    expect(sourceLabel("cnbc_us_quote")).toBe("CNBC 미국 실시간 시세");
+    expect(sourceLabel("finnhub_us_quote")).toBe("Finnhub 미국 실시간 시세");
+    expect(sourceLabel("yahoo_1d_regular_session")).toBe("Yahoo 당일 일봉 시가");
+    expect(sourceLabel("manual")).toBe("직접 입력 강제 적용");
   });
 
 

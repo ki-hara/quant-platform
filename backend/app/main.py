@@ -17,7 +17,7 @@ from app.api.routes_dashboard import router as dashboard_router
 from app.api.routes_gold_toilet_orders import router as gold_toilet_orders_router
 from app.api.routes_integrated_orders import router as integrated_orders_router
 from app.api.routes_portfolios import router as portfolios_router
-from app.infrastructure.market_data.yahoo_regular_open_provider import YahooRegularOpenProvider
+from app.infrastructure.market_data.regular_open_factory import build_regular_open_provider
 from app.services.gold_toilet_open_collector import GoldToiletOpenCollector
 from app.api.routes_trading_plan import router as trading_plan_router
 from app.api.routes_strategies import router as strategies_router
@@ -43,7 +43,7 @@ def create_app(
             seed_default_owner(session, settings.default_owner_id)
         collector = gold_toilet_collector or GoldToiletOpenCollector(
             session_factory=session_factory,
-            market_provider=YahooRegularOpenProvider(),
+            market_provider=build_regular_open_provider(),
         )
         collector_task = asyncio.create_task(
             collector.run(),

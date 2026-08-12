@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.domain.models import GoldToiletOrderSheet
 from app.dto.gold_toilet_orders import GoldToiletOrderResponseDto, GoldToiletOrderSheetDto
-from app.infrastructure.market_data.yahoo_regular_open_provider import RegularOpenLookup
+from app.infrastructure.market_data.regular_open import RegularOpenLookup
 from app.infrastructure.repositories.gold_toilet_orders import GoldToiletOrderRepository
 from app.services.gold_toilet_order_service import (
     calculate_allocation_amount,
@@ -92,7 +92,12 @@ class GoldToiletOrderInterpreter:
                 checked_at,
             )
         else:
-            self.repository.snapshot_provider_open(sheet, lookup.quote.price, checked_at)
+            self.repository.snapshot_provider_open(
+                sheet,
+                lookup.quote.price,
+                lookup.quote.source,
+                checked_at,
+            )
         self.session.commit()
 
     def _response(self, account, sheet) -> GoldToiletOrderResponseDto:
@@ -167,7 +172,7 @@ class GoldToiletOrderInterpreter:
             return sheet.manual_market_open, "manual"
         if sheet.provider_market_open is None:
             return None, None
-        return sheet.provider_market_open, "yahoo_1d_regular_session"
+        return sheet.provider_market_open, sheet.provider_open_source
 
     @staticmethod
     def _now() -> datetime:

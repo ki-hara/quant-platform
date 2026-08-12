@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     auth_secret: str = "change-me-for-deployment"
     market_data_provider: str = "finance_data_reader"
     static_dir: str | None = None
+    finnhub_api_key: str | None = None
 
     model_config = SettingsConfigDict(env_prefix="QUANT_", env_file=".env")
 

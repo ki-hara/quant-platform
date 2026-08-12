@@ -9,7 +9,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.db.base import Base
 from app.db.seed import seed_default_owner
-from app.infrastructure.market_data.yahoo_regular_open_provider import (
+from app.infrastructure.market_data.regular_open import (
     RegularOpenLookup,
     RegularSessionOpen,
 )
@@ -32,7 +32,9 @@ class FakeProvider:
         return lookup
 
 
-def _ready_lookup(price: str = "131.505") -> RegularOpenLookup:
+def _ready_lookup(
+    price: str = "131.505", source: str = "cnbc_us_quote"
+) -> RegularOpenLookup:
     return RegularOpenLookup(
         RegularSessionOpen(
             symbol="SOXL",
@@ -41,6 +43,7 @@ def _ready_lookup(price: str = "131.505") -> RegularOpenLookup:
             high=None,
             low=None,
             bar_time=datetime(2026, 8, 4, 9, 30),
+            source=source,
         )
     )
 
@@ -88,7 +91,7 @@ def test_collector_captures_saved_sheet_without_an_api_request_and_only_once() -
         sheet = GoldToiletOrderRepository(session).get_sheet("default", date(2026, 8, 4))
         assert sheet is not None
         assert sheet.provider_market_open == Decimal("131.505000")
-        assert sheet.provider_open_source == "yahoo_1d_regular_session"
+        assert sheet.provider_open_source == "cnbc_us_quote"
     assert provider.calls == 1
 
 
