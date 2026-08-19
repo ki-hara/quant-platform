@@ -3,6 +3,7 @@ import {
   goldToiletOrderResultItems,
   GOLD_TOILET_OPEN_POLL_INTERVAL_MS,
   orderCopyText,
+  reconcileGoldToiletDraft,
   shouldPollForOpen,
   sourceLabel,
 } from "./goldToiletOrders";
@@ -14,6 +15,31 @@ describe("gold toilet order helpers", () => {
     expect(shouldPollForOpen("2026-08-04", null, now)).toBe(true);
     expect(shouldPollForOpen("2026-08-04", "131.505", now)).toBe(false);
     expect(shouldPollForOpen("2026-08-03", null, now)).toBe(false);
+  });
+
+  it("preserves account and order-sheet input while an open-price poll refreshes results", () => {
+    const typedDraft = {
+      capital: "10000",
+      cash: "9876.54",
+      entryPercent: "1.49",
+      allocationPercent: "22.50",
+      locPercent: "-9.34",
+    };
+
+    const refreshed = reconcileGoldToiletDraft(
+      typedDraft,
+      {
+        account: { capital: "8000", cash: "1000" },
+        sheet: {
+          entry_percent: "1.20",
+          allocation_percent: "20.00",
+          loc_percent: "-8.00",
+        },
+      },
+      true,
+    );
+
+    expect(refreshed).toEqual(typedDraft);
   });
 
   it("labels every automatic open source in Korean", () => {

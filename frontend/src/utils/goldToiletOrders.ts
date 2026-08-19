@@ -2,6 +2,43 @@ import type { GoldToiletCalculation } from "../api/goldToiletOrders";
 import { marketDateIso } from "./format";
 
 export const GOLD_TOILET_OPEN_POLL_INTERVAL_MS = 2_000;
+export interface GoldToiletDraft {
+  capital: string;
+  cash: string;
+  entryPercent: string;
+  allocationPercent: string;
+  locPercent: string;
+}
+
+interface GoldToiletDraftSource {
+  account: {
+    capital: string;
+    cash: string;
+  } | null;
+  sheet: {
+    entry_percent: string;
+    allocation_percent: string;
+    loc_percent: string;
+  } | null;
+}
+
+export function reconcileGoldToiletDraft(
+  current: GoldToiletDraft,
+  source: GoldToiletDraftSource,
+  preserveUserInput: boolean,
+): GoldToiletDraft {
+  if (preserveUserInput) return current;
+
+  return {
+    capital: source.account?.capital ?? current.capital,
+    cash: source.account?.cash ?? current.cash,
+    entryPercent: source.sheet?.entry_percent ?? current.entryPercent,
+    allocationPercent:
+      source.sheet?.allocation_percent ?? current.allocationPercent,
+    locPercent: source.sheet?.loc_percent ?? current.locPercent,
+  };
+}
+
 
 export function shouldPollForOpen(
   orderDate: string,

@@ -13,36 +13,38 @@ import {
   goldToiletOrderResultItems,
   GOLD_TOILET_OPEN_POLL_INTERVAL_MS,
   orderCopyText,
+  reconcileGoldToiletDraft,
+  type GoldToiletDraft,
   shouldPollForOpen,
   sourceLabel,
 } from "../utils/goldToiletOrders";
 
 export function GoldToiletOrdersPage() {
   const [orderDate, setOrderDate] = useState(() => marketDateIso("SOXL"));
-  const [capital, setCapital] = useState("");
-  const [cash, setCash] = useState("");
-  const [entryPercent, setEntryPercent] = useState("1.49");
-  const [allocationPercent, setAllocationPercent] = useState("22.50");
-  const [locPercent, setLocPercent] = useState("-9.34");
+  const [draft, setDraft] = useState<GoldToiletDraft>({
+    capital: "",
+    cash: "",
+    entryPercent: "1.49",
+    allocationPercent: "22.50",
+    locPercent: "-9.34",
+  });
+  const { capital, cash, entryPercent, allocationPercent, locPercent } = draft;
+  const setCapital = (value: string) => setDraft((current) => ({ ...current, capital: value }));
+  const setCash = (value: string) => setDraft((current) => ({ ...current, cash: value }));
+  const setEntryPercent = (value: string) => setDraft((current) => ({ ...current, entryPercent: value }));
+  const setAllocationPercent = (value: string) => setDraft((current) => ({ ...current, allocationPercent: value }));
+  const setLocPercent = (value: string) => setDraft((current) => ({ ...current, locPercent: value }));
   const [manualOpen, setManualOpen] = useState("");
   const [data, setData] = useState<GoldToiletOrderResponse | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [working, setWorking] = useState(false);
 
-  const load = useCallback(async (signal?: AbortSignal) => {
+  const load = useCallback(async (signal?: AbortSignal, preserveUserInput = false) => {
     try {
       const response = await getGoldToiletOrderSheet(orderDate, signal);
       setData(response);
-      if (response.account) {
-        setCapital(response.account.capital);
-        setCash(response.account.cash);
-      }
-      if (response.sheet) {
-        setEntryPercent(response.sheet.entry_percent);
-        setAllocationPercent(response.sheet.allocation_percent);
-        setLocPercent(response.sheet.loc_percent);
-      }
+      setDraft((current) => reconcileGoldToiletDraft(current, response, preserveUserInput));
       setError("");
     } catch (caught) {
       if ((caught as Error).name !== "AbortError") {
@@ -59,7 +61,7 @@ export function GoldToiletOrdersPage() {
 
   useEffect(() => {
     if (!data || !shouldPollForOpen(orderDate, data.sheet?.provider_market_open)) return;
-    const timer = window.setInterval(() => void load(), GOLD_TOILET_OPEN_POLL_INTERVAL_MS);
+    const timer = window.setInterval(() => void load(undefined, true), GOLD_TOILET_OPEN_POLL_INTERVAL_MS);
     return () => window.clearInterval(timer);
   }, [data, load, orderDate]);
 
