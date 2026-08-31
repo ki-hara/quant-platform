@@ -14,7 +14,7 @@ from app.db.session import get_session
 from app.dto.market_data import OhlcvDto
 from app.infrastructure.repositories.market_data import MarketPriceRepository
 from app.main import create_app
-from app.services.market_refresh_service import get_market_data_provider
+from app.services.market_refresh_service import MarketRefreshService, get_market_data_provider
 from app.strategy_engine.dynamic_wave import DynamicWaveStrategy
 
 
@@ -471,3 +471,123 @@ def test_post_refresh_excludes_unconfirmed_intraday_prices(
         )
     assert max(price.date for price in prices) == date(2026, 7, 14)
     assert date(2026, 7, 15) not in {price.date for price in prices}
+
+
+def test_refresh_symbol_retries_confirmed_date_with_short_request(
+    api_client: TestClient,
+) -> None:
+    confirmed_date = date(2026, 8, 28)
+
+    class RecoveringProvider:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, date, date]] = []
+
+        def get_ohlcv(
+            self,
+            symbol: str,
+            start_date: date,
+            end_date: date,
+        ) -> list[OhlcvDto]:
+            self.calls.append((symbol, start_date, end_date))
+            quote_date = confirmed_date if start_date == confirmed_date else confirmed_date - timedelta(days=1)
+            return [
+                OhlcvDto(
+                    symbol=symbol,
+                    date=quote_date,
+                    open=Decimal("111"),
+                    high=Decimal("112"),
+                    low=Decimal("110"),
+                    close=Decimal("111.34"),
+                    volume=60_540_900,
+                )
+            ]
+
+    provider = RecoveringProvider()
+    with Session(api_client.app.state.test_engine) as session:
+        prices = MarketRefreshService(session, provider)._refresh_symbol("SOXL", confirmed_date)
+
+        stored = MarketPriceRepository(session).list_prices(
+            "finance_data_reader",
+            "SOXL",
+            confirmed_date,
+            confirmed_date,
+        )
+
+    assert max(price.date for price in prices) == confirmed_date
+    assert confirmed_date in {price.date for price in prices}
+    assert provider.calls[-1] == ("SOXL", confirmed_date, confirmed_date + timedelta(days=1))
+    assert [price.date for price in stored] == [confirmed_date]
+
+
+def test_post_refresh_returns_503_and_preserves_existing_data_when_confirmed_date_is_missing(
+    api_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_id = create_config(api_client)
+    confirmed_date = date(2026, 8, 28)
+    previous_date = confirmed_date - timedelta(days=1)
+
+    class IncompleteProvider:
+        def get_ohlcv(
+            self,
+            symbol: str,
+            start_date: date,
+            end_date: date,
+        ) -> list[OhlcvDto]:
+            return [
+                OhlcvDto(
+                    symbol=symbol,
+                    date=previous_date,
+                    open=Decimal("123"),
+                    high=Decimal("124"),
+                    low=Decimal("117"),
+                    close=Decimal("123.05"),
+                    volume=55_965_600,
+                )
+            ]
+
+    from app.services import market_refresh_service
+
+    monkeypatch.setattr(
+        market_refresh_service,
+        "latest_confirmed_market_date",
+        lambda symbol: confirmed_date,
+        raising=False,
+    )
+    with Session(api_client.app.state.test_engine) as session:
+        MarketPriceRepository(session).upsert_prices(
+            "finance_data_reader",
+            [
+                OhlcvDto(
+                    symbol="TEST",
+                    date=previous_date,
+                    open=Decimal("123"),
+                    high=Decimal("124"),
+                    low=Decimal("117"),
+                    close=Decimal("123.05"),
+                    volume=55_965_600,
+                )
+            ],
+        )
+
+    api_client.app.dependency_overrides[get_market_data_provider] = IncompleteProvider
+    try:
+        response = api_client.post(f"/api/strategy-configs/{config_id}/market-data/refresh")
+    finally:
+        api_client.app.dependency_overrides.pop(get_market_data_provider, None)
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "detail": (
+            "확정 거래일 2026-08-28의 TEST 시세가 아직 완성되지 않았습니다. "
+            "잠시 후 다시 갱신해 주세요."
+        )
+    }
+    with Session(api_client.app.state.test_engine) as session:
+        stored = MarketPriceRepository(session).list_prices(
+            "finance_data_reader",
+            "TEST",
+            previous_date,
+            confirmed_date,
+        )
+    assert [price.date for price in stored] == [previous_date]

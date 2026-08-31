@@ -3,6 +3,7 @@ from datetime import date, timedelta
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.errors import MarketDataError
 from app.dto.trading_plan import MarketRefreshResponseDto
 from app.infrastructure.market_data.base import MarketDataProvider
 from app.infrastructure.market_data.finance_data_reader_provider import FinanceDataReaderProvider
@@ -52,5 +53,27 @@ class MarketRefreshService:
         start_date = confirmed_as_of - timedelta(days=400)
         prices = self.provider.get_ohlcv(symbol, start_date, confirmed_as_of + timedelta(days=1))
         confirmed_prices = [price for price in prices if price.date <= confirmed_as_of]
+        if not any(price.date == confirmed_as_of for price in confirmed_prices):
+            retry_prices = self.provider.get_ohlcv(
+                symbol,
+                confirmed_as_of,
+                confirmed_as_of + timedelta(days=1),
+            )
+            prices_by_date = {
+                price.date: price
+                for price in [*confirmed_prices, *retry_prices]
+                if price.date <= confirmed_as_of
+            }
+            confirmed_prices = sorted(prices_by_date.values(), key=lambda price: price.date)
+
+        if not any(price.date == confirmed_as_of for price in confirmed_prices):
+            raise MarketDataError(
+                "market_data_incomplete",
+                (
+                    f"확정 거래일 {confirmed_as_of.isoformat()}의 {symbol} 시세가 "
+                    "아직 완성되지 않았습니다. 잠시 후 다시 갱신해 주세요."
+                ),
+            )
+
         self.market_prices.upsert_prices(settings.market_data_provider, confirmed_prices)
         return confirmed_prices

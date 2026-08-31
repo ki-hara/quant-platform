@@ -1,9 +1,13 @@
+import logging
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from app.core.errors import MarketDataError
 from app.dto.market_data import OhlcvDto
+
+
+logger = logging.getLogger(__name__)
 
 
 class FinanceDataReaderProvider:
@@ -40,18 +44,31 @@ class FinanceDataReaderProvider:
         rows: list[OhlcvDto] = []
         for index, row in frame.iterrows():
             quote_date = index.date() if hasattr(index, "date") else index
-            rows.append(
-                OhlcvDto(
-                    symbol=symbol,
-                    date=quote_date,
-                    open=Decimal(str(row[required_columns["open"]])),
-                    high=Decimal(str(row[required_columns["high"]])),
-                    low=Decimal(str(row[required_columns["low"]])),
-                    close=Decimal(str(row[required_columns["close"]])),
-                    volume=int(row[required_columns["volume"]]),
-                    adjusted=True,
+            try:
+                values = {
+                    name: Decimal(str(row[column]))
+                    for name, column in required_columns.items()
+                }
+                if any(not value.is_finite() for value in values.values()):
+                    raise ValueError("non-finite OHLCV value")
+                rows.append(
+                    OhlcvDto(
+                        symbol=symbol,
+                        date=quote_date,
+                        open=values["open"],
+                        high=values["high"],
+                        low=values["low"],
+                        close=values["close"],
+                        volume=int(values["volume"]),
+                        adjusted=True,
+                    )
                 )
-            )
+            except (InvalidOperation, TypeError, ValueError):
+                logger.warning(
+                    "Skipping incomplete market data row: symbol=%s date=%s",
+                    symbol,
+                    quote_date,
+                )
         return sorted(rows, key=lambda price: price.date)
 
     def _column_for(self, columns: dict[str, Any], *names: str) -> Any | None:

@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import CurrentOwnerDep, ensure_config_owner
+from app.core.errors import MarketDataError
 from app.db.session import get_session
 from app.dto.trading_plan import (
     ChartResponseDto,
@@ -116,6 +117,11 @@ def refresh_market_data(
     ensure_config_owner(config_id, owner, session)
     try:
         return MarketRefreshService(session, provider).refresh(config_id, today)
+    except MarketDataError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=exc.message,
+        ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=_status_code_for_error(str(exc)), detail=str(exc)) from exc
 
