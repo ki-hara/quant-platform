@@ -7,7 +7,11 @@ from app.core.config import settings
 from app.core.errors import MarketDataError
 from app.dto.trading_plan import MarketRefreshResponseDto
 from app.infrastructure.market_data.base import MarketDataProvider
+from app.infrastructure.market_data.eastmoney_provider import EastmoneyMarketDataProvider
 from app.infrastructure.market_data.finance_data_reader_provider import FinanceDataReaderProvider
+from app.infrastructure.market_data.missing_daily_price_fallback_provider import (
+    MissingDailyPriceFallbackProvider,
+)
 from app.infrastructure.repositories.market_data import MarketPriceRepository
 from app.infrastructure.repositories.strategies import StrategyConfigRepository
 from app.services.market_session_service import latest_confirmed_market_date
@@ -19,7 +23,10 @@ logger = logging.getLogger(__name__)
 
 
 def get_market_data_provider() -> MarketDataProvider:
-    return FinanceDataReaderProvider()
+    return MissingDailyPriceFallbackProvider(
+        FinanceDataReaderProvider(),
+        EastmoneyMarketDataProvider(),
+    )
 
 
 class MarketRefreshService:
