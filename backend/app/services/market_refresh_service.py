@@ -1,3 +1,4 @@
+import logging
 from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
@@ -12,6 +13,9 @@ from app.infrastructure.repositories.strategies import StrategyConfigRepository
 from app.services.market_session_service import latest_confirmed_market_date
 from app.services.mode_service import ModeService
 from app.services.trend_filter_service import trend_filter_symbols
+
+
+logger = logging.getLogger(__name__)
 
 
 def get_market_data_provider() -> MarketDataProvider:
@@ -54,11 +58,20 @@ class MarketRefreshService:
         prices = self.provider.get_ohlcv(symbol, start_date, confirmed_as_of + timedelta(days=1))
         confirmed_prices = [price for price in prices if price.date <= confirmed_as_of]
         if not any(price.date == confirmed_as_of for price in confirmed_prices):
-            retry_prices = self.provider.get_ohlcv(
-                symbol,
-                confirmed_as_of,
-                confirmed_as_of + timedelta(days=1),
-            )
+            try:
+                retry_prices = self.provider.get_ohlcv(
+                    symbol,
+                    confirmed_as_of,
+                    confirmed_as_of + timedelta(days=1),
+                )
+            except MarketDataError as exc:
+                logger.warning(
+                    "Confirmed market data retry failed: symbol=%s date=%s error=%s",
+                    symbol,
+                    confirmed_as_of,
+                    exc.message,
+                )
+                retry_prices = []
             prices_by_date = {
                 price.date: price
                 for price in [*confirmed_prices, *retry_prices]

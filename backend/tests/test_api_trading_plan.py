@@ -8,6 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
+from app.core.errors import MarketDataError
 from app.db.base import Base
 from app.db.seed import seed_default_owner
 from app.db.session import get_session
@@ -517,6 +518,46 @@ def test_refresh_symbol_retries_confirmed_date_with_short_request(
     assert confirmed_date in {price.date for price in prices}
     assert provider.calls[-1] == ("SOXL", confirmed_date, confirmed_date + timedelta(days=1))
     assert [price.date for price in stored] == [confirmed_date]
+
+
+def test_refresh_symbol_converts_retry_provider_error_to_incomplete_data(
+    api_client: TestClient,
+) -> None:
+    confirmed_date = date(2026, 8, 28)
+
+    class TimestampErrorProvider:
+        def get_ohlcv(
+            self,
+            symbol: str,
+            start_date: date,
+            end_date: date,
+        ) -> list[OhlcvDto]:
+            if start_date == confirmed_date:
+                raise MarketDataError("market_data_provider_failed", "'timestamp'")
+            return [
+                OhlcvDto(
+                    symbol=symbol,
+                    date=confirmed_date - timedelta(days=1),
+                    open=Decimal("123"),
+                    high=Decimal("124"),
+                    low=Decimal("117"),
+                    close=Decimal("123.05"),
+                    volume=55_965_600,
+                )
+            ]
+
+    with Session(api_client.app.state.test_engine) as session:
+        with pytest.raises(MarketDataError) as caught:
+            MarketRefreshService(session, TimestampErrorProvider())._refresh_symbol(
+                "SOXL",
+                confirmed_date,
+            )
+
+    assert caught.value.code == "market_data_incomplete"
+    assert caught.value.message == (
+        "확정 거래일 2026-08-28의 SOXL 시세가 아직 완성되지 않았습니다. "
+        "잠시 후 다시 갱신해 주세요."
+    )
 
 
 def test_post_refresh_returns_503_and_preserves_existing_data_when_confirmed_date_is_missing(
