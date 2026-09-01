@@ -750,7 +750,11 @@ function LocNettingTable({
         {orders.map((order, index) => (
           <div className="loc-netting-row" key={`${order.side}-${order.limitPrice}-${order.quantity}-${index}`}>
             <span className={order.side === "buy" ? "is-buy" : "is-sell"}>{order.side === "buy" ? "매수" : "매도"}</span>
-            <strong>{formatMoney(String(order.limitPrice), symbol)}</strong>
+            <strong>
+              {order.execution === "market_on_close"
+                ? "종가"
+                : formatMoney(String(order.limitPrice), symbol)}
+            </strong>
             <em>{order.quantity}주</em>
           </div>
         ))}
@@ -778,24 +782,45 @@ function buildLocNettingInputs(
 ): LocOrderInput[] {
   const buyOrders = buyPlanOrders.map((order) => ({
     side: "buy" as const,
+    execution: "loc" as const,
     limitPrice: Number(order.limit_price),
     quantity: Number(order.quantity),
   }));
   const sellOrders = sellOrderRows
-    .map((signal) => ({
-      side: "sell" as const,
-      limitPrice: Number(signal.sell_limit_price ?? signal.position.buy_price),
-      quantity: Number(signal.position.quantity),
-    }))
-    .filter((order) => Number.isFinite(order.limitPrice) && order.limitPrice > 0 && order.quantity > 0);
+    .map((signal) =>
+      isCloseSellDue(signal)
+        ? {
+            side: "sell" as const,
+            execution: "market_on_close" as const,
+            limitPrice: null,
+            quantity: Number(signal.position.quantity),
+          }
+        : {
+            side: "sell" as const,
+            execution: "loc" as const,
+            limitPrice: Number(signal.sell_limit_price ?? signal.position.buy_price),
+            quantity: Number(signal.position.quantity),
+          },
+    )
+    .filter(
+      (order) =>
+        order.quantity > 0 &&
+        (order.execution === "market_on_close" ||
+          (Number.isFinite(order.limitPrice) && Number(order.limitPrice) > 0)),
+    );
 
   return [...buyOrders, ...sellOrders].filter(
-    (order) => Number.isFinite(order.limitPrice) && order.limitPrice > 0 && order.quantity > 0,
+    (order) =>
+      order.quantity > 0 &&
+      (order.execution === "market_on_close" ||
+        (Number.isFinite(order.limitPrice) && Number(order.limitPrice) > 0)),
   );
 }
 
 function sortLocOrdersByPriceDesc(orders: LocOrderInput[]): LocOrderInput[] {
-  return [...orders].sort((left, right) => right.limitPrice - left.limitPrice);
+  return [...orders].sort(
+    (left, right) => (right.limitPrice ?? Number.NEGATIVE_INFINITY) - (left.limitPrice ?? Number.NEGATIVE_INFINITY),
+  );
 }
 
 function formatOptionalMoney(value: string | null | undefined, symbol?: string | null): string {

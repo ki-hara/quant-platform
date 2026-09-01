@@ -4,20 +4,23 @@ from typing import Literal
 
 
 LocSide = Literal["buy", "sell"]
+LocExecution = Literal["loc", "market_on_close"]
 
 
 @dataclass(frozen=True)
 class LocOrderInput:
     side: LocSide
-    limit_price: Decimal
+    limit_price: Decimal | None
     quantity: int
+    execution: LocExecution = "loc"
 
 
 @dataclass(frozen=True)
 class NettedLocOrder:
     side: LocSide
-    limit_price: Decimal
+    limit_price: Decimal | None
     quantity: int
+    execution: LocExecution = "loc"
 
 
 def net_loc_orders(orders: list[LocOrderInput], tick_size: Decimal) -> list[NettedLocOrder]:
@@ -26,16 +29,22 @@ def net_loc_orders(orders: list[LocOrderInput], tick_size: Decimal) -> list[Nett
 
     buy_by_price: dict[Decimal, int] = {}
     sell_by_price: dict[Decimal, int] = {}
+    market_close_sell_quantity = 0
     for order in orders:
         if order.quantity <= 0:
             raise ValueError("quantity must be positive.")
-        if order.limit_price <= 0:
+        if order.execution == "market_on_close":
+            if order.side != "sell":
+                raise ValueError("Only sell orders can use market_on_close.")
+            market_close_sell_quantity += order.quantity
+            continue
+        if order.limit_price is None or order.limit_price <= 0:
             raise ValueError("limit_price must be positive.")
         target = buy_by_price if order.side == "buy" else sell_by_price
         target[order.limit_price] = target.get(order.limit_price, 0) + order.quantity
 
     prices = sorted(set(buy_by_price) | set(sell_by_price), reverse=True)
-    net_quantity = -sum(sell_by_price.values())
+    net_quantity = -sum(sell_by_price.values()) - market_close_sell_quantity
     result: list[NettedLocOrder] = []
 
     for price in prices:
@@ -63,6 +72,15 @@ def net_loc_orders(orders: list[LocOrderInput], tick_size: Decimal) -> list[Nett
             )
             net_quantity = next_net_quantity
 
+    if net_quantity < 0:
+        result.append(
+            NettedLocOrder(
+                "sell",
+                None,
+                -net_quantity,
+                execution="market_on_close",
+            )
+        )
     return [order for order in result if order.quantity > 0]
 
 

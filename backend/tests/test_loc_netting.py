@@ -60,3 +60,52 @@ def test_net_loc_orders_preserves_non_crossed_orders() -> None:
         ("sell", Decimal("70.00"), 2),
         ("buy", Decimal("65.00"), 3),
     ]
+
+
+def test_net_loc_orders_nets_market_close_sell_against_loc_buy() -> None:
+    orders = net_loc_orders(
+        [
+            LocOrderInput(
+                side="sell",
+                limit_price=None,
+                quantity=7,
+                execution="market_on_close",
+            ),
+            LocOrderInput(
+                side="buy",
+                limit_price=Decimal("117.30"),
+                quantity=12,
+            ),
+        ],
+        tick_size=Decimal("0.01"),
+    )
+
+    assert _plain(orders) == [
+        ("buy", Decimal("117.30"), 5),
+        ("sell", Decimal("117.31"), 7),
+    ]
+
+
+def test_net_loc_orders_keeps_unmatched_market_close_sell_quantity() -> None:
+    orders = net_loc_orders(
+        [
+            LocOrderInput(
+                side="sell",
+                limit_price=None,
+                quantity=7,
+                execution="market_on_close",
+            ),
+            LocOrderInput(
+                side="buy",
+                limit_price=Decimal("117.30"),
+                quantity=5,
+            ),
+        ],
+        tick_size=Decimal("0.01"),
+    )
+
+    assert _plain(orders) == [
+        ("sell", Decimal("117.31"), 5),
+        ("sell", None, 2),
+    ]
+    assert orders[-1].execution == "market_on_close"
