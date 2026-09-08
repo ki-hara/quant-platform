@@ -148,7 +148,8 @@ def test_chart_returns_sorted_ohlcv_loc_trade_markers_and_rsi_guides() -> None:
             candle.date for candle in chart.candles
         )
         assert len(chart.candles) == 171
-        assert chart.LOC.value == Decimal("277.070000")
+        assert chart.LOC.value == Decimal("276.040000")
+        assert chart.LOC.as_of == date(2026, 6, 18)
         assert {marker.kind for marker in chart.trade_markers} == {"buy", "sell"}
         assert chart.rsi.guides == [
             Decimal("35"),

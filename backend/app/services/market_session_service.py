@@ -15,7 +15,7 @@ def latest_confirmed_market_date(symbol: str, now: datetime | None = None) -> da
     else:
         local = current.astimezone(ZoneInfo("America/New_York"))
         basis = local.date() if local.time() >= US_CUTOFF else local.date() - timedelta(days=1)
-    return _previous_weekday(basis)
+    return _latest_exchange_trading_day(symbol, basis)
 
 
 def current_market_date(symbol: str, now: datetime | None = None) -> date:
@@ -34,7 +34,10 @@ def _is_korean_symbol(symbol: str) -> bool:
     return is_korean_symbol(symbol)
 
 
-def _previous_weekday(value: date) -> date:
-    while value.weekday() >= 5:
+def _latest_exchange_trading_day(symbol: str, value: date) -> date:
+    # Local import avoids the calendar module's dependency on symbol classification.
+    from app.services.exchange_calendar_service import is_exchange_trading_day
+
+    while not is_exchange_trading_day(symbol, value):
         value -= timedelta(days=1)
     return value

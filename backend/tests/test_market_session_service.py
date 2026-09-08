@@ -39,3 +39,15 @@ def test_us_symbol_current_market_date_uses_new_york_date() -> None:
     now = datetime(2026, 6, 27, 2, 0, tzinfo=ZoneInfo("Asia/Seoul"))
 
     assert current_market_date("SOXL", now) == date(2026, 6, 26)
+
+
+def test_us_symbol_after_cutoff_skips_labor_day_holiday() -> None:
+    now = datetime(2026, 9, 8, 7, 0, tzinfo=ZoneInfo("Asia/Seoul"))
+
+    assert latest_confirmed_market_date("SOXL", now) == date(2026, 9, 4)
+
+
+def test_korean_symbol_after_cutoff_skips_chuseok_holidays() -> None:
+    now = datetime(2026, 9, 25, 15, 50, tzinfo=ZoneInfo("Asia/Seoul"))
+
+    assert latest_confirmed_market_date("005930.KS", now) == date(2026, 9, 23)
