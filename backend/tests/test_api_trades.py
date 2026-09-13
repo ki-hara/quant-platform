@@ -2,14 +2,14 @@ from datetime import date
 from decimal import Decimal
 import pytest
 from fastapi import HTTPException
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app.db.base import Base
 from app.db.seed import seed_default_owner
 from app.db.session import create_database_engine
 from app.domain.enums import LocOrderStatus, PositionStatus, StrategyMode, TradeSide
-from app.domain.models import LocOrder, MarketPrice, Owner
+from app.domain.models import LocOrder, MarketPrice, Owner, PortfolioAdjustment
 from app.api.routes_trades import (
     BuyOrderPositionCreateDto,
     PositionUpdateDto,
@@ -420,6 +420,93 @@ def test_pending_to_open_rejects_cost_plus_fee_above_cash() -> None:
         assert portfolio is not None
         assert portfolio.cash == Decimal("100")
         assert not config.trades
+
+
+def test_external_funding_policy_records_cash_only_adjustment_on_fill() -> None:
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    with Session(engine) as session:
+        seed_default_owner(session, "default")
+        owner = session.get(Owner, "default")
+        assert owner is not None
+        config = StrategyConfigService(session).create_config(
+            "default",
+            StrategyConfigCreateRequest(
+                name="Dynamic",
+                strategy_type="dynamic_wave",
+                symbol="TQQQ",
+                initial_capital=Decimal("100"),
+                fee_rate=Decimal("0"),
+                slippage_rate=Decimal("0"),
+                settings_json=DynamicWaveStrategy.default_settings(),
+            ),
+        )
+        position = create_buy_order_position(
+            config.id,
+            BuyOrderPositionCreateDto(
+                order_date=date(2026, 7, 27),
+                quantity=Decimal("2"),
+                limit_price=Decimal("60"),
+                mode=StrategyMode.SAFE,
+                cash_shortage_policy="external_funding",
+            ),
+            session,
+            owner,
+        )
+
+        update_position(
+            position.id,
+            PositionUpdateDto(buy_price=Decimal("60"), status="open"),
+            session,
+            owner,
+        )
+
+        portfolio = PortfolioRepository(session).get_by_config(config.id)
+        adjustment = session.scalars(select(PortfolioAdjustment)).one()
+        assert portfolio is not None
+        assert portfolio.cash == Decimal("0")
+        assert portfolio.capital == Decimal("100")
+        assert portfolio.realized_pnl == Decimal("0")
+        assert adjustment.cash_delta == Decimal("20")
+        assert adjustment.capital_delta == Decimal("0")
+        assert adjustment.source == "buy_cash_shortage"
+
+
+def test_available_cash_policy_reduces_buy_order_to_affordable_whole_shares() -> None:
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    with Session(engine) as session:
+        seed_default_owner(session, "default")
+        owner = session.get(Owner, "default")
+        assert owner is not None
+        config = StrategyConfigService(session).create_config(
+            "default",
+            StrategyConfigCreateRequest(
+                name="Dynamic",
+                strategy_type="dynamic_wave",
+                symbol="TQQQ",
+                initial_capital=Decimal("100"),
+                fee_rate=Decimal("1"),
+                slippage_rate=Decimal("0"),
+                settings_json=DynamicWaveStrategy.default_settings(),
+            ),
+        )
+
+        position = create_buy_order_position(
+            config.id,
+            BuyOrderPositionCreateDto(
+                order_date=date(2026, 7, 27),
+                quantity=Decimal("3"),
+                limit_price=Decimal("50"),
+                mode=StrategyMode.SAFE,
+                cash_shortage_policy="available_cash",
+            ),
+            session,
+            owner,
+        )
+
+        assert position.quantity == Decimal("1")
+        assert position.cash_shortage_policy == "available_cash"
 def test_radar_buy_order_uses_server_snapshot_and_rejects_stale_duplicate() -> None:
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)

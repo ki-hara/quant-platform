@@ -1709,6 +1709,37 @@ button:disabled,
   padding-top: 10px;
 }
 
+.cash-shortage-choice {
+  display: grid;
+  gap: 7px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #ead9bd;
+}
+
+.cash-shortage-choice > strong {
+  color: #8a521d;
+  font-size: 13px;
+}
+
+.cash-shortage-choice > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cash-shortage-choice button {
+  min-height: 30px;
+  padding: 5px 9px;
+  font-size: 12px;
+}
+
+.cash-shortage-choice button.is-active {
+  border-color: #976126;
+  background: #fff7e9;
+  color: #704313;
+}
+
 .recommendation-card {
   display: grid;
   grid-template-columns: minmax(0, 1fr);

@@ -72,6 +72,7 @@ class PositionRepository:
         radar_profile: str | None = None,
         radar_cycle_id: str | None = None,
         radar_cycle_capital: Decimal | None = None,
+        cash_shortage_policy: str = "defer",
     ) -> Position:
         position = Position(
             strategy_config_id=strategy_config_id,
@@ -88,6 +89,7 @@ class PositionRepository:
             radar_profile=radar_profile,
             radar_cycle_id=radar_cycle_id,
             radar_cycle_capital=radar_cycle_capital,
+            cash_shortage_policy=cash_shortage_policy,
             status=PositionStatus.OPEN,
         )
         self.session.add(position)
@@ -110,6 +112,7 @@ class PositionRepository:
         sell_threshold_percent: Decimal | None = None,
         sell_limit_price: Decimal | None = None,
         max_holding_days: int | None = None,
+        cash_shortage_policy: str = "defer",
     ) -> Position:
         position = Position(
             strategy_config_id=strategy_config_id,
@@ -126,6 +129,7 @@ class PositionRepository:
             sell_threshold_percent=sell_threshold_percent,
             sell_limit_price=sell_limit_price,
             max_holding_days=max_holding_days,
+            cash_shortage_policy=cash_shortage_policy,
             status=PositionStatus.PENDING,
         )
         self.session.add(position)

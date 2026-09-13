@@ -31,6 +31,8 @@ def test_fresh_database_records_latest_schema_version() -> None:
             text("SELECT version FROM schema_migrations ORDER BY version")
         ).all()
     assert versions == list(range(1, migrations.LATEST_SCHEMA_VERSION + 1))
+    columns = {column["name"] for column in inspect(engine).get_columns("positions")}
+    assert "cash_shortage_policy" in columns
 
 
 def test_open_source_migration_invalidates_daily_open_and_preserves_manual_value() -> None:

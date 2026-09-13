@@ -34,6 +34,7 @@ class PositionDto(BaseModel):
     radar_profile: str | None = None
     radar_cycle_id: str | None = None
     radar_cycle_capital: Decimal | None = None
+    cash_shortage_policy: str = "defer"
     status: str
 
 

@@ -30,6 +30,17 @@ describe("executable LOC buy orders", () => {
     expect(executableLocBuyOrders(plan)).toEqual([order]);
   });
 
+  it("keeps the recommended order visible when only cash is insufficient", () => {
+    const plan = {
+      buy_available: false,
+      LOC: { orders: [], limit_price: "50", quantity: 2, blocking_reason: "insufficient_cash" },
+    };
+
+    expect(executableLocBuyOrders(plan)).toEqual([
+      { step: 1, limit_price: "50", quantity: 2, cumulative_quantity: 2, cumulative_amount: "100", compressed: false },
+    ]);
+  });
+
   it("creates one executable Radar tier order when the ladder is empty", () => {
     expect(executableLocBuyOrders({
       buy_available: true, strategy_type: "radar0458_pro", radar_tier: 3,

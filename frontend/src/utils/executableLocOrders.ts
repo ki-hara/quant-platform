@@ -2,14 +2,15 @@ export interface LocBuyOrderPlan<T> {
   buy_available: boolean;
   strategy_type?: string | null;
   radar_tier?: number | null;
-  LOC: { orders: T[]; limit_price?: string; quantity?: number };
+  LOC: { orders: T[]; limit_price?: string; quantity?: number; blocking_reason?: string | null };
 }
 
 export function executableLocBuyOrders<T>(plan: LocBuyOrderPlan<T> | null): T[] {
-  if (!plan?.buy_available) return [];
+  if (!plan || (!plan.buy_available && plan.LOC.blocking_reason !== "insufficient_cash")) return [];
   if (plan.LOC.orders.length > 0) return plan.LOC.orders;
-  if (plan.strategy_type !== "radar0458_pro" || plan.radar_tier == null || !plan.LOC.limit_price || !plan.LOC.quantity) return [];
-  return [{ step: plan.radar_tier, limit_price: plan.LOC.limit_price, quantity: plan.LOC.quantity, cumulative_quantity: plan.LOC.quantity, cumulative_amount: String(Number(plan.LOC.limit_price) * plan.LOC.quantity), compressed: false } as T];
+  if (!plan.LOC.limit_price || !plan.LOC.quantity) return [];
+  const step = plan.strategy_type === "radar0458_pro" && plan.radar_tier != null ? plan.radar_tier : 1;
+  return [{ step, limit_price: plan.LOC.limit_price, quantity: plan.LOC.quantity, cumulative_quantity: plan.LOC.quantity, cumulative_amount: String(Number(plan.LOC.limit_price) * plan.LOC.quantity), compressed: false } as T];
 }
 export interface LocBuyBlockInfo {
   open_position_count: number;

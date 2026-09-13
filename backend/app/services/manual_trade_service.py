@@ -267,6 +267,7 @@ class ManualTradeService:
                 "radar_profile": position.radar_profile,
                 "radar_cycle_id": position.radar_cycle_id,
                 "radar_cycle_capital": position.radar_cycle_capital,
+                "cash_shortage_policy": position.cash_shortage_policy,
             }
             for position in existing_positions
         }
@@ -320,6 +321,9 @@ class ManualTradeService:
                     radar_profile=snapshot["radar_profile"] if snapshot else None,
                     radar_cycle_id=snapshot["radar_cycle_id"] if snapshot else None,
                     radar_cycle_capital=snapshot["radar_cycle_capital"] if snapshot else None,
+                    cash_shortage_policy=(
+                        snapshot["cash_shortage_policy"] if snapshot else "defer"
+                    ),
                 )
                 if old_position_id is not None:
                     rebuilt_positions[old_position_id] = position
@@ -361,6 +365,7 @@ class ManualTradeService:
                 sell_threshold_percent=pending["sell_threshold_percent"],
                 sell_limit_price=pending["sell_limit_price"],
                 max_holding_days=pending["max_holding_days"],
+                cash_shortage_policy=pending["cash_shortage_policy"],
             )
             rebuilt_positions[pending["position_id"]] = rebuilt_pending
         for order_id, old_position_id in loc_order_position_ids.items():

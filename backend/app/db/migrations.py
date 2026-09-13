@@ -528,6 +528,15 @@ def _separate_gold_toilet_open_sources(connection: Connection) -> None:
     )
 
 
+def _add_position_cash_shortage_policy(connection: Connection) -> None:
+    _add_column_if_missing(
+        connection,
+        "positions",
+        "cash_shortage_policy",
+        "cash_shortage_policy VARCHAR(32) NOT NULL DEFAULT 'defer'",
+    )
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     (1, "legacy_schema", _upgrade_legacy_schema),
     (2, "loc_orders_trade_fk_set_null", _rebuild_loc_orders_trade_foreign_key),
@@ -541,6 +550,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     (10, "gold_toilet_order_tables", _add_gold_toilet_order_tables),
     (11, "gold_toilet_provider_open", _track_gold_toilet_provider_open),
     (12, "separate_gold_toilet_open_sources", _separate_gold_toilet_open_sources),
+    (13, "position_cash_shortage_policy", _add_position_cash_shortage_policy),
 )
 LATEST_SCHEMA_VERSION = MIGRATIONS[-1][0]
 

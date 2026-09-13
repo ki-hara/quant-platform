@@ -1,9 +1,9 @@
-import type { BacktestCreateRequest, BuyOrderPositionCreateRequest, RadarProfile, StrategyMode } from "../types/api";
+import type { BacktestCreateRequest, BuyOrderPositionCreateRequest, CashShortagePolicy, RadarProfile, StrategyMode } from "../types/api";
 
 type RadarPlanSnapshots = { plan_date?: string | null; strategy_type?: string | null; radar_tier?: number | null; radar_profile?: RadarProfile | null; radar_cycle_id?: string | null; radar_cycle_capital?: string | null };
 
-export function buildBuyOrderPositionRequest(input: { orderDate: string; quantity: string; limitPrice: string; mode: StrategyMode; plan: RadarPlanSnapshots }): BuyOrderPositionCreateRequest {
-  const base = { order_date: input.orderDate, quantity: input.quantity, limit_price: input.limitPrice, mode: input.mode };
+export function buildBuyOrderPositionRequest(input: { orderDate: string; quantity: string; limitPrice: string; mode: StrategyMode; cashShortagePolicy?: CashShortagePolicy; plan: RadarPlanSnapshots }): BuyOrderPositionCreateRequest {
+  const base = { order_date: input.orderDate, quantity: input.quantity, limit_price: input.limitPrice, mode: input.mode, cash_shortage_policy: input.cashShortagePolicy ?? "defer" };
   if (input.plan.strategy_type !== "radar0458_pro") return base;
   return { ...base, order_date: input.plan.plan_date ?? input.orderDate, radar_tier: input.plan.radar_tier, radar_profile: input.plan.radar_profile, radar_cycle_id: input.plan.radar_cycle_id, radar_cycle_capital: input.plan.radar_cycle_capital };
 }

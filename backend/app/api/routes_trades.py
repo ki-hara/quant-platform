@@ -1,9 +1,9 @@
 from datetime import date
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -16,7 +16,7 @@ from app.api.deps import (
 from app.core.errors import NotFoundError, ValidationAppError
 from app.db.session import get_session
 from app.domain.enums import PositionStatus, StrategyMode, TradeSide, TradeSource
-from app.domain.models import LocOrder
+from app.domain.models import LocOrder, PortfolioAdjustment
 from app.dto.dashboard import PositionDto
 from app.dto.trades import (
     ManualTradeRequestDto as BaseManualTradeRequestDto,
@@ -74,6 +74,7 @@ class BuyOrderPositionCreateDto(BaseModel):
     sell_threshold_percent: Decimal | None = None
     sell_limit_price: Decimal | None = None
     max_holding_days: int | None = None
+    cash_shortage_policy: Literal["defer", "external_funding", "available_cash"] = "defer"
 
 
 @router.get("/strategy-configs/{config_id}/positions", response_model=list[PositionDto])
@@ -125,7 +126,11 @@ def create_buy_order_position(
             plan.radar_cycle_id,
             plan.radar_cycle_capital,
         )
-        if not plan.buy_available or plan.radar_tier is None:
+        cash_shortage_override = (
+            plan.LOC.blocking_reason == "insufficient_cash"
+            and request.cash_shortage_policy != "defer"
+        )
+        if (not plan.buy_available and not cash_shortage_override) or plan.radar_tier is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Radar buy order unavailable: {plan.LOC.blocking_reason}",
@@ -143,13 +148,6 @@ def create_buy_order_position(
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Radar tier already has a pending or open position.",
-            )
-        portfolio = config.live_portfolio
-        fee = _estimate_fee(config, request.limit_price, request.quantity)
-        if portfolio is None or request.limit_price * request.quantity + fee > portfolio.cash:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Insufficient cash for Radar buy order.",
             )
         threshold = plan.radar_sell_threshold_percent
         if threshold is None or plan.radar_max_holding_days is None:
@@ -181,13 +179,21 @@ def create_buy_order_position(
             detail="Radar snapshots are not valid for this strategy.",
         )
 
+    quantity = _resolve_buy_order_quantity(
+        config,
+        request.limit_price,
+        request.quantity,
+        request.cash_shortage_policy,
+    )
+
     try:
         position = PositionRepository(session).create_pending(
             strategy_config_id=config_id,
             buy_date=request.order_date,
             limit_price=request.limit_price,
-            quantity=request.quantity,
+            quantity=quantity,
             mode=request.mode,
+            cash_shortage_policy=request.cash_shortage_policy,
             **radar_kwargs,
         )
         session.commit()
@@ -265,11 +271,7 @@ def update_position(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Live portfolio not found."
             )
         total_cost = (position.buy_price * position.quantity) + fee
-        if total_cost > config.live_portfolio.cash:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Insufficient cash for buy fill.",
-            )
+        _fund_cash_shortage(config, position, total_cost, session)
         trade_repo = TradeRepository(session)
         trade_repo.create(
             strategy_config_id=position.strategy_config_id,
@@ -297,11 +299,13 @@ def update_position(
             matching_trade.price * matching_trade.quantity + matching_trade.fee
         )
         replacement_cost = position.buy_price * position.quantity + fee
-        if replacement_cost > config.live_portfolio.cash + current_cost:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Insufficient cash for corrected buy fill.",
-            )
+        _fund_cash_shortage(
+            config,
+            position,
+            replacement_cost,
+            session,
+            reusable_cash=current_cost,
+        )
         matching_trade.quantity = position.quantity
         matching_trade.price = position.buy_price
         matching_trade.fee = fee
@@ -334,6 +338,64 @@ def _matching_buy_trade(position, session: Session):
 def _estimate_fee(config, price: Decimal, quantity: Decimal) -> Decimal:
     fee_rate = config.fee_rate if config is not None else Decimal("0")
     return (price * quantity * fee_rate / Decimal("100")).quantize(Decimal("0.000001"))
+
+
+def _resolve_buy_order_quantity(config, price: Decimal, quantity: Decimal, policy: str) -> Decimal:
+    portfolio = config.live_portfolio
+    if portfolio is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Live portfolio not found.",
+        )
+    total_cost = price * quantity + _estimate_fee(config, price, quantity)
+    if total_cost <= portfolio.cash or policy == "external_funding":
+        return quantity
+    if policy == "available_cash":
+        fee_factor = Decimal("1") + config.fee_rate / Decimal("100")
+        affordable = int(
+            (portfolio.cash / (price * fee_factor)).to_integral_value(rounding=ROUND_DOWN)
+        )
+        if affordable <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Available cash cannot buy one share including fees.",
+            )
+        return Decimal(affordable)
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Insufficient cash for buy order.",
+    )
+
+
+def _fund_cash_shortage(
+    config,
+    position,
+    total_cost: Decimal,
+    session: Session,
+    reusable_cash: Decimal = Decimal("0"),
+) -> None:
+    portfolio = config.live_portfolio
+    available = portfolio.cash + reusable_cash
+    if total_cost <= available:
+        return
+    if position.cash_shortage_policy != "external_funding":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Insufficient cash for buy fill.",
+        )
+    shortage = (total_cost - available).quantize(Decimal("0.000001"))
+    portfolio.cash += shortage
+    session.add(
+        PortfolioAdjustment(
+            strategy_config_id=config.id,
+            date=position.buy_date,
+            cash_delta=shortage,
+            capital_delta=Decimal("0"),
+            memo=f"매수 체결 부족금 자동 충당 (포지션 #{position.id})",
+            source="buy_cash_shortage",
+        )
+    )
+    session.add(portfolio)
 
 
 @router.get("/strategy-configs/{config_id}/trades", response_model=list[TradeResponseDto])

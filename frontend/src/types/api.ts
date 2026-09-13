@@ -130,8 +130,11 @@ export interface PositionRow {
   radar_profile: RadarProfile | null;
   radar_cycle_id: string | null;
   radar_cycle_capital: DecimalString | null;
+  cash_shortage_policy: CashShortagePolicy;
   status: string;
 }
+
+export type CashShortagePolicy = "defer" | "external_funding" | "available_cash";
 
 export interface MarketPriceRow {
   symbol: string;
@@ -314,6 +317,7 @@ export interface BuyOrderPositionCreateRequest {
   sell_threshold_percent?: DecimalString | null;
   sell_limit_price?: DecimalString | null;
   max_holding_days?: number | null;
+  cash_shortage_policy?: CashShortagePolicy;
 }
 
 export interface BacktestCreateRequest {

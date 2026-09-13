@@ -316,6 +316,9 @@ class Position(Base):
     radar_profile: Mapped[str | None] = mapped_column(String(16))
     radar_cycle_id: Mapped[str | None] = mapped_column(String(64))
     radar_cycle_capital: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))
+    cash_shortage_policy: Mapped[str] = mapped_column(
+        String(32), default="defer", nullable=False
+    )
     status: Mapped[PositionStatus] = mapped_column(enum_column(PositionStatus), nullable=False)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)

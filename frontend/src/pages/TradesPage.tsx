@@ -13,6 +13,7 @@ import {
 import { getDailyPlan } from "../api/tradingPlan";
 import { Table, type TableColumn } from "../components/Table";
 import type {
+  CashShortagePolicy,
   DailyPlan,
   DashboardResponse,
   PositionHistoryRow,
@@ -46,6 +47,7 @@ function initialManualForm(symbol?: string | null) {
     mode: "safe",
     position_id: "",
     sell_reason: "",
+    cash_shortage_policy: "defer" as CashShortagePolicy,
   };
 }
 
@@ -85,7 +87,29 @@ export function TradesPage() {
   const rowRequests = rowRequestsRef.current;
   const selectedSymbol = dashboard?.config.symbol ?? plan?.symbol ?? configs.find((config) => config.id === selectedId)?.symbol;
   const isRadar = dashboard?.config.strategy_type === "radar0458_pro" || plan?.strategy_type === "radar0458_pro";
-  const executableBuyOrders = useMemo(() => executableLocBuyOrders(plan), [plan]);
+  const plannedBuyOrders = useMemo(() => executableLocBuyOrders(plan), [plan]);
+  const hasCashShortage = plan?.LOC.blocking_reason === "insufficient_cash";
+  const executableBuyOrders = useMemo(
+    () => {
+      if (hasCashShortage && manualForm.cash_shortage_policy === "defer") return [];
+      if (
+        hasCashShortage
+        && manualForm.cash_shortage_policy === "available_cash"
+        && plan
+      ) {
+        const quantity = Number(affordableShareQuantity(plan, dashboard?.config.fee_rate));
+        if (!quantity) return [];
+        return plannedBuyOrders.slice(0, 1).map((order) => ({
+          ...order,
+          quantity,
+          cumulative_quantity: quantity,
+          cumulative_amount: String(Number(order.limit_price) * quantity),
+        }));
+      }
+      return plannedBuyOrders;
+    },
+    [dashboard?.config.fee_rate, hasCashShortage, manualForm.cash_shortage_policy, plan, plannedBuyOrders],
+  );
 
   const sortedPositions = useMemo(
     () => [...positions].sort(comparePositionByDate),
@@ -148,6 +172,11 @@ export function TradesPage() {
     if (selectedId) void loadRows(selectedId, livePositionSizingPolicy);
   }, [selectedId, livePositionSizingPolicy]);
 
+  useEffect(() => {
+    const symbol = configs.find((config) => config.id === selectedId)?.symbol;
+    setManualForm(initialManualForm(symbol));
+  }, [selectedId]);
+
   useEffect(() => () => rowRequests.cancel(), [rowRequests]);
 
   async function loadRows(configId = selectedId, positionSizingPolicy = livePositionSizingPolicy) {
@@ -197,12 +226,15 @@ export function TradesPage() {
   }
 
   function fillBuyRecommendation() {
-    if (!plan || !plan.buy_available) return;
+    if (!plan || (!plan.buy_available && manualForm.cash_shortage_policy === "defer")) return;
+    const quantity = manualForm.cash_shortage_policy === "available_cash"
+      ? affordableShareQuantity(plan, dashboard?.config.fee_rate)
+      : wholeShare(plan.LOC.quantity);
     setManualForm((current) => ({
       ...current,
       trade_date: plan.plan_date,
       side: "buy",
-      quantity: wholeShare(plan.LOC.quantity),
+      quantity,
       limit_price: recommendedBuyPrice(plan.LOC.limit_price),
       price: recommendedBuyPrice(plan.LOC.limit_price),
       fee: "0",
@@ -255,6 +287,7 @@ export function TradesPage() {
           quantity: manualForm.quantity,
           limitPrice: manualForm.limit_price,
           mode: manualForm.mode as StrategyMode,
+          cashShortagePolicy: manualForm.cash_shortage_policy,
           plan: plan ?? { strategy_type: dashboard?.config.strategy_type },
         }));
         setMessage("매수 주문이 보유 포지션에 대기 상태로 등록되었습니다.");
@@ -392,7 +425,7 @@ export function TradesPage() {
             <div className="order-board-header">
               <div>
                 <span className="signal-label">오늘의 LOC 매수 주문표</span>
-                <strong>{executableBuyOrders.length ? `${Math.min(executableBuyOrders.length, 5)}건` : "주문 없음"}</strong>
+                <strong>{plannedBuyOrders.length ? `${Math.min(plannedBuyOrders.length, 5)}건` : "주문 없음"}</strong>
               </div>
               {!isRadar ? <div className="order-policy-switch" role="group" aria-label="매수 수량 계산">
                 <button
@@ -412,9 +445,9 @@ export function TradesPage() {
               </div> : <span className="status-pill compact is-muted">{formatRadarProfile(plan?.radar_profile)}</span>}
             </div>
             <div className="order-board-body">
-              {executableBuyOrders.length ? (
+              {plannedBuyOrders.length ? (
                 <div className="loc-order-list">
-                  {executableBuyOrders.slice(0, 5).map((order) => (
+                  {plannedBuyOrders.slice(0, 5).map((order) => (
                     <div className="loc-order-row" key={order.step}>
                       <span>{isRadar && plan?.radar_tier ? String(plan.radar_tier) + "티어 LOC" : String(order.step) + "차 LOC"}</span>
                       <strong>LOC {formatMoney(order.limit_price, selectedSymbol)}</strong>
@@ -425,9 +458,20 @@ export function TradesPage() {
               ) : (
                 <small>{locBuyBlockMessage(plan) || translateReason(plan?.LOC.blocking_reason) || "오늘 입력할 LOC 매수 주문이 없습니다."}</small>
               )}
+              {hasCashShortage && plan ? (
+                <div className="cash-shortage-choice">
+                  <strong>현금이 {formatMoney(cashShortageAmount(plan), selectedSymbol)} 부족합니다.</strong>
+                  <div role="group" aria-label="현금 부족 주문 처리">
+                    <button type="button" className={manualForm.cash_shortage_policy === "defer" ? "is-active" : undefined} onClick={() => setManualForm((current) => ({ ...current, cash_shortage_policy: "defer" }))}>매수 보류</button>
+                    <button type="button" className={manualForm.cash_shortage_policy === "external_funding" ? "is-active" : undefined} onClick={() => setManualForm((current) => ({ ...current, cash_shortage_policy: "external_funding" }))}>부족금 충당</button>
+                    <button type="button" className={manualForm.cash_shortage_policy === "available_cash" ? "is-active" : undefined} onClick={() => setManualForm((current) => ({ ...current, cash_shortage_policy: "available_cash" }))}>가용 현금만큼</button>
+                  </div>
+                  {manualForm.cash_shortage_policy === "available_cash" ? <small>수수료 포함 최대 {affordableShareQuantity(plan, dashboard?.config.fee_rate) || "0"}주를 주문합니다.</small> : null}
+                </div>
+              ) : null}
             </div>
             <div className="order-board-actions">
-              <button type="button" onClick={fillBuyRecommendation} disabled={!plan?.buy_available || saving}>
+              <button type="button" onClick={fillBuyRecommendation} disabled={(!plan?.buy_available && manualForm.cash_shortage_policy === "defer") || saving}>
                 <Wand2 aria-hidden="true" size={16} /> 매수 주문 입력
               </button>
             </div>
@@ -998,6 +1042,16 @@ function normalizeShareInput(value: string): string {
 function estimateFee(price: string, quantity: string, feeRate: string | undefined): string {
   const fee = Number(price) * Number(quantity) * Number(feeRate ?? "0") / 100;
   return Number.isFinite(fee) ? fee.toFixed(6) : "0";
+}
+
+function affordableShareQuantity(plan: DailyPlan, feeRate: string | undefined): string {
+  const unitCost = Number(plan.LOC.limit_price) * (1 + Number(feeRate ?? "0") / 100);
+  const quantity = Math.floor(Number(plan.cash ?? plan.LOC.available) / unitCost);
+  return Number.isFinite(quantity) && quantity > 0 ? String(quantity) : "";
+}
+
+function cashShortageAmount(plan: DailyPlan): string {
+  return Math.max(0, Number(plan.LOC.required_cash) - Number(plan.LOC.available)).toFixed(2);
 }
 
 function errorMessage(error: unknown): string {
