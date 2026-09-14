@@ -93,12 +93,13 @@ export function DashboardPage() {
       setLoading(true);
       setError("");
       const config = configs.find((candidate) => candidate.id === configId);
+      const recommendation = shouldLoadModeRecommendation(config?.strategy_type)
+        ? await getModeRecommendation(configId, controller.signal)
+        : null;
       const [dashboardData, planData, modeData, chartData, trades] = await Promise.all([
         getDashboard(configId, controller.signal),
         getDailyPlan(configId, "fixed_quantity", controller.signal),
-        shouldLoadModeRecommendation(config?.strategy_type)
-          ? getModeRecommendation(configId, controller.signal)
-          : Promise.resolve(null),
+        Promise.resolve(recommendation),
         getChart(configId, chartRange, controller.signal),
         listPositionHistory(configId, controller.signal),
       ]);

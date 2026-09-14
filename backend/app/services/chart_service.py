@@ -24,6 +24,7 @@ from app.infrastructure.repositories.strategies import StrategyConfigRepository
 from app.infrastructure.repositories.trades import TradeRepository
 from app.services.market_session_service import latest_confirmed_market_date
 from app.services.trend_filter_service import trend_filter_symbols
+from app.services.weekly_mode_history import weekly_mode_history
 from app.strategy_engine.loc import calculate_loc_plan
 from app.strategy_engine.radar0458_pro import get_radar_preset
 from app.strategy_engine.weekly_rsi import (
@@ -60,6 +61,9 @@ class ChartService:
         if config is None:
             raise ValueError(f"Strategy config not found: {config_id}")
         as_of = today or latest_confirmed_market_date(config.symbol)
+        rsi_as_of = today or latest_confirmed_market_date(
+            str(config.settings_json.get("mode_rsi_symbol", "QQQ"))
+        )
         days = RANGE_DAYS.get(range_key)
         if days is None:
             raise ValueError(f"Unsupported chart range: {range_key}")
@@ -90,12 +94,12 @@ class ChartService:
             rsi=(
                 RsiSeriesDto(guides=[], points=[])
                 if config.strategy_type == "radar0458_pro"
-                else self._rsi_series(config.settings_json, start_date, as_of)
+                else self._rsi_series(config.settings_json, start_date, rsi_as_of)
             ),
             mode_markers=(
                 []
                 if config.strategy_type == "radar0458_pro"
-                else self._mode_markers(config_id, start_date, as_of)
+                else self._mode_markers(config_id, start_date, rsi_as_of)
             ),
             cci=(
                 CciSeriesDto(guides=[], series=[])
@@ -200,35 +204,16 @@ class ChartService:
         return CciSeriesDto(guides=CCI_GUIDES, series=series)
 
     def _mode_markers(self, config_id: int, start_date: date, end_date: date) -> list[ModeMarkerDto]:
-        current_recommendation = next(
-            (
-                recommendation
-                for recommendation in self.mode_recommendations.list_by_config(config_id)
-                if recommendation.effective_week <= end_date
-            ),
-            None,
-        )
-        if current_recommendation is None:
-            return []
-        period_start = current_recommendation.effective_week
-        period_end = period_start + timedelta(days=4)
-        if period_end < start_date:
-            return []
+        config = self.configs.get(config_id)
+        recommendations = weekly_mode_history(self.session, config, end_date)
         return [
             ModeMarkerDto(
-                date=period_end,
-                mode=current_recommendation.recommended_mode,
-                rule_code=current_recommendation.rule_code,
-                period_start_date=period_start,
-                period_end_date=period_end,
-                rule_label=self._mode_rule_label(current_recommendation.rule_code),
+                date=row.effective_week + timedelta(days=4),
+                mode=row.recommended_mode,
+                rule_code=row.rule_code,
+                period_start_date=row.effective_week,
+                period_end_date=row.effective_week + timedelta(days=4),
             )
+            for row in recommendations
+            if row.effective_week + timedelta(days=4) >= start_date
         ]
-
-    @staticmethod
-    def _mode_rule_label(rule_code: str | None) -> str | None:
-        labels = {
-            "S1": "RSI 고점하락",
-            "A1": "RSI 30 상향돌파",
-        }
-        return labels.get(rule_code or "")

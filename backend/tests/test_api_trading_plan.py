@@ -149,9 +149,10 @@ def test_get_mode_recommendation_returns_differs_and_preserves_confirmed_mode(
     assert body["confirmed_source"] == "manual"
     assert body["recommended_mode"] == "safe"
     assert body["differs"] is True
-    assert body["effective_week"] == "2026-06-22"
-    assert body["data_as_of"] == "2026-06-19"
-    assert body["rule_code"] == "S1"
+    assert body["effective_week"] == "2026-06-15"
+    assert body["data_as_of"] == "2026-06-12"
+    assert body["next_week"] == "2026-06-22"
+    assert body["next_rule_code"] == "S1"
 
 
 def test_put_confirmed_mode_set_updates_confirmed_mode_and_source(
@@ -291,7 +292,7 @@ def test_get_mode_recommendations_returns_newest_history_first(api_client: TestC
 
     assert response.status_code == 200
     body = response.json()
-    assert [item["effective_week"] for item in body] == ["2026-06-29", "2026-06-22"]
+    assert [item["effective_week"] for item in body] == ["2026-06-22", "2026-06-15"]
 
 
 def test_mode_recommendation_missing_config_returns_404(api_client: TestClient) -> None:

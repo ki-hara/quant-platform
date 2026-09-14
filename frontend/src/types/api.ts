@@ -366,6 +366,9 @@ export interface BacktestTrade {
 }
 
 export interface ModeRecommendation {
+  next_week?: ISODate | null;
+  next_mode?: StrategyMode | null;
+  next_rule_code?: string | null;
   confirmed_mode: StrategyMode;
   confirmed_source: ModeConfirmationSource;
   recommended_mode: StrategyMode | null;

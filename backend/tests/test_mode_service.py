@@ -132,14 +132,16 @@ def test_get_mode_recommendation_updates_only_recommendation_fields() -> None:
         assert result.confirmed_source == ModeConfirmationSource.MANUAL
         assert result.recommended_mode == StrategyMode.SAFE
         assert result.differs is False
-        assert result.effective_week == date(2026, 6, 22)
-        assert result.data_as_of == date(2026, 6, 19)
-        assert result.rule_code == "S1"
+        assert result.effective_week == date(2026, 6, 15)
+        assert result.data_as_of == date(2026, 6, 12)
+        assert result.rule_code is None
+        assert result.next_week == date(2026, 6, 22)
+        assert result.next_rule_code == "S1"
         assert state.confirmed_mode == StrategyMode.SAFE
         assert state.recommended_mode == StrategyMode.SAFE
-        assert state.recommendation_effective_week == date(2026, 6, 22)
+        assert state.recommendation_effective_week == date(2026, 6, 15)
         assert len(histories) == 1
-        assert histories[0].effective_week == date(2026, 6, 22)
+        assert histories[0].effective_week == date(2026, 6, 15)
 
 
 def test_get_mode_recommendation_ignores_incomplete_current_week() -> None:
@@ -328,8 +330,8 @@ def test_mode_recommendation_history_is_newest_first() -> None:
         histories = service.list_mode_recommendations(config.id)
 
         assert [history.effective_week for history in histories] == [
-            date(2026, 6, 29),
             date(2026, 6, 22),
+            date(2026, 6, 15),
         ]
 
 

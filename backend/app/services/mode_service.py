@@ -3,19 +3,14 @@ from datetime import date, datetime, timezone
 
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
 from app.domain.enums import ModeConfirmationSource, StrategyMode
 from app.domain.models import ModeRecommendation, StrategyConfig, StrategyModeState
 from app.dto.trading_plan import ModeRecommendationDto
 from app.infrastructure.repositories.market_data import MarketPriceRepository
 from app.infrastructure.repositories.modes import ModeRecommendationRepository, ModeStateRepository
 from app.infrastructure.repositories.strategies import StrategyConfigRepository
-from app.strategy_engine.weekly_rsi import (
-    DailyClose,
-    aggregate_daily_closes_to_weekly_closes,
-    latest_completed_mode_week_ending,
-    resolve_weekly_rsi_transition,
-)
+from app.services.market_session_service import latest_confirmed_market_date
+from app.services.weekly_mode_history import weekly_mode_history
 
 
 @dataclass(frozen=True)
@@ -40,7 +35,15 @@ class ModeService:
         config = self._get_config(config_id)
         state = self.mode_states.get_or_create_safe(config_id)
         recommendation = self._recalculate(config, state, as_of)
-        return self._to_dto(state, recommendation)
+        result = self._to_dto(state, recommendation)
+        symbol = str(config.settings_json.get("mode_rsi_symbol", "QQQ"))
+        history = weekly_mode_history(self.session, config, min(as_of, latest_confirmed_market_date(symbol)))
+        upcoming = next((row for row in history if row.effective_week > as_of), None)
+        if upcoming:
+            result.next_week = upcoming.effective_week
+            result.next_mode = upcoming.recommended_mode
+            result.next_rule_code = upcoming.rule_code
+        return result
 
     def set_confirmed_mode(self, config_id: int, mode: StrategyMode) -> ModeRecommendationDto:
         self._get_config(config_id)
@@ -82,26 +85,13 @@ class ModeService:
         as_of: date,
     ) -> ModeRecommendation:
         symbol = str(config.settings_json.get("mode_rsi_symbol", "QQQ"))
-        prices = self.market_prices.list_prices(
-            settings.market_data_provider,
-            symbol,
-            date(1970, 1, 1),
-            as_of,
-        )
-        latest_completed_week_ending = latest_completed_mode_week_ending(as_of)
-        weekly_closes = [
-            weekly_close
-            for weekly_close in aggregate_daily_closes_to_weekly_closes(
-                [DailyClose(date=price.date, close=price.close) for price in prices]
-            )
-            if weekly_close.week_ending <= latest_completed_week_ending
-        ]
-        if len(weekly_closes) < 16:
+        confirmed = min(as_of, latest_confirmed_market_date(symbol))
+        history = weekly_mode_history(self.session, config, confirmed)
+        if not history:
             raise ValueError("At least 16 completed weekly closes are required.")
-
-        transition = resolve_weekly_rsi_transition(weekly_closes, prior_mode=state.confirmed_mode)
+        transition = next((row for row in reversed(history) if row.effective_week <= as_of), None)
         if transition is None:
-            raise ValueError("At least 16 completed weekly closes are required.")
+            raise ValueError("At least 16 completed weekly closes are required for the current week.")
 
         recommendation = ModeRecommendation(
             strategy_config_id=config.id,

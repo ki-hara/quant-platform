@@ -17,12 +17,6 @@ function formatChartDate(time: unknown): string {
   return "";
 }
 
-function formatShortDate(date: string | null): string {
-  if (!date) return "";
-  const [, month, day] = date.split("-");
-  return `${Number(month)}/${Number(day)}`;
-}
-
 export function RsiChart({ chart }: RsiChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -35,6 +29,7 @@ export function RsiChart({ chart }: RsiChartProps) {
       grid: { vertLines: { color: "#eef0f2" }, horzLines: { color: "#eef0f2" } },
       rightPriceScale: { borderColor: "#d9dde3" },
       timeScale: {
+        minBarSpacing: 65,
         borderColor: "#d9dde3",
         tickMarkFormatter: formatChartDate,
       },
@@ -71,15 +66,7 @@ export function RsiChart({ chart }: RsiChartProps) {
         position: marker.mode === "aggressive" ? "belowBar" : "aboveBar",
         color: marker.mode === "aggressive" ? "#d17a22" : "#24745a",
         shape: marker.mode === "aggressive" ? "arrowUp" : "arrowDown",
-        text: [
-          marker.period_start_date && marker.period_end_date
-            ? `${formatShortDate(marker.period_start_date)}~${formatShortDate(marker.period_end_date)}`
-            : null,
-          translateMode(marker.mode),
-          marker.rule_label ? `· ${marker.rule_label}` : null,
-        ]
-          .filter(Boolean)
-          .join(" "),
+        text: `${marker.period_start_date && marker.period_start_date > new Date().toLocaleDateString("en-CA") ? "다음 주 " : ""}${translateMode(marker.mode)} ${marker.rule_code ?? "유지"}`,
       })),
     );
     instance.timeScale().fitContent();

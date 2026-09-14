@@ -158,7 +158,7 @@ def test_chart_returns_sorted_ohlcv_loc_trade_markers_and_rsi_guides() -> None:
             Decimal("60"),
             Decimal("65"),
         ]
-        assert len(chart.mode_markers) == 1
+        assert len(chart.mode_markers) == 2
         assert chart.mode_markers[0].period_start_date == date(2026, 6, 15)
         assert chart.mode_markers[0].period_end_date == date(2026, 6, 19)
         assert chart.mode_markers[0].date == date(2026, 6, 19)
@@ -259,10 +259,10 @@ def test_chart_shows_current_mode_period_marker_from_week_start() -> None:
 
         chart = ChartService(session).get_chart(config.id, range_key="6m", today=date(2026, 7, 6))
 
-        assert len(chart.mode_markers) == 1
-        assert chart.mode_markers[0].period_start_date == date(2026, 7, 6)
-        assert chart.mode_markers[0].period_end_date == date(2026, 7, 10)
-        assert chart.mode_markers[0].date == date(2026, 7, 10)
+        assert len(chart.mode_markers) == 4
+        assert chart.mode_markers[-1].period_start_date == date(2026, 7, 6)
+        assert chart.mode_markers[-1].period_end_date == date(2026, 7, 10)
+        assert chart.mode_markers[-1].date == date(2026, 7, 10)
 
 
 @pytest.mark.parametrize(
@@ -337,6 +337,29 @@ def test_chart_missing_config_raises_value_error() -> None:
     with create_session() as session:
         with pytest.raises(ValueError, match="Strategy config not found"):
             ChartService(session).get_chart(999, range_key="6m", today=date(2026, 6, 20))
+
+
+def test_missing_friday_quote_does_not_create_next_week_marker() -> None:
+    with create_session() as session:
+        config = create_config(session)
+        seed_weekly_prices(session, [str(100 + index) for index in range(17)])
+        service = ChartService(session)
+        before = service._mode_markers(config.id, date(2026, 6, 1), date(2026, 6, 25))
+        after = service._mode_markers(config.id, date(2026, 6, 1), date(2026, 6, 27))
+        assert [row.date for row in before] == [row.date for row in after]
+        assert after[-1].date == date(2026, 6, 26)
+
+
+def test_friday_holiday_uses_thursday_close_for_next_week_marker() -> None:
+    with create_session() as session:
+        config = create_config(session)
+        seed_weekly_prices(session, [str(100 + index) for index in range(16)])
+        seed_prices(session, "QQQ", date(2026, 6, 18), 1)
+        markers = ChartService(session)._mode_markers(
+            config.id, date(2026, 6, 1), date(2026, 6, 18),
+        )
+        assert markers[-1].period_start_date == date(2026, 6, 22)
+        assert markers[-1].date == date(2026, 6, 26)
 
 
 def test_chart_defaults_to_confirmed_market_date(monkeypatch) -> None:

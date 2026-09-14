@@ -1,6 +1,7 @@
 import { Check, ShieldCheck, Zap } from "lucide-react";
 import type { ModeRecommendation, StrategyMode } from "../types/api";
 import { formatDecimal, translateMode } from "../utils/format";
+import { modeRuleDescription } from "../utils/modeRules";
 
 interface ModeControlProps {
   mode: ModeRecommendation | null;
@@ -64,13 +65,19 @@ export function ModeControl({
         </div>
         <div>
           <dt>규칙</dt>
-          <dd>{mode?.rule_code ?? "-"}</dd>
+          <dd>{mode ? modeRuleDescription(mode.rule_code) : "-"}</dd>
         </div>
         <div>
           <dt>기준일</dt>
           <dd>{mode?.data_as_of ?? "-"}</dd>
         </div>
       </dl>
+      {mode?.next_mode ? (
+        <div className="notice">
+          <strong>{mode.next_week} 다음 주 추천: {translateMode(mode.next_mode)}</strong>
+          <div>{modeRuleDescription(mode.next_rule_code)}</div>
+        </div>
+      ) : null}
 
       {mode?.differs ? <div className="notice notice-warning">추천 모드와 확정 모드가 다릅니다.</div> : null}
 

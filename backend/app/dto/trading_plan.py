@@ -24,6 +24,9 @@ class ModeRecommendationDto(BaseModel):
     previous_rsi: Decimal | None = None
     current_rsi: Decimal | None = None
     rule_code: str | None = None
+    next_week: date | None = None
+    next_mode: StrategyMode | None = None
+    next_rule_code: str | None = None
 
 
 class LocPlanDto(BaseModel):
