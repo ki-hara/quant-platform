@@ -46,6 +46,13 @@ class CachedMarketDataProvider:
         return start_date in cached_dates and end_date in cached_dates
 
     def _to_dtos(self, prices: list[object]) -> list[OhlcvDto]:
+        # Primary adjusted quotes and fallback raw quotes can coexist in the DB.
+        # Simulate each session once, preferring the primary adjusted quote.
+        by_date = {}
+        for price in prices:
+            existing = by_date.get(price.date)
+            if existing is None or (price.adjusted and not existing.adjusted):
+                by_date[price.date] = price
         return [
             OhlcvDto(
                 symbol=price.symbol,
@@ -57,5 +64,5 @@ class CachedMarketDataProvider:
                 volume=int(price.volume),
                 adjusted=price.adjusted,
             )
-            for price in sorted(prices, key=lambda item: item.date)
+            for price in sorted(by_date.values(), key=lambda item: item.date)
         ]
