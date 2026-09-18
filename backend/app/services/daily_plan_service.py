@@ -12,7 +12,7 @@ from app.infrastructure.repositories.modes import ModeStateRepository
 from app.infrastructure.repositories.portfolios import PortfolioRepository, PositionRepository
 from app.infrastructure.repositories.strategies import StrategyConfigRepository
 from app.services.exchange_calendar_service import previous_exchange_trading_day
-from app.services.market_session_service import current_market_date
+from app.services.market_session_service import current_market_date, latest_confirmed_market_date
 from app.strategy_engine.loc import LocPlan, calculate_loc_plan
 from app.strategy_engine.radar0458_pro import build_radar_buy_plan, get_radar_preset
 
@@ -44,7 +44,12 @@ class DailyPlanService:
             if now is not None
             else (today or current_market_date(config.symbol))
         )
-        basis_date = previous_exchange_trading_day(config.symbol, order_date)
+        # Explicit historical requests retain their pre-order close semantics.
+        basis_date = (
+            previous_exchange_trading_day(config.symbol, order_date)
+            if today is not None and now is None
+            else latest_confirmed_market_date(config.symbol, now)
+        )
         latest_price = self.market_prices.latest_price_on_or_before(
             settings.market_data_provider,
             config.symbol,

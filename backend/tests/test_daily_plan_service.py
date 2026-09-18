@@ -310,7 +310,21 @@ def test_daily_plan_uses_last_confirmed_us_close_before_cutoff() -> None:
         assert plan.LOC.limit_price == Decimal("236.457107")
 
 
-def test_daily_plan_uses_previous_trading_day_close_for_today_order_after_kr_close() -> None:
+@pytest.mark.parametrize("hour,available,expected", [(16, True, 24), (17, True, 25), (17, False, 24)])
+def test_us_live_plan_uses_latest_confirmed_available_close(hour, available, expected):
+    with create_session() as session:
+        config = create_config(session)
+        config.symbol = "SOXL"
+        session.commit()
+        seed_daily_prices(session, "SOXL", date(2026, 6, 24),
+                          ["100", "110"] if available else ["100"])
+        plan = DailyPlanService(session).get_daily_plan(
+            config.id, now=datetime(2026, 6, 25, hour, 0, tzinfo=ZoneInfo("America/New_York")))
+        assert plan.loc_basis_date == date(2026, 6, expected)
+        assert plan.previous_close == Decimal("110" if expected == 25 else "100")
+
+
+def test_daily_plan_uses_latest_confirmed_close_after_kr_close() -> None:
     with create_session() as session:
         config = create_config(session)
         config.symbol = "0193T0"
@@ -345,9 +359,9 @@ def test_daily_plan_uses_previous_trading_day_close_for_today_order_after_kr_clo
             now=datetime(2026, 7, 6, 17, 0, tzinfo=ZoneInfo("Asia/Seoul")),
         )
 
-        assert plan.loc_basis_date == date(2026, 7, 3)
-        assert plan.previous_close == Decimal("27400.000000")
-        assert plan.LOC.limit_price == Decimal("28222.000000")
+        assert plan.loc_basis_date == date(2026, 7, 6)
+        assert plan.previous_close == Decimal("25310.000000")
+        assert plan.LOC.limit_price == Decimal("26069.300000")
 
 
 @pytest.mark.parametrize(
@@ -609,6 +623,10 @@ def test_daily_plan_reuses_confirmed_mode_and_keeps_recommendation_state() -> No
 
 
 def test_daily_plan_defaults_to_the_market_timezone_for_order_and_loc_basis(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.services.daily_plan_service.latest_confirmed_market_date",
+        lambda symbol, now=None: date(2026, 7, 14),
+    )
     with create_session() as session:
         config = create_config(session)
         seed_daily_prices(session, "TEST", date(2026, 7, 14), ["100", "200"])
