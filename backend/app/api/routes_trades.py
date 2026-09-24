@@ -82,7 +82,8 @@ class BuyOrderPositionCreateDto(BaseModel):
 
 @router.get("/strategy-configs/{config_id}/positions", response_model=list[PositionDto])
 def list_positions(config_id: int, session: SessionDep, owner: CurrentOwnerDep) -> list[object]:
-    config = ensure_config_owner(config_id, owner, session)
+    ensure_config_owner(config_id, owner, session)
+    config = StrategyConfigRepository(session).get(config_id)
     positions = PositionRepository(session).list_open(config_id)
     pending = [p for p in positions if p.status == PositionStatus.PENDING]
     quotes = {}
