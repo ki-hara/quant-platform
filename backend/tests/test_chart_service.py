@@ -26,6 +26,29 @@ def create_session() -> Session:
     return session
 
 
+@pytest.mark.parametrize("reverse", [False, True])
+def test_chart_deduplicates_adjusted_and_fallback_quotes(reverse):
+    with create_session() as session:
+        config = create_config(session)
+        rows = [
+            OhlcvDto(symbol="TEST", date=date(2026, 9, day),
+                     open=Decimal(value), high=Decimal(value), low=Decimal(value),
+                     close=Decimal(value), volume=volume, adjusted=adjusted)
+            for day, adjusted, value, volume in [
+                (22, False, "151.95", 10), (22, True, "151.949997", 20),
+                (23, False, "146.25", 30),
+            ]
+        ]
+        if reverse:
+            rows.reverse()
+        MarketPriceRepository(session).upsert_prices("finance_data_reader", rows)
+        chart = ChartService(session).get_chart(config.id, "1m", today=date(2026, 9, 23))
+        assert [p.date for p in chart.candles] == [date(2026, 9, 22), date(2026, 9, 23)]
+        assert chart.candles[0].close == Decimal("151.949997")
+        assert chart.candles[0].volume == 20
+        assert chart.candles[1].close == Decimal("146.25")
+
+
 def create_config(session: Session):
     settings = DynamicWaveStrategy.default_settings()
     settings["fee_rate_percent"] = "0.1"

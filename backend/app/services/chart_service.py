@@ -75,6 +75,14 @@ class ChartService:
             start_date,
             as_of,
         )
+        # Both adjusted primary and raw fallback rows may exist for one session.
+        # Chart series require strictly increasing, unique dates.
+        prices_by_date = {}
+        for price in prices:
+            existing = prices_by_date.get(price.date)
+            if existing is None or (price.adjusted and not existing.adjusted):
+                prices_by_date[price.date] = price
+        prices = sorted(prices_by_date.values(), key=lambda price: price.date)
         candles = [
             ChartCandleDto(
                 date=price.date,
