@@ -24,6 +24,7 @@ class PositionDto(BaseModel):
     buy_date: date
     limit_price: Decimal | None = None
     buy_price: Decimal
+    suggested_fill_price: Decimal | None = None
     buy_fee: Decimal
     quantity: Decimal
     mode: str

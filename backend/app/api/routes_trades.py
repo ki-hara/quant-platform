@@ -18,6 +18,9 @@ from app.db.session import get_session
 from app.domain.enums import PositionStatus, StrategyMode, TradeSide, TradeSource
 from app.domain.models import LocOrder, PortfolioAdjustment
 from app.dto.dashboard import PositionDto
+from app.core.config import settings
+from app.infrastructure.repositories.market_data import MarketPriceRepository
+from app.services.market_session_service import latest_confirmed_market_date
 from app.dto.trades import (
     ManualTradeRequestDto as BaseManualTradeRequestDto,
     ManualTradeResponseDto,
@@ -79,8 +82,26 @@ class BuyOrderPositionCreateDto(BaseModel):
 
 @router.get("/strategy-configs/{config_id}/positions", response_model=list[PositionDto])
 def list_positions(config_id: int, session: SessionDep, owner: CurrentOwnerDep) -> list[object]:
-    ensure_config_owner(config_id, owner, session)
-    return PositionRepository(session).list_open(config_id)
+    config = ensure_config_owner(config_id, owner, session)
+    positions = PositionRepository(session).list_open(config_id)
+    pending = [p for p in positions if p.status == PositionStatus.PENDING]
+    quotes = {}
+    if pending:
+        prices = MarketPriceRepository(session).list_prices(
+            settings.market_data_provider, config.symbol,
+            min(p.buy_date for p in pending), latest_confirmed_market_date(config.symbol),
+        )
+        for price in prices:
+            if price.date not in quotes or price.adjusted:
+                quotes[price.date] = price
+    result = []
+    for position in positions:
+        dto = PositionDto.model_validate(position)
+        price = quotes.get(position.buy_date)
+        if position.status == PositionStatus.PENDING and price is not None:
+            dto.suggested_fill_price = price.close
+        result.append(dto)
+    return result
 
 
 @router.get("/positions/{config_id}", response_model=list[PositionDto])

@@ -1,6 +1,7 @@
 import { RefreshCw, Save, Trash2, Wand2 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { getDashboard } from "../api/dashboard";
+import { positionFillPrice } from "../utils/positionFillPrice";
 import { listStrategyConfigs } from "../api/strategies";
 import {
   createBuyOrderPosition,
@@ -71,6 +72,7 @@ export function TradesPage() {
   const [configs, setConfigs] = useState<StrategyConfig[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [positions, setPositions] = useState<PositionRow[]>([]);
+  const manualFillPrices = useRef<Record<number, string>>({});
   const [positionHistory, setPositionHistory] = useState<PositionHistoryRow[]>([]);
   const [plan, setPlan] = useState<DailyPlan | null>(null);
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
@@ -199,7 +201,7 @@ export function TradesPage() {
             position.id,
             {
               quantity: String(Math.trunc(Number(position.quantity))),
-              buy_price: Number(position.buy_price).toFixed(2),
+              buy_price: manualFillPrices.current[position.id] ?? positionFillPrice(position),
               status: position.status.toLowerCase() === "pending" ? "pending" : "open",
             },
           ]),
@@ -344,11 +346,16 @@ export function TradesPage() {
       position?.status.toLowerCase() === "pending" && edit.status === "pending"
         ? { ...edit, status: "open" }
         : edit;
+    if (nextEdit.status !== "unfilled" && (!nextEdit.buy_price || Number(nextEdit.buy_price) <= 0)) {
+      setError("실제 체결가를 입력해 주세요.");
+      return;
+    }
     try {
       setSaving(true);
       setError("");
       setMessage("");
       await updatePosition(positionId, nextEdit);
+      delete manualFillPrices.current[positionId];
       setMessage(
         nextEdit.status === "unfilled"
           ? "포지션을 미체결로 제거했습니다."
@@ -594,13 +601,15 @@ export function TradesPage() {
                         type="number"
                         step="0.01"
                         value={edit.buy_price}
+                        placeholder="체결가 입력"
                         inputMode="decimal"
-                        onChange={(event) =>
+                        onChange={(event) => {
+                          manualFillPrices.current[position.id] = event.target.value;
                           setPositionEdits((current) => ({
                             ...current,
                             [position.id]: { ...edit, buy_price: event.target.value },
-                          }))
-                        }
+                          }));
+                        }}
                       />
                     </label>
                     <label>

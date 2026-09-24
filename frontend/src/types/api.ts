@@ -115,6 +115,7 @@ export interface PortfolioRow {
 }
 
 export interface PositionRow {
+  suggested_fill_price?: DecimalString | null;
   id: number;
   strategy_config_id: number;
   buy_date: ISODate;
