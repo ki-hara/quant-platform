@@ -93,22 +93,26 @@ export function DashboardPage() {
       setLoading(true);
       setError("");
       const config = configs.find((candidate) => candidate.id === configId);
-      const recommendation = shouldLoadModeRecommendation(config?.strategy_type)
-        ? await getModeRecommendation(configId, controller.signal)
-        : null;
-      const [dashboardData, planData, modeData, chartData, trades] = await Promise.all([
-        getDashboard(configId, controller.signal),
-        getDailyPlan(configId, "fixed_quantity", controller.signal),
-        Promise.resolve(recommendation),
-        getChart(configId, chartRange, controller.signal),
-        listPositionHistory(configId, controller.signal),
+      const failures: string[] = [];
+      async function apply<T>(label: string, request: Promise<T>, update: (value: T) => void) {
+        try {
+          const value = await request;
+          if (operationalRequests.isCurrent(controller)) update(value);
+        } catch (caught) {
+          if (!isAbortError(caught) && operationalRequests.isCurrent(controller)) {
+            failures.push(`${label}: ${errorMessage(caught)}`);
+            setError(failures.join(" / "));
+          }
+        }
+      }
+      await Promise.all([
+        apply("대시보드", getDashboard(configId, controller.signal), setDashboard),
+        apply("주문표", getDailyPlan(configId, "fixed_quantity", controller.signal), setPlan),
+        apply("운용 모드", shouldLoadModeRecommendation(config?.strategy_type)
+          ? getModeRecommendation(configId, controller.signal) : Promise.resolve(null), setMode),
+        apply("차트", getChart(configId, chartRange, controller.signal), setChart),
+        apply("최근 거래", listPositionHistory(configId, controller.signal), (rows) => setRecentTrades(rows.slice(0, 8))),
       ]);
-      if (!operationalRequests.isCurrent(controller)) return;
-      setDashboard(dashboardData);
-      setPlan(planData);
-      setMode(modeData);
-      setChart(chartData);
-      setRecentTrades(trades.slice(0, 8));
     } catch (caught) {
       if (operationalRequests.isCurrent(controller) && !isAbortError(caught)) {
         setError(errorMessage(caught));
