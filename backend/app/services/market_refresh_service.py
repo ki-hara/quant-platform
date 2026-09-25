@@ -1,4 +1,5 @@
 import logging
+from time import perf_counter
 from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
@@ -61,6 +62,8 @@ class MarketRefreshService:
         )
 
     def _refresh_symbol(self, symbol: str, confirmed_as_of: date) -> list:
+        started = perf_counter()
+        logger.info("Market refresh started: symbol=%s expected=%s", symbol, confirmed_as_of)
         start_date = confirmed_as_of - timedelta(days=400)
         prices = self.provider.get_ohlcv(symbol, start_date, confirmed_as_of + timedelta(days=1))
         confirmed_prices = [price for price in prices if price.date <= confirmed_as_of]
@@ -95,5 +98,11 @@ class MarketRefreshService:
                 ),
             )
 
+        fetched_at = perf_counter()
         self.market_prices.upsert_prices(settings.market_data_provider, confirmed_prices)
+        logger.info(
+            "Market refresh completed: symbol=%s expected=%s actual=%s rows=%s fetch_ms=%.0f save_ms=%.0f",
+            symbol, confirmed_as_of, max(p.date for p in confirmed_prices), len(confirmed_prices),
+            (fetched_at - started) * 1000, (perf_counter() - fetched_at) * 1000,
+        )
         return confirmed_prices
