@@ -20,7 +20,7 @@ from app.services.mode_service import ModeService
 from app.services.trend_filter_service import trend_filter_symbols
 
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("uvicorn.error.market_refresh")
 
 
 def get_market_data_provider() -> MarketDataProvider:
@@ -37,7 +37,7 @@ class MarketRefreshService:
         self.configs = StrategyConfigRepository(session)
         self.market_prices = MarketPriceRepository(session)
 
-    def refresh(self, config_id: int, today: date | None = None) -> MarketRefreshResponseDto:
+    def refresh(self, config_id: int, today: date | None = None, full_history: bool = False) -> MarketRefreshResponseDto:
         config = self.configs.get(config_id)
         if config is None:
             raise ValueError(f"Strategy config not found: {config_id}")
@@ -45,26 +45,47 @@ class MarketRefreshService:
         rsi_symbol = str(config.settings_json.get("mode_rsi_symbol", "QQQ"))
         investment_as_of = today or latest_confirmed_market_date(config.symbol)
         rsi_as_of = today or latest_confirmed_market_date(rsi_symbol)
-        investment_prices = self._refresh_symbol(config.symbol, investment_as_of)
-        rsi_prices = self._refresh_symbol(rsi_symbol, rsi_as_of)
+        investment_prices = self._refresh_symbol(config.symbol, investment_as_of, full_history)
+        warnings = []
+        rsi_ok = True
+        if rsi_symbol == config.symbol:
+            rsi_prices = investment_prices
+        else:
+            try:
+                rsi_prices = self._refresh_symbol(rsi_symbol, rsi_as_of, full_history)
+            except MarketDataError as exc:
+                rsi_ok = False
+                warnings.append(f"{rsi_symbol}: {exc.message}")
+                rsi_prices = self.market_prices.list_prices_up_to(settings.market_data_provider, rsi_symbol, rsi_as_of)
         for symbol in trend_filter_symbols(config.settings_json, config.symbol):
             if symbol not in {config.symbol, rsi_symbol}:
-                self._refresh_symbol(symbol, today or latest_confirmed_market_date(symbol))
+                try:
+                    self._refresh_symbol(symbol, today or latest_confirmed_market_date(symbol), full_history)
+                except MarketDataError as exc:
+                    warnings.append(f"{symbol}: {exc.message}")
 
-        recommendation = ModeService(self.session).get_mode_recommendation(config_id, as_of=rsi_as_of)
+        modes = ModeService(self.session)
+        recommendation = modes.get_mode_recommendation(config_id, as_of=rsi_as_of) if rsi_ok else None
+        state = modes.get_state(config_id)
         return MarketRefreshResponseDto(
-            confirmed_mode=recommendation.confirmed_mode,
-            confirmed_source=recommendation.confirmed_source,
-            recommended_mode=recommendation.recommended_mode,
-            differs=recommendation.differs,
+            confirmed_mode=state.confirmed_mode,
+            confirmed_source=state.confirmed_source,
+            recommended_mode=recommendation.recommended_mode if recommendation else None,
+            differs=recommendation.differs if recommendation else False,
+            warnings=warnings,
             investment_data_as_of=max((price.date for price in investment_prices), default=None),
             rsi_data_as_of=max((price.date for price in rsi_prices), default=None),
         )
 
-    def _refresh_symbol(self, symbol: str, confirmed_as_of: date) -> list:
+    def _refresh_symbol(self, symbol: str, confirmed_as_of: date, full_history: bool = False) -> list:
         started = perf_counter()
         logger.info("Market refresh started: symbol=%s expected=%s", symbol, confirmed_as_of)
         start_date = confirmed_as_of - timedelta(days=400)
+        latest = self.market_prices.latest_price_on_or_before(settings.market_data_provider, symbol, confirmed_as_of)
+        history = self.market_prices.list_prices(settings.market_data_provider, symbol, start_date, confirmed_as_of)
+        if latest is not None and len(history) >= 200 and not full_history:
+            start_date = max(start_date, latest.date - timedelta(days=7))
+        logger.info("Market refresh request: symbol=%s start=%s end=%s full_history=%s", symbol, start_date, confirmed_as_of, full_history)
         try:
             prices = self.provider.get_ohlcv(symbol, start_date, confirmed_as_of + timedelta(days=1))
         except MarketDataError as exc:
@@ -94,6 +115,7 @@ class MarketRefreshService:
             confirmed_prices = sorted(prices_by_date.values(), key=lambda price: price.date)
 
         if not any(price.date == confirmed_as_of for price in confirmed_prices):
+            logger.warning("Market refresh incomplete: symbol=%s expected=%s elapsed_ms=%.0f", symbol, confirmed_as_of, (perf_counter()-started)*1000)
             raise MarketDataError(
                 "market_data_incomplete",
                 (

@@ -549,6 +549,7 @@ export interface TradingChart {
 }
 
 export interface MarketRefreshResponse {
+  warnings?: string[];
   confirmed_mode: StrategyMode;
   confirmed_source: ModeConfirmationSource;
   recommended_mode: StrategyMode | null;

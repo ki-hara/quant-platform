@@ -184,3 +184,4 @@ class MarketRefreshResponseDto(BaseModel):
     differs: bool
     investment_data_as_of: date | None = None
     rsi_data_as_of: date | None = None
+    warnings: list[str] = []

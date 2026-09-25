@@ -133,7 +133,7 @@ export function DashboardPage() {
       setError("");
       const result = await refreshMarketData(selectedId);
       setMessage(
-        `시장 데이터 갱신 완료: 투자종목 ${result.investment_data_as_of ?? "-"}, RSI ${result.rsi_data_as_of ?? "-"}`,
+        `시장 데이터 ${result.warnings?.length ? "일부 갱신" : "갱신 완료"}: 투자종목 ${result.investment_data_as_of ?? "-"}, RSI ${result.rsi_data_as_of ?? "-"}${result.warnings?.length ? ` / ${result.warnings.join(" / ")}` : ""}`,
       );
       await loadOperationalData(selectedId, range);
     } catch (caught) {

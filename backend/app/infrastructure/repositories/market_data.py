@@ -1,6 +1,7 @@
 from datetime import date
 
 from sqlalchemy import select
+from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.orm import Session
 
 from app.domain.models import MarketPrice
@@ -24,9 +25,11 @@ class MarketPriceRepository:
             .where(MarketPrice.symbol == symbol)
             .where(MarketPrice.date >= start_date)
             .where(MarketPrice.date <= end_date)
-            .order_by(MarketPrice.date)
+            .order_by(MarketPrice.date, MarketPrice.adjusted)
         )
-        return list(self.session.scalars(stmt))
+        # Prefer the primary quote when both primary and fallback exist.
+        by_date = {price.date: price for price in self.session.scalars(stmt)}
+        return list(by_date.values())
 
     def list_prices_up_to(self, provider: str, symbol: str, end_date: date) -> list[MarketPrice]:
         return self.list_prices(provider, symbol, date.min, end_date)
@@ -37,8 +40,12 @@ class MarketPriceRepository:
         symbol: str,
         end_date: date,
     ) -> MarketPrice | None:
-        prices = self.list_prices_up_to(provider, symbol, end_date)
-        return prices[-1] if prices else None
+        return self.session.scalar(
+            select(MarketPrice).where(
+                MarketPrice.provider == provider, MarketPrice.symbol == symbol,
+                MarketPrice.date <= end_date,
+            ).order_by(MarketPrice.date.desc(), MarketPrice.adjusted.desc()).limit(1)
+        )
 
     def list_prices_in_range(
         self,
@@ -50,18 +57,17 @@ class MarketPriceRepository:
         return self.list_prices(provider, symbol, start_date, end_date)
 
     def upsert_prices(self, provider: str, prices: list[OhlcvDto]) -> None:
-        for price in prices:
-            existing = self.session.scalar(
-                select(MarketPrice)
-                .where(MarketPrice.provider == provider)
-                .where(MarketPrice.symbol == price.symbol)
-                .where(MarketPrice.date == price.date)
-                .where(MarketPrice.adjusted == price.adjusted)
-            )
-            values = price.model_dump()
-            if existing is None:
-                self.session.add(MarketPrice(provider=provider, **values))
-            else:
-                for key, value in values.items():
-                    setattr(existing, key, value)
-        self.session.commit()
+        rows = [dict(provider=provider, **price.model_dump()) for price in prices]
+        try:
+            # Bound statement size for SQLite builds with a low variable limit.
+            for offset in range(0, len(rows), 80):
+                statement = insert(MarketPrice).values(rows[offset:offset + 80])
+                self.session.execute(statement.on_conflict_do_update(
+                    index_elements=["provider", "symbol", "date", "adjusted"],
+                    set_={key: getattr(statement.excluded, key) for key in
+                          ("open", "high", "low", "close", "volume")},
+                ))
+            self.session.commit()
+        except Exception:
+            self.session.rollback()
+            raise
