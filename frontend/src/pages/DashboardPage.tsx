@@ -13,6 +13,7 @@ import {
 import { DailyPlanPanel } from "../components/DailyPlanPanel";
 import { CciChart } from "../components/CciChart";
 import { MarketChart } from "../components/MarketChart";
+import { applyLatestResult } from "../utils/applyLatestResult";
 import { MetricStrip } from "../components/MetricStrip";
 import { ModeControl } from "../components/ModeControl";
 import { RsiChart } from "../components/RsiChart";
@@ -95,15 +96,10 @@ export function DashboardPage() {
       const config = configs.find((candidate) => candidate.id === configId);
       const failures: string[] = [];
       async function apply<T>(label: string, request: Promise<T>, update: (value: T) => void) {
-        try {
-          const value = await request;
-          if (operationalRequests.isCurrent(controller)) update(value);
-        } catch (caught) {
-          if (!isAbortError(caught) && operationalRequests.isCurrent(controller)) {
+        await applyLatestResult(request, () => operationalRequests.isCurrent(controller), update, (caught) => {
             failures.push(`${label}: ${errorMessage(caught)}`);
             setError(failures.join(" / "));
-          }
-        }
+        });
       }
       await Promise.all([
         apply("대시보드", getDashboard(configId, controller.signal), setDashboard),
