@@ -65,7 +65,11 @@ class MarketRefreshService:
         started = perf_counter()
         logger.info("Market refresh started: symbol=%s expected=%s", symbol, confirmed_as_of)
         start_date = confirmed_as_of - timedelta(days=400)
-        prices = self.provider.get_ohlcv(symbol, start_date, confirmed_as_of + timedelta(days=1))
+        try:
+            prices = self.provider.get_ohlcv(symbol, start_date, confirmed_as_of + timedelta(days=1))
+        except MarketDataError as exc:
+            logger.warning("Market history fetch failed: symbol=%s expected=%s code=%s", symbol, confirmed_as_of, exc.code)
+            prices = []
         confirmed_prices = [price for price in prices if price.date <= confirmed_as_of]
         if not any(price.date == confirmed_as_of for price in confirmed_prices):
             try:
