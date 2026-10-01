@@ -13,6 +13,36 @@ def quote(symbol, day, value='100', adjusted=True):
                     low=Decimal(value), close=Decimal(value), volume=1, adjusted=adjusted)
 
 
+def test_automatic_refresh_skips_current_quotes_but_manual_refresh_fetches():
+    day = date(2026, 9, 24)
+    calls = []
+    class Provider:
+        def get_ohlcv(self, symbol, start, end):
+            calls.append(symbol)
+            return [quote(symbol, day)]
+    with create_session() as session:
+        service = MarketRefreshService(session, Provider())
+        service.market_prices.upsert_prices('finance_data_reader', [quote('SOXL', day)])
+        assert service._refresh_symbol('SOXL', day, only_if_stale=True)[0].date == day
+        assert calls == []
+        service._refresh_symbol('SOXL', day)
+        assert calls == ['SOXL']
+
+
+def test_automatic_refresh_fetches_missing_confirmed_day():
+    day = date(2026, 9, 24)
+    calls = []
+    class Provider:
+        def get_ohlcv(self, symbol, start, end):
+            calls.append(symbol)
+            return [quote(symbol, day)]
+    with create_session() as session:
+        service = MarketRefreshService(session, Provider())
+        service.market_prices.upsert_prices('finance_data_reader', [quote('SOXL', day-timedelta(days=1))])
+        assert service._refresh_symbol('SOXL', day, only_if_stale=True)[0].date == day
+        assert calls == ['SOXL']
+
+
 def test_initial_range_failure_still_attempts_confirmed_day():
     day = date(2026, 9, 24)
     class Provider:

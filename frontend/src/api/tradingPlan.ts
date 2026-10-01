@@ -34,6 +34,14 @@ export function setConfirmedMode(
   return apiPut<ModeRecommendation>(`/api/strategy-configs/${configId}/confirmed-mode`, request);
 }
 
-export function refreshMarketData(configId: number): Promise<MarketRefreshResponse> {
-  return apiPost<MarketRefreshResponse>(`/api/strategy-configs/${configId}/market-data/refresh`);
+const automaticRefreshes = new Map<number, Promise<MarketRefreshResponse>>();
+
+export function refreshMarketData(configId: number, onlyIfStale = false): Promise<MarketRefreshResponse> {
+  const pending = onlyIfStale ? automaticRefreshes.get(configId) : undefined;
+  if (pending) return pending;
+  const request = apiPost<MarketRefreshResponse>(`/api/strategy-configs/${configId}/market-data/refresh?only_if_stale=${onlyIfStale}`);
+  if (!onlyIfStale) return request;
+  const tracked = request.finally(() => automaticRefreshes.delete(configId));
+  automaticRefreshes.set(configId, tracked);
+  return tracked;
 }

@@ -114,10 +114,11 @@ def refresh_market_data(
     provider: MarketProviderDep,
     today: date | None = None,
     full_history: bool = False,
+    only_if_stale: bool = False,
 ) -> object:
     ensure_config_owner(config_id, owner, session)
     try:
-        return MarketRefreshService(session, provider).refresh(config_id, today, full_history)
+        return MarketRefreshService(session, provider).refresh(config_id, today, full_history, only_if_stale)
     except MarketDataError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

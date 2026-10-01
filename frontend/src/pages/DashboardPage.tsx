@@ -55,6 +55,9 @@ export function DashboardPage() {
   const [working, setWorking] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [autoRefreshing, setAutoRefreshing] = useState(false);
+  const rangeRef = useRef(range);
+  rangeRef.current = range;
   const operationalRequestsRef = useRef<LatestRequest | null>(null);
   if (operationalRequestsRef.current === null) operationalRequestsRef.current = new LatestRequest();
   const operationalRequests = operationalRequestsRef.current;
@@ -84,6 +87,25 @@ export function DashboardPage() {
     if (!selectedId) return;
     void loadOperationalData(selectedId, range);
   }, [selectedId, range]);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    let active = true;
+    setAutoRefreshing(true);
+    setMessage("");
+    void refreshMarketData(selectedId, true).then(async (result) => {
+      if (!active) return;
+      await loadOperationalData(selectedId, rangeRef.current);
+      if (!active) return;
+      if (result.warnings?.length) setError(result.warnings.join(" / "));
+      setMessage(`시세 확인: 투자종목 ${result.investment_data_as_of ?? "-"}, RSI ${result.rsi_data_as_of ?? "-"}`);
+    }).catch((caught) => {
+      if (active) setError(`자동 시세 갱신 실패: ${errorMessage(caught)}. 저장된 데이터를 표시합니다.`);
+    }).finally(() => {
+      if (active) setAutoRefreshing(false);
+    });
+    return () => { active = false; };
+  }, [selectedId]);
 
   useEffect(() => () => operationalRequests.cancel(), [operationalRequests]);
 
@@ -209,7 +231,7 @@ export function DashboardPage() {
             ))}
           </select>
         </label>
-        <button type="button" onClick={handleRefresh} disabled={!selectedId || loading || working}>
+        <button type="button" onClick={handleRefresh} disabled={!selectedId || loading || working || autoRefreshing}>
           <RefreshCw aria-hidden="true" size={16} />
           시장 데이터 갱신
         </button>
@@ -218,7 +240,8 @@ export function DashboardPage() {
         <FearGreedGauge sentiment={dashboard?.market_sentiment ?? null} />
       </section>
 
-      {loading ? <div className="notice">불러오는 중입니다.</div> : null}
+      {loading ? <div className="notice">저장된 데이터를 불러오는 중입니다.</div> : null}
+      {autoRefreshing ? <div className="notice">최신 시세 확인 및 갱신 중입니다.</div> : null}
       {error ? <div className="notice notice-error">{error}</div> : null}
       {message ? <div className="notice notice-success">{message}</div> : null}
       {!loading && configs.length === 0 ? <div className="empty-state">전략 설정 데이터 없음</div> : null}

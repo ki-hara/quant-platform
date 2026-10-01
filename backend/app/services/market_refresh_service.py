@@ -37,7 +37,7 @@ class MarketRefreshService:
         self.configs = StrategyConfigRepository(session)
         self.market_prices = MarketPriceRepository(session)
 
-    def refresh(self, config_id: int, today: date | None = None, full_history: bool = False) -> MarketRefreshResponseDto:
+    def refresh(self, config_id: int, today: date | None = None, full_history: bool = False, only_if_stale: bool = False) -> MarketRefreshResponseDto:
         config = self.configs.get(config_id)
         if config is None:
             raise ValueError(f"Strategy config not found: {config_id}")
@@ -45,14 +45,14 @@ class MarketRefreshService:
         rsi_symbol = str(config.settings_json.get("mode_rsi_symbol", "QQQ"))
         investment_as_of = today or latest_confirmed_market_date(config.symbol)
         rsi_as_of = today or latest_confirmed_market_date(rsi_symbol)
-        investment_prices = self._refresh_symbol(config.symbol, investment_as_of, full_history)
+        investment_prices = self._refresh_symbol(config.symbol, investment_as_of, full_history, only_if_stale)
         warnings = []
         rsi_ok = True
         if rsi_symbol == config.symbol:
             rsi_prices = investment_prices
         else:
             try:
-                rsi_prices = self._refresh_symbol(rsi_symbol, rsi_as_of, full_history)
+                rsi_prices = self._refresh_symbol(rsi_symbol, rsi_as_of, full_history, only_if_stale)
             except MarketDataError as exc:
                 rsi_ok = False
                 warnings.append(f"{rsi_symbol}: {exc.message}")
@@ -60,7 +60,7 @@ class MarketRefreshService:
         for symbol in trend_filter_symbols(config.settings_json, config.symbol):
             if symbol not in {config.symbol, rsi_symbol}:
                 try:
-                    self._refresh_symbol(symbol, today or latest_confirmed_market_date(symbol), full_history)
+                    self._refresh_symbol(symbol, today or latest_confirmed_market_date(symbol), full_history, only_if_stale)
                 except MarketDataError as exc:
                     warnings.append(f"{symbol}: {exc.message}")
 
@@ -77,11 +77,13 @@ class MarketRefreshService:
             rsi_data_as_of=max((price.date for price in rsi_prices), default=None),
         )
 
-    def _refresh_symbol(self, symbol: str, confirmed_as_of: date, full_history: bool = False) -> list:
+    def _refresh_symbol(self, symbol: str, confirmed_as_of: date, full_history: bool = False, only_if_stale: bool = False) -> list:
         started = perf_counter()
         logger.info("Market refresh started: symbol=%s expected=%s", symbol, confirmed_as_of)
         start_date = confirmed_as_of - timedelta(days=400)
         latest = self.market_prices.latest_price_on_or_before(settings.market_data_provider, symbol, confirmed_as_of)
+        if only_if_stale and not full_history and latest is not None and latest.date == confirmed_as_of:
+            return [latest]
         history = self.market_prices.list_prices(settings.market_data_provider, symbol, start_date, confirmed_as_of)
         if latest is not None and len(history) >= 200 and not full_history:
             start_date = max(start_date, latest.date - timedelta(days=7))
