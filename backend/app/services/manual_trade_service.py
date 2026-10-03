@@ -123,6 +123,8 @@ class ManualTradeService:
             linked_orders = self.session.scalars(
                 select(LocOrder).where(LocOrder.trade_id == trade.id)
             ).all()
+            from app.services.settlement_guards import guard_ledger_rebuild
+            guard_ledger_rebuild(self.session, trade.strategy_config_id)
             for order in linked_orders:
                 order.trade_id = None
                 self.session.add(order)
@@ -250,6 +252,8 @@ class ManualTradeService:
         return None
 
     def _rebuild_live_ledger(self, config: StrategyConfig, portfolio: LivePortfolio) -> None:
+        from app.services.settlement_guards import guard_ledger_rebuild
+        guard_ledger_rebuild(self.session, config.id)
         existing_positions = self.positions.list_by_strategy_config(config.id)
         snapshots = {
             position.id: {

@@ -238,6 +238,9 @@ def update_position(
 ) -> object:
     repo = PositionRepository(session)
     position = ensure_position_owner(position_id, owner, session)
+    if position.status != PositionStatus.PENDING:
+        from app.services.settlement_guards import guard_ledger_rebuild
+        guard_ledger_rebuild(session, position.strategy_config_id)
     config = StrategyConfigRepository(session).get(position.strategy_config_id)
     matching_trade = _matching_buy_trade(position, session)
     if request.status == "unfilled":
