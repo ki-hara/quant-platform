@@ -163,6 +163,30 @@ class StrategyConfigSnapshot(Base):
     strategy_config: Mapped[StrategyConfig] = relationship(back_populates="snapshots")
 
 
+class OrderSnapshot(Base):
+    __tablename__ = "order_snapshots"
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    config_id: Mapped[int] = mapped_column(ForeignKey("strategy_configs.id"), index=True)
+    trade_date: Mapped[date] = mapped_column(Date, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    payload_json: Mapped[dict[str, Any]] = mapped_column(JSON)
+
+
+class TradeSettlement(Base):
+    __tablename__ = "trade_settlements"
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    config_id: Mapped[int] = mapped_column(ForeignKey("strategy_configs.id"), index=True)
+    snapshot_id: Mapped[int | None] = mapped_column(ForeignKey("order_snapshots.id"))
+    trade_date: Mapped[date] = mapped_column(Date, index=True)
+    status: Mapped[str] = mapped_column(String(20), default="draft")
+    revision: Mapped[int] = mapped_column(default=1)
+    draft_json: Mapped[dict[str, Any]] = mapped_column(JSON)
+    preview_hash: Mapped[str | None] = mapped_column(String(64))
+    idempotency_key: Mapped[str | None] = mapped_column(String(100), unique=True)
+    result_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class MarketPrice(Base):
     __tablename__ = "market_prices"
     __table_args__ = (
