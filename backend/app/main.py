@@ -22,6 +22,7 @@ from app.services.gold_toilet_open_collector import GoldToiletOpenCollector
 from app.api.routes_trading_plan import router as trading_plan_router
 from app.api.routes_strategies import router as strategies_router
 from app.api.routes_trades import router as trades_router
+from app.api.routes_settlements import router as settlements_router
 from app.core.config import settings, validate_production_settings
 from app.db.base import Base
 from app.db.migrations import run_sqlite_migrations
@@ -77,6 +78,7 @@ def create_app(
     app.include_router(integrated_orders_router)
     app.include_router(portfolios_router)
     app.include_router(trades_router)
+    app.include_router(settlements_router)
     app.include_router(backtests_router)
     app.include_router(admin_router)
     app.include_router(auth_router)
