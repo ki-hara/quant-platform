@@ -13,7 +13,7 @@ import {
 } from "../api/trades";
 import { getDailyPlan } from "../api/tradingPlan";
 import { Table, type TableColumn } from "../components/Table";
-import { TradeSettlementPanel } from "../components/TradeSettlementPanel";
+import { QuickSettlementPanel } from "../components/QuickSettlementPanel";
 import type {
   CashShortagePolicy,
   DailyPlan,
@@ -542,7 +542,7 @@ export function TradesPage() {
       </section>
 
       {selectedId && dashboard?.config.strategy_type === "dynamic_wave" ? (
-        <TradeSettlementPanel key={selectedId} configId={selectedId} sizingPolicy={livePositionSizingPolicy}
+        <QuickSettlementPanel key={selectedId} configId={selectedId} sizingPolicy={livePositionSizingPolicy}
           cashShortagePolicy={manualForm.cash_shortage_policy}
           onCommitted={() => { void loadRows(selectedId); }} onDirtyChange={setSettlementDirty} />
       ) : null}

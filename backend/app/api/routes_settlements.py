@@ -11,7 +11,8 @@ from sqlalchemy.orm import Session
 from app.api.deps import CurrentOwnerDep, ensure_config_owner
 from app.db.session import get_session
 from app.domain.models import TradeSettlement
-from app.dto.settlements import SettlementDraftDto, StrictDto
+from app.dto.settlements import SettlementDraftDto, StrictDto, QuickSettlementDto
+from app.services.quick_settlement_service import QuickSettlementService
 from app.services.order_snapshot_service import OrderSnapshotService
 from app.services.settlement_service import SettlementService, state_of
 
@@ -89,6 +90,20 @@ def list_settlements(config_id: int, session: SessionDep, owner: CurrentOwnerDep
     if trade_date:
         query = query.where(TradeSettlement.trade_date == trade_date)
     return [record_view(s) for s in session.scalars(query.order_by(TradeSettlement.id.desc()))]
+
+
+@router.get("/settlement-candidates")
+def settlement_candidates(config_id: int, trade_date: date, session: SessionDep, owner: CurrentOwnerDep):
+    ensure_config_owner(config_id, owner, session)
+    return run(lambda: QuickSettlementService(session).candidates(config_id, trade_date), session)
+
+
+@router.post("/settlements/quick-preview")
+def quick_preview(config_id: int, request: QuickSettlementDto, session: SessionDep, owner: CurrentOwnerDep):
+    ensure_config_owner(config_id, owner, session)
+    result = run(lambda: QuickSettlementService(session).prepare(config_id, request.trade_date,
+        request.state_hash, [s.model_dump() for s in request.selections], request.netting), session)
+    return {**result, 'record': record_view(result['record'])}
 
 
 @router.post("/settlements")

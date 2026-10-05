@@ -65,3 +65,17 @@ class SettlementPreviewDto(StrictDto):
     total_fee: Decimal = Decimal("0")
     realized_pnl: Decimal = Decimal("0")
     preview_hash: str = ""
+
+
+class QuickSelectionDto(StrictDto):
+    position_id: int = Field(gt=0)
+    quantity: Quantity
+    price: Price
+    fee: Money | None = None
+
+
+class QuickSettlementDto(StrictDto):
+    trade_date: date
+    state_hash: str = Field(min_length=64, max_length=64)
+    selections: list[QuickSelectionDto] = Field(min_length=1, max_length=200)
+    netting: bool = True

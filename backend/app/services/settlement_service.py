@@ -16,7 +16,7 @@ from app.infrastructure.repositories.portfolios import PositionRepository
 from app.infrastructure.repositories.trades import TradeRepository
 from app.services.manual_trade_service import ManualTradeRequest, ManualTradeService
 from app.services.market_session_service import latest_confirmed_market_date
-from app.services.exchange_calendar_service import is_exchange_trading_day
+from app.services.exchange_calendar_service import is_exchange_trading_day, count_exchange_trading_days
 from app.services.order_snapshot_service import json_value
 from app.services.position_exit_policy import build_position_exit_policy
 from app.services.settlement_allocation import SettlementContext, calculate_settlement
@@ -88,6 +88,17 @@ class SettlementService:
                        for p in positions if p.status == PositionStatus.OPEN}
             sources["buy:manual"] = dict(id="buy:manual", side="buy", position_id=None,
                                          quantity=100000000, limit_price=None, execution="loc")
+            for p in positions:
+                if p.status == PositionStatus.OPEN:
+                    source = sources[f"sell:{p.id}"]
+                    due = p.max_holding_days is not None and count_exchange_trading_days(
+                        config.symbol, p.buy_date, draft.trade_date) >= p.max_holding_days
+                    if due:
+                        source['execution'] = 'market_on_close'
+                elif p.status == PositionStatus.PENDING and p.buy_date == draft.trade_date:
+                    sources[f"buy:{p.id}"] = dict(id=f"buy:{p.id}", side="buy", position_id=p.id,
+                        quantity=int(p.quantity), limit_price=str(p.limit_price or p.buy_price),
+                        execution="loc", buy_date=str(p.buy_date), buy_price=str(p.buy_price))
         close = None
         if draft.trade_date <= latest_confirmed_market_date(config.symbol):
             quote = MarketPriceRepository(self.session).latest_price_on_or_before(
@@ -140,7 +151,10 @@ class SettlementService:
                 for candidate in context.positions.values()
             ):
                 result.blocking_errors.append("같은 거래일의 대기 매수를 연결해 주세요. 중복 생성을 막기 위해 신규 생성을 보류합니다.")
-        if any(r.side == "buy" for r in result.rows) and not draft.snapshot_id and not draft.manual_buy_settings:
+        if any(r.side == "buy" and not (
+            r.position_id in context.positions
+            and context.positions[r.position_id]["status"] == "pending"
+        ) for r in result.rows) and not draft.snapshot_id and not draft.manual_buy_settings:
             result.blocking_errors.append("당시 매수 모드·익절률·보유기간을 입력해 주세요.")
         portfolio = self.session.get(LivePortfolio, record.config_id)
         if portfolio is None or portfolio.cash + result.cash_delta < 0:
@@ -224,17 +238,24 @@ class SettlementService:
             gross = sum(r.quantity*r.price for r in rows)
             fee = sum(r.fee for r in rows)
             price = (gross/quantity).quantize(Decimal("0.000001"))
+            pending = self.session.get(Position, pending_id) if pending_id else None
             if snapshot:
                 mode = StrategyMode(snapshot.payload_json["mode"])
                 policy = build_position_exit_policy(snapshot.payload_json["settings"], mode, price)
                 threshold, limit, days = policy.sell_threshold_percent, policy.sell_limit_price, policy.max_holding_days
+            elif pending:
+                from app.services.position_exit_policy import sell_limit_price_for
+                mode = pending.mode
+                fallback = build_position_exit_policy(config.settings_json, mode, price)
+                threshold = pending.sell_threshold_percent if pending.sell_threshold_percent is not None else fallback.sell_threshold_percent
+                days = pending.max_holding_days if pending.max_holding_days is not None else fallback.max_holding_days
+                limit = sell_limit_price_for(price, threshold)
             else:
                 policy = draft.manual_buy_settings
                 mode = StrategyMode(policy.mode)
                 threshold, days = policy.sell_threshold_percent, policy.max_holding_days
                 from app.services.position_exit_policy import sell_limit_price_for
                 limit = sell_limit_price_for(price, threshold)
-            pending = self.session.get(Position, pending_id) if pending_id else None
             if pending and pending.quantity == quantity:
                 position = pending
                 position.buy_price, position.buy_fee = price, fee
