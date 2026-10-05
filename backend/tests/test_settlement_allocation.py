@@ -41,6 +41,19 @@ def test_zero_external_fill_full_offset():
     assert result.cash_delta == 0
 
 
+def test_small_fee_split_never_creates_negative_remainder():
+    request = SettlementDraftDto(trade_date=date(2026, 9, 24), fills=[
+        dict(id="f", side="sell", quantity=5, price="110", fee="0.000003")
+    ], allocations=[
+        dict(source_id="s", fill_id="f", side="sell", quantity=1, kind="actual")
+        for _ in range(5)
+    ])
+    result = calculate_settlement(request, context())
+    assert not result.blocking_errors
+    assert all(row.fee >= 0 for row in result.rows)
+    assert sum(row.fee for row in result.rows) == D("0.000003")
+
+
 def test_missing_close_and_unallocated_fill_are_blocked():
     ctx = context()
     ctx.close = None

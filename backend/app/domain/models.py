@@ -172,6 +172,12 @@ class OrderSnapshot(Base):
     payload_json: Mapped[dict[str, Any]] = mapped_column(JSON)
 
 
+class OrderSnapshotInvalidation(Base):
+    __tablename__ = "order_snapshot_invalidations"
+    snapshot_id: Mapped[int] = mapped_column(ForeignKey("order_snapshots.id"), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class TradeSettlement(Base):
     __tablename__ = "trade_settlements"
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)

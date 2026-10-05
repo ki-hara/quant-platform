@@ -21,6 +21,7 @@ SessionDep = Annotated[Session, Depends(get_session)]
 
 class SnapshotRequest(StrictDto):
     sizing_policy: Literal["fixed_quantity", "full_allocation"] = "fixed_quantity"
+    cash_shortage_policy: Literal["defer", "external_funding", "available_cash"] = "defer"
 
 
 class DraftUpdate(StrictDto):
@@ -61,7 +62,7 @@ def record_view(record):
 @router.post("/order-snapshots")
 def create_snapshot(config_id: int, request: SnapshotRequest, session: SessionDep, owner: CurrentOwnerDep):
     ensure_config_owner(config_id, owner, session)
-    return run(lambda: state_of(OrderSnapshotService(session).create(config_id, request.sizing_policy)), session)
+    return run(lambda: state_of(OrderSnapshotService(session).create(config_id, request.sizing_policy, request.cash_shortage_policy)), session)
 
 
 @router.get("/order-snapshots")

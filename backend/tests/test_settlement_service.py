@@ -105,3 +105,27 @@ def test_individual_trade_deletion_cannot_rebuild_settlement_ledger():
         trade = session.scalars(select(Trade)).first()
         with pytest.raises(Exception, match="정산"):
             ManualTradeService(session).delete_trade(trade.id)
+
+
+def test_pending_buy_must_be_linked_before_new_position_is_created():
+    from app.infrastructure.repositories.portfolios import PositionRepository
+    with create_session() as session:
+        config = create_config(session)
+        PositionRepository(session).create_pending(config.id, date(2026, 9, 24), D(100), D(5), StrategyMode.SAFE)
+        session.commit()
+        draft = SettlementDraftDto(trade_date=date(2026, 9, 24),
+            manual_buy_settings=dict(mode="safe", sell_threshold_percent="1", max_holding_days=10),
+            fills=[dict(id="f", side="buy", quantity=5, price="100", fee="0")],
+            allocations=[dict(source_id="buy:manual", side="buy", quantity=5, kind="actual", fill_id="f")])
+        service = SettlementService(session)
+        record = service.save_draft(config.id, draft)
+        assert any("대기" in e for e in service.preview(record.id).blocking_errors)
+
+
+def test_closed_market_date_cannot_be_settled():
+    with create_session() as session:
+        config, record, service = prepare(session)
+        request = SettlementDraftDto.model_validate(record.draft_json)
+        request.trade_date = date(2026, 9, 26)
+        record = service.save_draft(config.id, request, record.revision, record.id)
+        assert any("거래일" in e for e in service.preview(record.id).blocking_errors)

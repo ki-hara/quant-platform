@@ -30,7 +30,7 @@ class OrderSnapshotService:
     def __init__(self, session):
         self.session = session
 
-    def create(self, config_id: int, sizing_policy: str = "fixed_quantity") -> OrderSnapshot:
+    def create(self, config_id: int, sizing_policy: str = "fixed_quantity", cash_shortage_policy: str = "defer") -> OrderSnapshot:
         config = self.session.get(StrategyConfig, config_id)
         if config is None or config.strategy_type != "dynamic_wave":
             raise ValueError("동파법 전략만 정산할 수 있습니다.")
@@ -42,10 +42,19 @@ class OrderSnapshotService:
         signals = DashboardService(self.session)._signals(config, config.live_portfolio, positions, prices)
         by_id = {s["position_id"]: s for s in (signals.sell_signals or [])}
         sources = []
-        if plan.buy_available and plan.LOC.blocking_reason is None:
-            for index, row in enumerate(plan.LOC.orders or [plan.LOC]):
-                if row.quantity:
-                    sources.append(dict(id=f"buy:{index}", side="buy", quantity=row.quantity,
+        shortage = plan.LOC.blocking_reason == "insufficient_cash"
+        if (plan.buy_available and plan.LOC.blocking_reason is None) or (shortage and cash_shortage_policy != "defer"):
+            buy_orders = plan.LOC.orders or [plan.LOC]
+            if shortage and cash_shortage_policy == "available_cash":
+                buy_orders = buy_orders[:1]
+            for index, row in enumerate(buy_orders):
+                quantity = row.quantity
+                if shortage and cash_shortage_policy == "available_cash":
+                    unit_cost = plan.LOC.limit_price * (1 + config.fee_rate / 100)
+                    cash = plan.cash if plan.cash is not None else plan.LOC.available
+                    quantity = max(0, int(cash / unit_cost)) if unit_cost > 0 else 0
+                if quantity:
+                    sources.append(dict(id=f"buy:{index}", side="buy", quantity=quantity,
                                         limit_price=row.limit_price, execution="loc", position_id=None,
                                         mode=plan.confirmed_mode.value))
         for position in positions:
@@ -65,6 +74,7 @@ class OrderSnapshotService:
         snapshot = OrderSnapshot(config_id=config_id, trade_date=plan.plan_date, payload_json=json_value({
             "symbol": config.symbol, "settings": deepcopy(config.settings_json),
             "mode": plan.confirmed_mode.value, "plan": plan.model_dump(mode="json"),
+            "cash_shortage_policy": cash_shortage_policy,
             "sources": sources, "netted": [asdict(row) for row in netted],
         }))
         self.session.add(snapshot)

@@ -8,7 +8,7 @@ from sqlalchemy import select, update
 
 from app.core.config import settings
 from app.domain.enums import PositionStatus, StrategyMode, TradeSide, TradeSource, LocOrderStatus
-from app.domain.models import (StrategyConfig, OrderSnapshot, TradeSettlement, Position,
+from app.domain.models import (StrategyConfig, OrderSnapshot, OrderSnapshotInvalidation, TradeSettlement, Position,
                                Trade, LivePortfolio, PortfolioAdjustment, LocOrder)
 from app.dto.settlements import SettlementDraftDto
 from app.infrastructure.repositories.market_data import MarketPriceRepository
@@ -16,6 +16,7 @@ from app.infrastructure.repositories.portfolios import PositionRepository
 from app.infrastructure.repositories.trades import TradeRepository
 from app.services.manual_trade_service import ManualTradeRequest, ManualTradeService
 from app.services.market_session_service import latest_confirmed_market_date
+from app.services.exchange_calendar_service import is_exchange_trading_day
 from app.services.order_snapshot_service import json_value
 from app.services.position_exit_policy import build_position_exit_policy
 from app.services.settlement_allocation import SettlementContext, calculate_settlement
@@ -75,6 +76,8 @@ class SettlementService:
             raise ValueError("거래일과 주문표 저장본을 확인해 주세요.")
         positions = list(self.session.scalars(select(Position).where(Position.strategy_config_id == config_id)))
         if snapshot:
+            if self.session.get(OrderSnapshotInvalidation, snapshot.id) is not None:
+                raise ValueError("거래 내역 재구성으로 저장본의 포지션 연결이 무효화되었습니다. 수동 배분으로 확인해 주세요.")
             if snapshot.payload_json["symbol"] != config.symbol:
                 raise ValueError("저장본과 현재 종목이 다릅니다.")
             sources = {s["id"]: s for s in snapshot.payload_json["sources"]}
@@ -122,6 +125,8 @@ class SettlementService:
             TradeSettlement.status == "confirmed", TradeSettlement.id != record.id).limit(1)):
             result.blocking_errors.append("이 주문표는 이미 정산되었습니다. 기존 정산을 확인해 주세요.")
         config = self.config(record.config_id)
+        if not is_exchange_trading_day(config.symbol, draft.trade_date):
+            result.blocking_errors.append("해당 날짜는 거래일이 아닙니다.")
         if draft.trade_date > latest_confirmed_market_date(config.symbol):
             result.blocking_errors.append("마감이 확인된 거래일만 정산할 수 있습니다.")
         for row in result.rows:
@@ -130,6 +135,11 @@ class SettlementService:
                 result.blocking_errors.append("매수일 이전에는 매도할 수 없습니다.")
             if row.side == "buy" and p and p["buy_date"] != str(draft.trade_date):
                 result.blocking_errors.append("대기 매수의 거래일이 다릅니다.")
+            if row.side == "buy" and not row.position_id and any(
+                candidate["status"] == "pending" and candidate["buy_date"] == str(draft.trade_date)
+                for candidate in context.positions.values()
+            ):
+                result.blocking_errors.append("같은 거래일의 대기 매수를 연결해 주세요. 중복 생성을 막기 위해 신규 생성을 보류합니다.")
         if any(r.side == "buy" for r in result.rows) and not draft.snapshot_id and not draft.manual_buy_settings:
             result.blocking_errors.append("당시 매수 모드·익절률·보유기간을 입력해 주세요.")
         portfolio = self.session.get(LivePortfolio, record.config_id)

@@ -13,6 +13,7 @@ import {
 } from "../api/trades";
 import { getDailyPlan } from "../api/tradingPlan";
 import { Table, type TableColumn } from "../components/Table";
+import { TradeSettlementPanel } from "../components/TradeSettlementPanel";
 import type {
   CashShortagePolicy,
   DailyPlan,
@@ -84,6 +85,7 @@ export function TradesPage() {
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [settlementDirty, setSettlementDirty] = useState(false);
   const rowRequestsRef = useRef<LatestRequest | null>(null);
   if (rowRequestsRef.current === null) rowRequestsRef.current = new LatestRequest();
   const rowRequests = rowRequestsRef.current;
@@ -400,6 +402,7 @@ export function TradesPage() {
             value={selectedId ?? ""}
             onChange={(event) => {
               const nextId = Number(event.target.value) || null;
+              if (settlementDirty && !window.confirm("저장하지 않은 정산 입력이 있습니다. 전략을 바꿀까요?")) return;
               rememberStrategyConfigId(nextId);
               setSelectedId(nextId);
             }}
@@ -538,6 +541,11 @@ export function TradesPage() {
         ) : null}
       </section>
 
+      {selectedId && dashboard?.config.strategy_type === "dynamic_wave" ? (
+        <TradeSettlementPanel key={selectedId} configId={selectedId} sizingPolicy={livePositionSizingPolicy}
+          cashShortagePolicy={manualForm.cash_shortage_policy}
+          onCommitted={() => { void loadRows(selectedId); }} onDirtyChange={setSettlementDirty} />
+      ) : null}
       <div className="page-grid">
         <section className="panel positions-panel">
           <div className="panel-header">

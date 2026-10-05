@@ -252,8 +252,9 @@ class ManualTradeService:
         return None
 
     def _rebuild_live_ledger(self, config: StrategyConfig, portfolio: LivePortfolio) -> None:
-        from app.services.settlement_guards import guard_ledger_rebuild
+        from app.services.settlement_guards import guard_ledger_rebuild, invalidate_order_snapshots
         guard_ledger_rebuild(self.session, config.id)
+        invalidate_order_snapshots(self.session, config.id)
         existing_positions = self.positions.list_by_strategy_config(config.id)
         snapshots = {
             position.id: {

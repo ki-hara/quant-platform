@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from decimal import Decimal
+from decimal import Decimal, ROUND_DOWN
 
 from app.dto.settlements import PreviewRowDto, SettlementDraftDto, SettlementPreviewDto
 
@@ -76,7 +76,7 @@ def calculate_settlement(draft: SettlementDraftDto, context: SettlementContext) 
         gross = sum((r.price*r.quantity for r in rows), Decimal("0"))
         remainder = fill.fee
         for index, row in enumerate(rows):
-            row.fee = remainder if index == len(rows)-1 else (fill.fee*row.price*row.quantity/gross).quantize(QUANT)
+            row.fee = remainder if index == len(rows)-1 else (fill.fee*row.price*row.quantity/gross).quantize(QUANT, rounding=ROUND_DOWN)
             remainder -= row.fee
     if offsets["buy"] != offsets["sell"]:
         errors.append("상계 매수와 상계 매도 수량이 다릅니다.")
