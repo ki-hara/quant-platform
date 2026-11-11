@@ -11,12 +11,18 @@ describe('quick settlement inputs',()=>{
   });
   it('refresh does not overwrite manually edited price quantity or selection',()=>{
     const [row]=mergeCandidates([candidate],[]);
-    const [updated]=mergeCandidates([{...candidate,price:'105'}],[{...row,priceInput:'99.5',quantityInput:'3',selected:false,touched:true}]);
+    const [updated]=mergeCandidates([{...candidate,price:'105'}],[{...row,priceInput:'99.5',quantityInput:'3',selected:false,touched:{priceInput:true,quantityInput:true,selected:true}}]);
     expect([updated.priceInput,updated.quantityInput,updated.selected]).toEqual(['99.5','3',false]);
   });
   it('missing close stays blank and unselected',()=>{
     const [row]=mergeCandidates([{...candidate,price:null,selected:false}],[]);
     expect(row.priceInput).toBe('');
     expect(row.selected).toBe(false);
+  });
+  it('adopts the confirmed close and selection when only quantity was edited',()=>{
+    const [row]=mergeCandidates([{...candidate,price:null,selected:false}],[]);
+    const [updated]=mergeCandidates([{...candidate,price:'56.06'}],[{...row,quantityInput:'2',touched:{quantityInput:true}}]);
+    expect([updated.priceInput,updated.quantityInput,updated.selected]).toEqual(['56.06','2',true]);
+    expect(mergeCandidates([], [updated])).toEqual([]);
   });
 });

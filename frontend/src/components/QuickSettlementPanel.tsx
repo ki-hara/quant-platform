@@ -8,10 +8,9 @@ import './tradeSettlement.css';
 
 const money=(value:string)=>Number(value).toLocaleString('en-US',{maximumFractionDigits:6});
 const reasons:Record<string,string>={profit:'익절 후보',maturity:'보유기간 만료',buy:'매수 후보',holding:'조건 미충족',policy_missing:'매수 설정 확인 필요'};
-function previousDay(){const d=new Date();d.setDate(d.getDate()-1);while(!d.getDay()||d.getDay()===6)d.setDate(d.getDate()-1);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
 
 export function QuickSettlementPanel(props:{configId:number;sizingPolicy:string;cashShortagePolicy?:string;onCommitted:()=>void;onDirtyChange:(dirty:boolean)=>void}) {
-  const [day,setDay]=useState(previousDay);
+  const [day,setDay]=useState('');
   const [data,setData]=useState<api.QuickCandidates|null>(null);
   const [rows,setRows]=useState<QuickRow[]>([]);
   const [netting,setNetting]=useState(true);
@@ -25,6 +24,7 @@ export function QuickSettlementPanel(props:{configId:number;sizingPolicy:string;
   const [pending,setPending]=useState<{result:api.QuickPreview;key:string}|null>(null);
   const epoch=useRef(0);
   const alive=useRef(true);
+  const submitting=useRef(false);
   useEffect(()=>{alive.current=true;return()=>{alive.current=false;epoch.current++;};},[]);
   useEffect(()=>{props.onDirtyChange(dirty||detailDirty);return()=>props.onDirtyChange(false);},[dirty,detailDirty,props.onDirtyChange]);
   useEffect(()=>{
@@ -35,19 +35,30 @@ export function QuickSettlementPanel(props:{configId:number;sizingPolicy:string;
     const request=++epoch.current;
     setBusy(true);setError('');setPending(null);
     try{const next=await api.getCandidates(props.configId,day);if(!alive.current||request!==epoch.current)return;
-      setData(next);setRows(old=>mergeCandidates(next.rows,preserve?old:[]));
+      setRows(old=>mergeCandidates(next.rows,preserve&&data?.trade_date===next.trade_date?old:[]));setData(next);
     }catch(e){if(alive.current&&request===epoch.current)setError(e instanceof Error?e.message:'조회에 실패했습니다.');}
     finally{if(alive.current&&request===epoch.current)setBusy(false);}
   }
   useEffect(()=>{setData(null);setRows([]);void reload(false);},[props.configId,day]);
-  function edit(id:number,patch:Partial<QuickRow>){setRows(old=>old.map(row=>row.position_id===id?{...row,...patch,touched:true}:row));setDirty(true);setPending(null);setMessage('');}
+  useEffect(()=>{
+    function refresh(){if(document.visibilityState==='visible'&&!submitting.current)void reload();}
+    function market(event:Event){if((event as CustomEvent<number>).detail===props.configId)refresh();}
+    function storage(event:StorageEvent){if(event.key===`market-data-refreshed:${props.configId}`)refresh();}
+    window.addEventListener('focus',refresh);
+    document.addEventListener('visibilitychange',refresh);
+    window.addEventListener('market-data-refreshed',market);
+    window.addEventListener('storage',storage);
+    return ()=>{window.removeEventListener('focus',refresh);document.removeEventListener('visibilitychange',refresh);window.removeEventListener('market-data-refreshed',market);window.removeEventListener('storage',storage);};
+  },[props.configId,day,data?.trade_date]);
+  function edit(id:number,patch:Partial<Pick<QuickRow,'priceInput'|'quantityInput'|'feeInput'|'selected'>>){setRows(old=>old.map(row=>row.position_id===id?{...row,...patch,touched:{...row.touched,...Object.fromEntries(Object.keys(patch).map(key=>[key,true]))}}:row));setDirty(true);setPending(null);setMessage('');}
   async function submit(){
     if(!data)return;
+    submitting.current=true;
     setBusy(true);setError('');
     try{
       let prepared=pending;
       if(!prepared){
-        const result=await api.prepareQuick(props.configId,{trade_date:day,state_hash:data.state_hash,netting,
+        const result=await api.prepareQuick(props.configId,{trade_date:data.trade_date,state_hash:data.state_hash,netting,
           selections:rows.filter(r=>r.selected).map(r=>({position_id:r.position_id,quantity:Number(r.quantityInput),price:r.priceInput,fee:r.feeInput||null}))});
         if(!alive.current)return;
         prepared={result,key:createSettlementId()};setPending(prepared);
@@ -56,13 +67,13 @@ export function QuickSettlementPanel(props:{configId:number;sizingPolicy:string;
       if(result.preview.blocking_errors.length){setError(result.preview.blocking_errors.join('\n'));return;}
       const selected=rows.filter(r=>r.selected);
       const sum=(side:string)=>selected.filter(r=>r.side===side).reduce((a,r)=>a+Number(r.quantityInput),0);
-      if(!window.confirm(`${day}\n매도 ${sum('sell')}주 · 매수 ${sum('buy')}주\n증권사 실제 체결: 매도 ${result.actual_sell}주 · 매수 ${result.actual_buy}주\n종가 상계: ${result.offset_quantity}주\n현금 증감 ${money(result.preview.cash_delta)} · 수수료 ${money(result.preview.total_fee)}\n\n실제 체결 내역과 일치하면 반영합니다.`))return;
+      if(!window.confirm(`${data.trade_date}\n매도 ${sum('sell')}주 · 매수 ${sum('buy')}주\n증권사 실제 체결: 매도 ${result.actual_sell}주 · 매수 ${result.actual_buy}주\n종가 상계: ${result.offset_quantity}주\n현금 증감 ${money(result.preview.cash_delta)} · 수수료 ${money(result.preview.total_fee)}\n\n실제 체결 내역과 일치하면 반영합니다.`))return;
       await api.confirmSettlement(props.configId,result.record.id,result.preview.preview_hash,key);
       if(!alive.current)return;
       setConfirmed(result.record.id);setPending(null);setDirty(false);setMessage('선택한 체결을 일괄 반영했습니다.');
       props.onCommitted();await reload(false);
     }catch(e){if(alive.current)setError(e instanceof Error?e.message:'반영에 실패했습니다.');}
-    finally{if(alive.current)setBusy(false);}
+    finally{submitting.current=false;if(alive.current)setBusy(false);}
   }
   return <>
     <section className="panel settlement-panel quick-settlement">
@@ -71,7 +82,7 @@ export function QuickSettlementPanel(props:{configId:number;sizingPolicy:string;
       {message&&<div className="notice" role="status">{message}</div>}
       <fieldset className="settlement-fields" disabled={busy}>
         <div className="settlement-toolbar">
-          <label>거래일<input type="date" value={day} onChange={e=>{
+          <label>거래일<input type="date" value={day||data?.trade_date||''} onChange={e=>{
             if(!e.target.value||(dirty&&!window.confirm('수정한 입력을 비우고 거래일을 바꿀까요?')))return;
             setDay(e.target.value);setDirty(false);setPending(null);setMessage('');setConfirmed(null);
           }}/></label>
@@ -87,7 +98,7 @@ export function QuickSettlementPanel(props:{configId:number;sizingPolicy:string;
           <td><input aria-label={`포지션 ${row.position_id} 수량`} inputMode="numeric" value={row.quantityInput} onChange={e=>edit(row.position_id,{quantityInput:e.target.value})}/><small className="settlement-position-detail"> / {row.quantity}주</small></td>
           <td><input aria-label={`포지션 ${row.position_id} 체결가`} inputMode="decimal" placeholder="직접 입력" value={row.priceInput} onChange={e=>edit(row.position_id,{priceInput:e.target.value})}/></td>
           <td><input aria-label={`포지션 ${row.position_id} 수수료`} inputMode="decimal" placeholder="자동 계산" value={row.feeInput} onChange={e=>edit(row.position_id,{feeInput:e.target.value})}/></td>
-          <td>{reasons[row.reason]}</td>
+          <td>{data?.close==null?'종가 대기':reasons[row.reason]}</td>
         </tr>)}</tbody></table></div>
         {!busy&&!rows.length&&<p>반영할 보유 포지션이 없습니다.</p>}
         <div className="settlement-actions">

@@ -93,7 +93,7 @@ def list_settlements(config_id: int, session: SessionDep, owner: CurrentOwnerDep
 
 
 @router.get("/settlement-candidates")
-def settlement_candidates(config_id: int, trade_date: date, session: SessionDep, owner: CurrentOwnerDep):
+def settlement_candidates(config_id: int, session: SessionDep, owner: CurrentOwnerDep, trade_date: date | None = None):
     ensure_config_owner(config_id, owner, session)
     return run(lambda: QuickSettlementService(session).candidates(config_id, trade_date), session)
 

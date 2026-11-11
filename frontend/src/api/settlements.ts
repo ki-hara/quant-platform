@@ -16,6 +16,6 @@ export const confirmSettlement = (id:number, record:number, preview_hash:string,
 export const cancelSettlement = (id:number, record:number) => apiPost(`${base(id)}/settlements/${record}/cancel`);
 export interface QuickCandidates {trade_date:string;close:string|null;state_hash:string;rows:QuickCandidate[]}
 export interface QuickPreview {record:SettlementRecord;preview:SettlementPreview;actual_buy:number;actual_sell:number;offset_quantity:number}
-export const getCandidates=(id:number,day:string)=>apiGet<QuickCandidates>(`${base(id)}/settlement-candidates?trade_date=${day}`);
+export const getCandidates=(id:number,day:string)=>apiGet<QuickCandidates>(`${base(id)}/settlement-candidates${day?'?trade_date='+day:''}`);
 export const prepareQuick=(id:number,body:{trade_date:string;state_hash:string;netting:boolean;selections:{position_id:number;quantity:number;price:string;fee:string|null}[]})=>
   apiPost<QuickPreview>(`${base(id)}/settlements/quick-preview`,body);

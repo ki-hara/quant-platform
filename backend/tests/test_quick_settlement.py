@@ -12,6 +12,26 @@ from app.services.quick_settlement_service import QuickSettlementService
 DAY = date(2026, 9, 24)
 
 
+def test_november_close_arrival_updates_pending_buy_and_expiring_sell(monkeypatch):
+    day = date(2026, 11, 10)
+    with create_session() as session:
+        config, repo, service = setup(session, monkeypatch, close=None)
+        for module in ('quick_settlement_service', 'settlement_service'):
+            monkeypatch.setattr(f'app.services.{module}.latest_confirmed_market_date', lambda symbol: day)
+        repo.create_open(config.id, date(2026, 10, 30), D('77.05'), D(14), StrategyMode.SAFE,
+                         sell_limit_price=D('79.74675'), max_holding_days=7)
+        repo.create_pending(config.id, day, D('60.42'), D(24), StrategyMode.SAFE)
+        session.commit()
+        before = service.candidates(config.id, None)
+        assert before['trade_date'] == str(day)
+        assert before['close'] is None and not any(r['selected'] for r in before['rows'])
+        monkeypatch.setattr(MarketPriceRepository, 'latest_price_on_or_before',
+                            lambda *a, **k: SimpleNamespace(date=day, close=D('56.06')))
+        after = service.candidates(config.id, None)
+        assert [(r['side'], r['quantity'], r['price'], r['selected']) for r in after['rows']] == [
+            ('sell', 14, '56.06', True), ('buy', 24, '56.06', True)]
+
+
 def setup(session, monkeypatch, close=D('100')):
     config = create_config(session)
     config.fee_rate = D('0')

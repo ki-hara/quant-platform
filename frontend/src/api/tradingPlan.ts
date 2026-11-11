@@ -39,7 +39,14 @@ const automaticRefreshes = new Map<number, Promise<MarketRefreshResponse>>();
 export function refreshMarketData(configId: number, onlyIfStale = false): Promise<MarketRefreshResponse> {
   const pending = onlyIfStale ? automaticRefreshes.get(configId) : undefined;
   if (pending) return pending;
-  const request = apiPost<MarketRefreshResponse>(`/api/strategy-configs/${configId}/market-data/refresh?only_if_stale=${onlyIfStale}`);
+  const request = apiPost<MarketRefreshResponse>(`/api/strategy-configs/${configId}/market-data/refresh?only_if_stale=${onlyIfStale}`).then(result=>{
+    if(typeof window!=='undefined'){
+      window.dispatchEvent(new CustomEvent('market-data-refreshed',{detail:configId}));
+      try{window.localStorage.setItem(`market-data-refreshed:${configId}`,String(Date.now()));}
+      catch{/* Storage may be unavailable; focus still refreshes the table. */}
+    }
+    return result;
+  });
   if (!onlyIfStale) return request;
   const tracked = request.finally(() => automaticRefreshes.delete(configId));
   automaticRefreshes.set(configId, tracked);

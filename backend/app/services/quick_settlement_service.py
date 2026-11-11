@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from app.dto.settlements import SettlementDraftDto
+from app.services.market_session_service import latest_confirmed_market_date
 from app.services.settlement_service import SettlementService, digest, state_of
 
 
@@ -10,6 +11,7 @@ class QuickSettlementService:
 
     def candidates(self, config_id, trade_date):
         config = self.service.config(config_id)
+        trade_date = trade_date or latest_confirmed_market_date(config.symbol)
         context = self.service.context(config_id, SettlementDraftDto(trade_date=trade_date))
         rows = []
         for source in context.sources.values():
