@@ -1,8 +1,10 @@
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
+import json
 
 from sqlalchemy.orm import Session
+from sqlalchemy import update
 
 from app.core.config import settings
 from app.domain.enums import PositionStatus, TradeSide
@@ -267,6 +269,57 @@ class DashboardService:
         portfolio: LivePortfolio,
         prices: list[MarketPrice],
     ) -> dict | None:
+        # Serialize updates before reading the ledger, including concurrent dashboard requests.
+        self.session.execute(update(LivePortfolio).where(
+            LivePortfolio.strategy_config_id == config.id
+        ).values(capital=LivePortfolio.capital))
+        self.session.refresh(portfolio)
+        # Revisit v2 periods: fills can be entered after a zero-PnL checkpoint.
+        for adjustment in self.session.query(PortfolioAdjustment).filter(
+            PortfolioAdjustment.strategy_config_id == config.id,
+            PortfolioAdjustment.source == "strategy_capital_update",
+        ).all():
+            memo = adjustment.memo or ""
+            if not memo.startswith("capital-v2:"):
+                continue
+            policy = json.loads(memo[len("capital-v2:"):])
+            pnl = self._period_realized_pnl(
+                config.id, adjustment.period_start_date, adjustment.period_end_date,
+                include_start=policy["include_start"],
+            )
+            delta = _capital_delta(policy, pnl)
+            portfolio.capital += delta - adjustment.capital_delta
+            adjustment.capital_delta = delta
+        self.session.flush()
+        applied = None
+        total_delta = Decimal("0")
+        while True:
+            before = self._last_strategy_capital_update(config.id)
+            result = self._apply_capital_period(config, portfolio, prices)
+            if result is None or not result.get("applied"):
+                expire = self.session.expire_on_commit
+                try:
+                    self.session.expire_on_commit = False
+                    self.session.commit()
+                finally:
+                    self.session.expire_on_commit = expire
+                if applied is not None:
+                    applied["capital_delta"] = total_delta
+                    applied["projected_capital"] = portfolio.capital
+                    return applied
+                return result
+            after = self._last_strategy_capital_update(config.id)
+            if after is None or (before is not None and after.id == before.id):
+                return result
+            applied = result
+            total_delta += after.capital_delta
+
+    def _apply_capital_period(
+        self,
+        config: StrategyConfig,
+        portfolio: LivePortfolio,
+        prices: list[MarketPrice],
+    ) -> dict | None:
         interval = _capital_update_interval(config.settings_json)
         if interval <= 0:
             return None
@@ -299,7 +352,7 @@ class DashboardService:
             count_exchange_trading_days(config.symbol, basis_date, market_today),
             interval,
         )
-        if market_today < period_end_date:
+        if min(market_today, latest_confirmed_market_date(config.symbol)) < period_end_date:
             return _capital_update_status(
                 status="waiting",
                 interval=interval,
@@ -323,21 +376,6 @@ class DashboardService:
             include_start=last_update is None,
         )
         capital_delta = _capital_delta(config.settings_json, realized_pnl)
-        if realized_pnl == 0:
-            return _capital_update_status(
-                status="waiting",
-                interval=interval,
-                elapsed=elapsed,
-                last_update_date=last_update.date if last_update else None,
-                next_update_date=period_end_date,
-                period_start_date=period_start_date,
-                period_end_date=period_end_date,
-                realized_pnl=realized_pnl,
-                capital_delta=Decimal("0"),
-                projected_capital=portfolio.capital,
-                message="갱신 대상 실현손익 없음",
-            )
-
         existing = self._strategy_capital_update_for_period(
             config.id, period_start_date, period_end_date
         )
@@ -363,17 +401,18 @@ class DashboardService:
             date=period_end_date,
             cash_delta=Decimal("0").quantize(MONEY_QUANT),
             capital_delta=capital_delta.quantize(MONEY_QUANT),
-            memo=(
-                f"전략 주기 자동 갱신 / 실현손익 {realized_pnl.quantize(MONEY_QUANT)} / "
-                f"기간 {period_start_date.isoformat()}~{period_end_date.isoformat()}"
-            ),
+            memo="capital-v2:" + json.dumps({
+                "profit_compounding_rate": config.settings_json.get("profit_compounding_rate", 0),
+                "loss_compounding_rate": config.settings_json.get("loss_compounding_rate", 0),
+                "include_start": last_update is None,
+            }),
             source="strategy_capital_update",
             period_start_date=period_start_date,
             period_end_date=period_end_date,
         )
         self.session.add(adjustment)
         self.session.add(portfolio)
-        self.session.commit()
+        self.session.flush()
         return _capital_update_status(
             status="applied",
             interval=interval,

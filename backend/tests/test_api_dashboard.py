@@ -405,9 +405,10 @@ def test_get_dashboard_auto_applies_capital_update_once(api_client: TestClient) 
     auto_adjustments = [
         row for row in adjustments.json() if row["source"] == "strategy_capital_update"
     ]
-    assert len(auto_adjustments) == 1
-    assert auto_adjustments[0]["period_start_date"] == "2026-01-02"
-    assert auto_adjustments[0]["period_end_date"] == "2026-01-16"
+    assert len([row for row in auto_adjustments if Decimal(row["capital_delta"]) != 0]) == 1
+    first_adjustment = next(row for row in auto_adjustments if Decimal(row["capital_delta"]) != 0)
+    assert first_adjustment["period_start_date"] == "2026-01-02"
+    assert first_adjustment["period_end_date"] == "2026-01-16"
 
 
 def test_capital_update_predicts_next_us_trading_day_with_holidays(
